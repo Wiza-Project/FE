@@ -106,10 +106,10 @@ src/
 `USER_TYPE`, `DEPARTMENT`, `APPROVAL_STATUS` 는 **백엔드 enum과 값이 정확히 일치**해야 합니다.
 
 ```jsx
-// 이렇게 하지 마세요
+// BAD
 if (application.status === 'APPROVE') { ... }   // 오타. JS는 알려주지 않습니다
 
-// 이렇게 하세요
+// GOOD
 import { APPROVAL_STATUS, APPROVAL_STATUS_LABEL } from '@/constants/domain';
 if (application.status === APPROVAL_STATUS.APPROVED) { ... }
 <span>{APPROVAL_STATUS_LABEL[application.status]}</span>
@@ -175,22 +175,22 @@ http://localhost:8080/swagger-ui.html
 ```
 main                              배포 가능 상태
 develop                           통합 브랜치
-feature/P2200-diagnosis-page      작업 브랜치 (프로세스 ID 사용, BE와 동일)
+feat(WP-11)/diagnosis-page      작업 브랜치 (프로세스 ID 사용, BE와 동일)
 ```
 
 ### 커밋 메시지
 
 ```
-feat: 역량진단 응시 화면 구현
-fix: 프로그램 목록 페이지네이션 오류 수정
-style: 상담 예약 캘린더 반응형 대응
-refactor: apiClient 에러 처리 정리
-chore: 패키지 업데이트
+feat(WP-12): 역량진단 응시 화면 구현
+fix(WP-22): 프로그램 목록 페이지네이션 오류 수정
+style(WP-22): 상담 예약 캘린더 반응형 대응
+refactor(WP-22): apiClient 에러 처리 정리
+chore(WP-22): 패키지 업데이트
 ```
 
 ### JavaScript로 진행할 때 지켜야 할 것
 
-TypeScript가 잡아주던 것을 사람이 대신 지켜야 합니다.
+Java와 달리 타입 검증을 하지 않아 사람이 대신 지켜야 합니다.
 
 1. **문자열 상수는 반드시 `constants/domain.js` 에서 import** (위 섹션 참고)
 2. **API 함수는 `api/` 폴더에만** 두고, 컴포넌트 안에서 `axios`를 직접 부르지 마세요.
