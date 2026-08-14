@@ -6,19 +6,19 @@
  * 오타가 나도 JS는 알려주지 않으므로, 상수로 모아두는 것이 유일한 방어책입니다.
  */
 
-/** 사용자 유형 — 프로세스 흐름도의 액터 4종 */
+/** 사용자 유형 */
 export const USER_TYPE = {
   STUDENT: 'STUDENT',
+  PROFESSOR: 'PROFESSOR',
   STAFF: 'STAFF',
-  COUNSELOR: 'COUNSELOR',
-  COMPANY: 'COMPANY',
+  ADMIN: 'ADMIN',
 };
 
 export const USER_TYPE_LABEL = {
   STUDENT: '학생',
+  PROFESSOR: '교수',
   STAFF: '교직원',
-  COUNSELOR: '상담사',
-  COMPANY: '기업체',
+  ADMIN: '관리자',
 };
 
 /** 소속 부서 (교직원만 해당) — 프로세스 흐름도의 스윔레인 */
