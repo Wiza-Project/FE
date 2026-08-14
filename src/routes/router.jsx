@@ -1,10 +1,25 @@
 import { createBrowserRouter } from 'react-router-dom';
 import RootLayout from '@/components/layout/RootLayout';
+import PortalShell from '@/components/layout/PortalShell';
 import ProtectedRoute from '@/routes/ProtectedRoute';
 import { USER_TYPE } from '@/constants/domain';
+import { ComingSoon } from '@/components/common';
 
 import HomePage from '@/pages/HomePage';
+import MyPage from '@/pages/MyPage';
+import CompetencyPage from '@/pages/competency/CompetencyPage';
+import ExtracurrPage from '@/pages/program/ExtracurrPage';
+import CounselingPage from '@/pages/counsel/CounselingPage';
+import MileagePage from '@/pages/mileage/MileagePage';
+import CareerPage from '@/pages/career/CareerPage';
+import StaffDashboard from '@/pages/staff/StaffDashboard';
+import StaffExtracurrPage from '@/pages/staff/extracurr/StaffExtracurrPage';
+import StaffCompetencyPage from '@/pages/staff/competency/StaffCompetencyPage';
+import StaffMileagePage from '@/pages/staff/mileage/StaffMileagePage';
+import StaffEmploymentPage from '@/pages/staff/career/StaffEmploymentPage';
+import StaffCounselingPage from '@/pages/staff/counsel/StaffCounselingPage';
 import LoginPage from '@/pages/auth/LoginPage';
+import ConsentPage from '@/pages/auth/ConsentPage';
 import ForbiddenPage from '@/pages/ForbiddenPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
@@ -16,9 +31,15 @@ import NotFoundPage from '@/pages/NotFoundPage';
  *   /counsel       상담관리         P3100
  *   /mileage       마일리지         P4100
  *   /career        취창업관리       P5100
- *   /admin/*       교직원 관리 화면
+ *   /staff/*       교직원 포털
+ *   /admin/*       관리자 포털 (향후 추가)
  *
- * 주석 처리된 라우트는 페이지를 만들면서 하나씩 열어가세요.
+ * 로그인/동의 화면과 로그인 이후 포털(학생·교직원)은 각각 전체 화면 디자인을 갖고 있어
+ * RootLayout(공개 페이지용 헤더·푸터)을 쓰지 않고 최상위 라우트로 분리했습니다.
+ * PortalShell이 포털 공통 사이드바·상단바 역할을 합니다.
+ *
+ * 아직 화면이 없는 항목은 ComingSoon 플레이스홀더로 채워뒀습니다. 페이지를 만들면서
+ * 하나씩 실제 컴포넌트로 교체하세요.
  */
 export const router = createBrowserRouter([
   {
@@ -26,59 +47,81 @@ export const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { index: true, element: <HomePage /> },
-      { path: 'login', element: <LoginPage /> },
       { path: 'forbidden', element: <ForbiddenPage /> },
-
-      // ── 로그인 필요 (유형 무관) ────────────────────────────
-      {
-        element: <ProtectedRoute />,
-        children: [
-          // { path: 'programs', element: <ProgramListPage /> },
-          // { path: 'programs/:id', element: <ProgramDetailPage /> },
-        ],
-      },
-
-      // ── 학생 전용 ──────────────────────────────────────────
-      {
-        element: <ProtectedRoute allow={[USER_TYPE.STUDENT]} />,
-        children: [
-          // { path: 'my/programs', element: <MyProgramPage /> },
-          // { path: 'competency/diagnosis', element: <DiagnosisPage /> },
-          // { path: 'counsel/reserve', element: <CounselReservePage /> },
-          // { path: 'mileage/my', element: <MyMileagePage /> },
-          // { path: 'career/portfolio', element: <PortfolioPage /> },
-        ],
-      },
-
-      // ── 상담사 전용 ────────────────────────────────────────
-      {
-        element: <ProtectedRoute allow={[USER_TYPE.COUNSELOR]} />,
-        children: [
-          // { path: 'counselor/schedules', element: <CounselorSchedulePage /> },
-          // { path: 'counselor/results', element: <CounselResultPage /> },
-        ],
-      },
-
-      // ── 기업체 전용 ────────────────────────────────────────
-      {
-        element: <ProtectedRoute allow={[USER_TYPE.COMPANY]} />,
-        children: [
-          // { path: 'company/job-postings', element: <JobPostingPage /> },
-        ],
-      },
-
-      // ── 교직원 전용 ────────────────────────────────────────
-      {
-        element: <ProtectedRoute allow={[USER_TYPE.STAFF]} />,
-        children: [
-          // { path: 'admin/programs', element: <AdminProgramPage /> },
-          // { path: 'admin/competency', element: <AdminCompetencyPage /> },
-          // { path: 'admin/mileage', element: <AdminMileagePage /> },
-          // { path: 'admin/career/statistics', element: <EmploymentStatisticsPage /> },
-        ],
-      },
-
       { path: '*', element: <NotFoundPage /> },
     ],
   },
+
+  // ── 로그인 / 최초 동의 (전체 화면, 헤더 없음) ─────────────
+  { path: '/login', element: <LoginPage /> },
+  {
+    element: <ProtectedRoute />,
+    children: [{ path: '/consent', element: <ConsentPage /> }],
+  },
+
+  // ── 학생 포털 ──────────────────────────────────────────
+  {
+    element: <ProtectedRoute allow={[USER_TYPE.STUDENT]} />,
+    children: [
+      {
+        element: <PortalShell />,
+        children: [
+          { path: '/my', element: <MyPage /> },
+          { path: '/competency', element: <CompetencyPage /> },
+          { path: '/programs', element: <ExtracurrPage /> },
+          { path: '/counsel', element: <CounselingPage /> },
+          { path: '/mileage', element: <MileagePage /> },
+          { path: '/career', element: <CareerPage /> },
+          { path: '/notice', element: <ComingSoon label="공지·문의" /> },
+        ],
+      },
+    ],
+  },
+
+  // ── 교사(교수) 포털 ────────────────────────────────────
+  // TODO: PROFESSOR 포털 페이지 구현 예정
+  // {
+  //   element: <ProtectedRoute allow={[USER_TYPE.PROFESSOR]} />,
+  //   children: [
+  //     {
+  //       element: <PortalShell />,
+  //       children: [
+  //         // professor pages
+  //       ],
+  //     },
+  //   ],
+  // },
+
+  // ── 교직원 포털 ────────────────────────────────────────
+  {
+    element: <ProtectedRoute allow={[USER_TYPE.STAFF]} />,
+    children: [
+      {
+        element: <PortalShell />,
+        children: [
+          { path: '/staff', element: <StaffDashboard /> },
+          { path: '/staff/programs', element: <StaffExtracurrPage /> },
+          { path: '/staff/competency', element: <StaffCompetencyPage /> },
+          { path: '/staff/counsel', element: <StaffCounselingPage /> },
+          { path: '/staff/mileage', element: <StaffMileagePage /> },
+          { path: '/staff/career', element: <StaffEmploymentPage /> },
+          { path: '/staff/career/statistics', element: <StaffEmploymentPage /> },
+        ],
+      },
+    ],
+  },
+
+  // ── 관리자 포털 ────────────────────────────────────────
+  // TODO: ADMIN 포털 페이지 구현 예정
+  // {
+  //   element: <ProtectedRoute allow={[USER_TYPE.ADMIN]} />,
+  //   children: [
+  //     {
+  //       element: <PortalShell />,
+  //       children: [
+  //         // admin pages
+  //       ],
+  //     },
+  //   ],
+  // },
 ]);

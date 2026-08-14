@@ -88,7 +88,7 @@ export default function LoginPage() {
         },
         'demo-token',
       );
-      navigate('/admin');
+      navigate('/staff');
       return;
     }
     // 관리자/기업 포털은 아직 라우터에 연결되지 않았습니다.
