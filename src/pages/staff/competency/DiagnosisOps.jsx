@@ -7,11 +7,12 @@ import {
   Drawer,
   Modal,
   StatTile,
+  StatusBadge,
   Tabs,
   toast,
 } from '@/components/common';
 
-const ACCENT = '#7C3AED';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
@@ -95,13 +96,6 @@ const INITIAL_ROUNDS = [
     status: '계획',
   },
 ];
-
-const STATUS_STYLE = {
-  계획: { bg: '#F3F4F6', text: '#6B7280' },
-  진행중: { bg: '#EDE9FE', text: '#7C3AED' },
-  마감: { bg: '#FEF3C7', text: '#D97706' },
-  결과공개: { bg: '#D1FAE5', text: '#059669' },
-};
 
 const NON_RESPONDENTS = [
   {
@@ -381,7 +375,6 @@ function RoundManage() {
             </thead>
             <tbody>
               {rounds.map((r) => {
-                const ss = STATUS_STYLE[r.status];
                 const rate = r.capacity > 0 ? Math.round((r.respondents / r.capacity) * 100) : 0;
                 return (
                   <tr
@@ -397,7 +390,7 @@ function RoundManage() {
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.type === '사전' ? 'bg-[#DBEAFE] text-[#2563EB]' : 'bg-[#FEE2E2] text-[#CF222E]'}`}
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.type === '사전' ? 'bg-[#F3F4F6] text-[#374151]' : 'bg-[#FEE2E2] text-[#CF222E]'}`}
                       >
                         {r.type}
                       </span>
@@ -427,12 +420,12 @@ function RoundManage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: ss.bg, color: ss.text }}
-                      >
-                        {r.status}
-                      </span>
+                      {/* 이 화면에서 '마감'은 결과 발표 대기(조치 필요) 의미라 warning으로 덮어씁니다 */}
+                      <StatusBadge
+                        status={r.status}
+                        variant={r.status === '마감' ? 'warning' : undefined}
+                        size="sm"
+                      />
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex gap-1 justify-center flex-wrap">
@@ -463,7 +456,7 @@ function RoundManage() {
                         )}
                         <button
                           onClick={() => toast('수정 기능은 다음 버전에서 제공됩니다.', 'info')}
-                          className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#F5F3FF] hover:bg-[#EDE9FE] transition-colors"
+                          className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
                           style={{ color: ACCENT }}
                         >
                           수정
@@ -523,7 +516,7 @@ function RoundManage() {
                 setDupError('');
               }}
               placeholder="예) 2026-2 핵심역량 사전진단"
-              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#7C3AED] bg-white"
+              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
             />
           </div>
 
@@ -539,7 +532,7 @@ function RoundManage() {
                   setFYear(e.target.value);
                   setDupError('');
                 }}
-                className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#7C3AED]"
+                className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
               >
                 {['2026', '2025', '2024'].map((y) => (
                   <option key={y}>{y}</option>
@@ -554,7 +547,7 @@ function RoundManage() {
                   setFSem(e.target.value);
                   setDupError('');
                 }}
-                className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#7C3AED]"
+                className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
               >
                 {['1학기', '2학기'].map((s) => (
                   <option key={s}>{s}</option>
@@ -572,14 +565,14 @@ function RoundManage() {
               {['사전', '사후'].map((t) => (
                 <label
                   key={t}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-[8px] border-2 cursor-pointer transition-all ${fType === t ? 'border-[#7C3AED] bg-[#F5F3FF]' : 'border-[#E5E7EB] bg-white hover:border-[#A78BFA]'}`}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-[8px] border-2 cursor-pointer transition-all ${fType === t ? 'border-[#374151] bg-[#F3F4F6]' : 'border-[#E5E7EB] bg-white hover:border-[#9CA3AF]'}`}
                   onClick={() => {
                     setFType(t);
                     setDupError('');
                   }}
                 >
                   <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${fType === t ? 'border-[#7C3AED]' : 'border-[#D1D5DB]'}`}
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${fType === t ? 'border-[#374151]' : 'border-[#D1D5DB]'}`}
                   >
                     {fType === t && (
                       <div className="w-2 h-2 rounded-full" style={{ background: ACCENT }} />
@@ -615,7 +608,7 @@ function RoundManage() {
                   type="date"
                   value={f.val}
                   onChange={(e) => f.set(e.target.value)}
-                  className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#7C3AED]"
+                  className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
                 />
               </div>
             ))}
@@ -629,7 +622,7 @@ function RoundManage() {
                 <button
                   key={m}
                   onClick={() => setFTM(m)}
-                  className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fTargetMode === m ? 'text-white border-[#7C3AED]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#A78BFA]'}`}
+                  className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fTargetMode === m ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#9CA3AF]'}`}
                   style={fTargetMode === m ? { background: ACCENT } : {}}
                 >
                   {m}
@@ -638,7 +631,7 @@ function RoundManage() {
             </div>
 
             {fTargetMode === '전체' && (
-              <div className="p-3 rounded-[6px] bg-[#F5F3FF] text-[12px]" style={{ color: ACCENT }}>
+              <div className="p-3 rounded-[6px] bg-[#F3F4F6] text-[12px]" style={{ color: ACCENT }}>
                 전체 재학생이 대상입니다.
               </div>
             )}
@@ -648,7 +641,7 @@ function RoundManage() {
                   <button
                     key={g}
                     onClick={() => toggleList(fGrades, g, setFGrades)}
-                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fGrades.includes(g) ? 'text-white border-[#7C3AED]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
+                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fGrades.includes(g) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
                     style={fGrades.includes(g) ? { background: ACCENT } : {}}
                   >
                     {g}
@@ -662,7 +655,7 @@ function RoundManage() {
                   <button
                     key={c}
                     onClick={() => toggleList(fColleges, c, setFColl)}
-                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fColleges.includes(c) ? 'text-white border-[#7C3AED]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
+                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fColleges.includes(c) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
                     style={fColleges.includes(c) ? { background: ACCENT } : {}}
                   >
                     {c}
@@ -676,7 +669,7 @@ function RoundManage() {
                   <button
                     key={d}
                     onClick={() => toggleList(fDepts, d, setFDepts)}
-                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fDepts.includes(d) ? 'text-white border-[#7C3AED]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
+                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fDepts.includes(d) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
                     style={fDepts.includes(d) ? { background: ACCENT } : {}}
                   >
                     {d}
@@ -831,7 +824,7 @@ function ResponseManage() {
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => setDownloadInfo(true)}
-              className="h-7 px-3 text-[11px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#7C3AED] hover:text-[#7C3AED] transition-colors"
+              className="h-7 px-3 text-[11px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#374151] hover:text-[#374151] transition-colors"
             >
               명단 엑셀 다운로드
             </button>
@@ -853,7 +846,7 @@ function ResponseManage() {
                   type="checkbox"
                   checked={allChecked}
                   onChange={toggleAll}
-                  className="accent-[#7C3AED] w-3.5 h-3.5 cursor-pointer"
+                  className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                 />
               </th>
               {['학번', '성명', '학과', '학년', '최근 로그인', '알림 발송'].map((h, i) => (
@@ -870,14 +863,14 @@ function ResponseManage() {
             {notifRows.map((r) => (
               <tr
                 key={r.studentId}
-                className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(r.studentId) ? 'bg-[#F5F3FF]' : ''}`}
+                className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(r.studentId) ? 'bg-[#F3F4F6]' : ''}`}
               >
                 <td className="px-4 py-3 text-center">
                   <input
                     type="checkbox"
                     checked={selected.has(r.studentId)}
                     onChange={() => toggle(r.studentId)}
-                    className="accent-[#7C3AED] w-3.5 h-3.5 cursor-pointer"
+                    className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                   />
                 </td>
                 <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">{r.studentId}</td>
@@ -930,7 +923,7 @@ function ResponseManage() {
                 <button
                   key={c}
                   onClick={() => toggleChannel(c)}
-                  className={`h-8 px-4 text-[12px] font-bold rounded-[6px] border-2 transition-colors ${channels.includes(c) ? 'text-white border-[#7C3AED]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
+                  className={`h-8 px-4 text-[12px] font-bold rounded-[6px] border-2 transition-colors ${channels.includes(c) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
                   style={channels.includes(c) ? { background: ACCENT } : {}}
                 >
                   {c}
@@ -956,7 +949,7 @@ function ResponseManage() {
           </div>
 
           <div
-            className="p-3 rounded-[8px] bg-[#EDE9FE] border border-[#C4B5FD] text-[12px]"
+            className="p-3 rounded-[8px] bg-[#F3F4F6] border border-[#E5E7EB] text-[12px]"
             style={{ color: ACCENT }}
           >
             발송 대상: <span className="font-black">{notifyTarget}명</span>
@@ -1068,7 +1061,7 @@ function ResultStats() {
             <select
               value={f.val}
               onChange={(e) => f.set(e.target.value)}
-              className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#7C3AED]"
+              className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
             >
               {f.opts.map((o) => (
                 <option key={o}>{o}</option>
@@ -1084,7 +1077,7 @@ function ResultStats() {
         <div className="relative ml-auto" ref={dropRef}>
           <button
             onClick={() => setDropOpen(!dropOpen)}
-            className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#7C3AED] hover:text-[#7C3AED] transition-colors flex items-center gap-1"
+            className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#374151] hover:text-[#374151] transition-colors flex items-center gap-1"
           >
             결과 내려받기 <span className="text-[10px]">▾</span>
           </button>
@@ -1097,7 +1090,7 @@ function ResultStats() {
                 <button
                   key={d.label}
                   onClick={() => handleDownload(d.label)}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-[12px] text-[#1F2328] hover:bg-[#F5F3FF] transition-colors text-left border-b border-[#F3F4F6] last:border-0"
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-[12px] text-[#1F2328] hover:bg-[#F3F4F6] transition-colors text-left border-b border-[#F3F4F6] last:border-0"
                 >
                   <span>{d.icon}</span>
                   {d.label}
@@ -1129,7 +1122,7 @@ function ResultStats() {
               accentColor="#D97706"
               trend={{ value: '-3.2%p', up: false }}
             />
-            <StatTile label="평균 점수" value="66.2점" sub="100점 기준" accentColor="#2563EB" />
+            <StatTile label="평균 점수" value="66.2점" sub="100점 기준" accentColor="#374151" />
           </div>
 
           {/* Bar chart */}
@@ -1185,7 +1178,7 @@ function ResultStats() {
                   {COLLEGE_DATA.map((row, ri) => (
                     <tr
                       key={row.college}
-                      className={`border-b border-[#F3F4F6] last:border-0 ${ri % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'} hover:bg-[#F5F3FF] transition-colors`}
+                      className={`border-b border-[#F3F4F6] last:border-0 ${ri % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'} hover:bg-[#F3F4F6] transition-colors`}
                     >
                       <td className="px-4 py-3 font-bold text-[#1F2328] whitespace-nowrap">
                         {row.college}

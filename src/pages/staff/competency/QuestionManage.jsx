@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Drawer, Modal, toast } from '@/components/common';
 
-const ACCENT = '#7C3AED';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -365,7 +365,7 @@ export default function QuestionManage() {
               setCore(e.target.value);
               setSub('전체');
             }}
-            className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#7C3AED]"
+            className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
           >
             {CORE_OPTIONS.map((o) => (
               <option key={o}>{o}</option>
@@ -377,7 +377,7 @@ export default function QuestionManage() {
           <select
             value={sub}
             onChange={(e) => setSub(e.target.value)}
-            className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#7C3AED]"
+            className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
           >
             {subOptions.map((o) => (
               <option key={o}>{o}</option>
@@ -389,7 +389,7 @@ export default function QuestionManage() {
           <select
             value={activeF}
             onChange={(e) => setActiveF(e.target.value)}
-            className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#7C3AED]"
+            className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
           >
             {['전체', '사용', '미사용'].map((o) => (
               <option key={o}>{o}</option>
@@ -402,12 +402,12 @@ export default function QuestionManage() {
             value={keyword}
             onChange={(e) => setKw(e.target.value)}
             placeholder="문항 ID 또는 내용..."
-            className="h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#7C3AED]"
+            className="h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
           />
         </div>
         <div className="flex items-end">
           <span
-            className="text-[12px] font-bold px-3 py-1.5 rounded-[6px] bg-[#F5F3FF]"
+            className="text-[12px] font-bold px-3 py-1.5 rounded-[6px] bg-[#F3F4F6]"
             style={{ color: ACCENT }}
           >
             {filtered.length}문항
@@ -462,7 +462,7 @@ export default function QuestionManage() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span
-                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] bg-[#F5F3FF]"
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] bg-[#F3F4F6]"
                       style={{ color: ACCENT }}
                     >
                       {q.coreName}
@@ -495,7 +495,7 @@ export default function QuestionManage() {
                   <td className="px-4 py-3 text-center">
                     <button
                       onClick={() => openEdit(q)}
-                      className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F5F3FF] hover:bg-[#EDE9FE] transition-colors"
+                      className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
                       style={{ color: ACCENT }}
                     >
                       수정
@@ -533,7 +533,7 @@ export default function QuestionManage() {
             <select
               value={fSub}
               onChange={(e) => setFSub(e.target.value)}
-              className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#7C3AED] bg-white"
+              className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
             >
               {Object.values(SUB_MAP)
                 .flat()
@@ -554,7 +554,7 @@ export default function QuestionManage() {
               onChange={(e) => setFContent(e.target.value)}
               rows={4}
               placeholder="나는 ..."
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#7C3AED] bg-white"
+              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151] bg-white"
             />
             <p className="text-[10px] text-[#9AA0A6] mt-1">{fContent.length}자</p>
           </div>
@@ -593,7 +593,7 @@ export default function QuestionManage() {
             <select
               value={fTemplate}
               onChange={(e) => selectTemplate(e.target.value)}
-              className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#7C3AED] bg-white"
+              className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
             >
               {TEMPLATE_OPTIONS.map((t) => (
                 <option key={t}>{t}</option>
@@ -628,7 +628,7 @@ export default function QuestionManage() {
                     <input
                       value={item.anchor}
                       onChange={(e) => updateAnchor(vi, e.target.value)}
-                      className="flex-1 text-[12px] bg-transparent focus:outline-none focus:bg-white focus:border-b focus:border-[#7C3AED] pb-0.5 transition-all"
+                      className="flex-1 text-[12px] bg-transparent focus:outline-none focus:bg-white focus:border-b focus:border-[#374151] pb-0.5 transition-all"
                     />
                   </div>
                 ))}
@@ -684,7 +684,7 @@ export default function QuestionManage() {
           <div className="flex flex-col gap-1.5 text-[11px] text-[#656D76]">
             <div className="flex items-center gap-2">
               <span
-                className="w-5 h-5 rounded-full bg-[#F5F3FF] flex items-center justify-center text-[9px] font-black shrink-0"
+                className="w-5 h-5 rounded-full bg-[#F3F4F6] flex items-center justify-center text-[9px] font-black shrink-0"
                 style={{ color: ACCENT }}
               >
                 1
@@ -693,7 +693,7 @@ export default function QuestionManage() {
             </div>
             <div className="flex items-center gap-2">
               <span
-                className="w-5 h-5 rounded-full bg-[#F5F3FF] flex items-center justify-center text-[9px] font-black shrink-0"
+                className="w-5 h-5 rounded-full bg-[#F3F4F6] flex items-center justify-center text-[9px] font-black shrink-0"
                 style={{ color: ACCENT }}
               >
                 2

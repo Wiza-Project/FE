@@ -52,7 +52,7 @@ const SUB_COMPETENCIES = {
 };
 const GRADES = ['1학년', '2학년', '3학년', '4학년'];
 
-const ACCENT = '#2563EB';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -96,7 +96,7 @@ function TextInput({ value, onChange, placeholder = '', error }) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+      className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
 }
@@ -110,7 +110,7 @@ function NumberInput({ value, onChange, min = 0, max, placeholder = '' }) {
       max={max}
       onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
       placeholder={placeholder}
-      className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB]"
+      className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
     />
   );
 }
@@ -120,7 +120,7 @@ function SelectInput({ value, onChange, options, error }) {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`w-full h-9 px-2 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+      className={`w-full h-9 px-2 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     >
       {options.map((o) => (
         <option key={o}>{o}</option>
@@ -135,7 +135,7 @@ function DateInput({ value, onChange }) {
       type="date"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB]"
+      className="h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
     />
   );
 }
@@ -145,7 +145,7 @@ function Toggle({ checked, onChange, label }) {
     <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
       <div
         onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors ${checked ? 'bg-[#2563EB]' : 'bg-[#D1D5DB]'}`}
+        className={`relative w-9 h-5 rounded-full transition-colors ${checked ? 'bg-[#374151]' : 'bg-[#D1D5DB]'}`}
       >
         <div
           className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : ''}`}
@@ -356,7 +356,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                         <button
                           key={tag}
                           onClick={() => toggleTag(tag)}
-                          className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${active ? 'text-white border-[#2563EB]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#93C5FD]'}`}
+                          className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${active ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#D1D5DB]'}`}
                           style={active ? { background: ACCENT } : {}}
                         >
                           {tag}
@@ -373,7 +373,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                     <button
                       key={m}
                       onClick={() => setOnline(m)}
-                      className={`h-9 px-4 text-[12px] font-semibold rounded-[6px] border transition-colors ${online === m ? 'border-[#2563EB] text-white' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#93C5FD]'}`}
+                      className={`h-9 px-4 text-[12px] font-semibold rounded-[6px] border transition-colors ${online === m ? 'border-[#374151] text-white' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#D1D5DB]'}`}
                       style={online === m ? { background: ACCENT } : {}}
                     >
                       {m}
@@ -429,7 +429,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                     <button
                       key={t}
                       onClick={() => setApplyType(t)}
-                      className={`h-9 px-5 text-[12px] font-semibold rounded-[6px] border transition-colors ${applyType === t ? 'border-[#2563EB] text-white' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#93C5FD]'}`}
+                      className={`h-9 px-5 text-[12px] font-semibold rounded-[6px] border transition-colors ${applyType === t ? 'border-[#374151] text-white' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#D1D5DB]'}`}
                       style={applyType === t ? { background: ACCENT } : {}}
                     >
                       {t}
@@ -460,7 +460,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                     <button
                       key={g}
                       onClick={() => toggleGrade(g)}
-                      className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${active ? 'text-white border-[#2563EB]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#93C5FD]'}`}
+                      className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${active ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#D1D5DB]'}`}
                       style={active ? { background: ACCENT } : {}}
                     >
                       {g}
@@ -497,10 +497,10 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         <div ref={sec3Ref}>
           <Section num={3} title="역량 연계" id="sec3">
             <div
-              className={`p-4 rounded-[8px] mb-5 border ${errors.competency ? 'bg-[#FFF5F5] border-[#FECACA]' : 'bg-[#EFF6FF] border-[#BFDBFE]'}`}
+              className={`p-4 rounded-[8px] mb-5 border ${errors.competency ? 'bg-[#FFF5F5] border-[#FECACA]' : 'bg-[#F3F4F6] border-[#E5E7EB]'}`}
             >
               <p
-                className={`text-[12px] font-semibold ${errors.competency ? 'text-[#CF222E]' : 'text-[#1D4ED8]'}`}
+                className={`text-[12px] font-semibold ${errors.competency ? 'text-[#CF222E]' : 'text-[#374151]'}`}
               >
                 핵심역량 연계를 <strong>최소 1개 이상</strong> 추가해야 저장할 수 있습니다. 가중치
                 합계는 100% 이하여야 합니다.
@@ -637,7 +637,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                   max={100}
                   value={attendance || 80}
                   onChange={(e) => setAttendance(Number(e.target.value))}
-                  className="flex-1 accent-[#2563EB]"
+                  className="flex-1 accent-[#374151]"
                 />
                 <div className="w-20">
                   <NumberInput value={attendance} onChange={setAttendance} min={0} max={100} />

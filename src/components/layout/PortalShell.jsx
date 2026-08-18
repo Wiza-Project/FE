@@ -126,55 +126,28 @@ const NAV_STUDENT = [
   { key: 'notice', label: '공지·문의', icon: Icon.Notice, accent: '#6B7280', path: '/notice' },
 ];
 
+// 교직원 포털은 업무시스템 톤(무채색 + 단일 포인트컬러)을 따릅니다.
+// 항목별로 다른 색을 쓰지 않고 STAFF_ACCENT 하나로 통일합니다.
 const NAV_STAFF = [
-  { key: 'dashboard', label: '대시보드', icon: Icon.Dashboard, accent: '#6B7280', path: '/staff' },
-  {
-    key: 'extracurr',
-    label: '비교과 운영',
-    icon: Icon.Grid,
-    accent: '#2563EB',
-    path: '/staff/programs',
-  },
-  {
-    key: 'competency',
-    label: '핵심역량 관리',
-    icon: Icon.Star,
-    accent: '#7C3AED',
-    path: '/staff/competency',
-  },
-  {
-    key: 'counseling',
-    label: '상담 운영',
-    icon: Icon.Chat,
-    accent: '#0891B2',
-    path: '/staff/counsel',
-  },
-  {
-    key: 'mileage',
-    label: '마일리지 심사',
-    icon: Icon.Coin,
-    accent: '#D97706',
-    path: '/staff/mileage',
-  },
-  {
-    key: 'career',
-    label: '취업·창업 운영',
-    icon: Icon.Briefcase,
-    accent: '#059669',
-    path: '/staff/career',
-  },
+  { key: 'dashboard', label: '대시보드', icon: Icon.Dashboard, path: '/staff' },
+  { key: 'extracurr', label: '비교과 운영', icon: Icon.Grid, path: '/staff/programs' },
+  { key: 'competency', label: '핵심역량 관리', icon: Icon.Star, path: '/staff/competency' },
+  { key: 'counseling', label: '상담 운영', icon: Icon.Chat, path: '/staff/counsel' },
+  { key: 'records', label: '학적 조회', icon: Icon.User, path: '/staff/students' },
+  { key: 'mileage', label: '마일리지 심사', icon: Icon.Coin, path: '/staff/mileage' },
+  { key: 'career', label: '취업·창업 운영', icon: Icon.Briefcase, path: '/staff/career' },
   {
     key: 'statistics',
     label: '통계',
     icon: Icon.Chart,
-    accent: '#6B7280',
     path: '/staff/career/statistics',
   },
 ];
 
 const PORTAL_NAVS = { student: NAV_STUDENT, staff: NAV_STAFF };
 const PORTAL_LABELS = { student: '학생 포털', staff: '교직원 포털' };
-const PORTAL_COLORS = { student: '#2563EB', staff: '#7C3AED' };
+// 학생 포털은 브랜드 블루 유지, 교직원 포털은 행정시스템 톤(거의 무채색)의 단일 포인트컬러 사용
+const PORTAL_COLORS = { student: '#2563EB', staff: '#1F2937' };
 
 const NOTIFICATIONS = [
   {

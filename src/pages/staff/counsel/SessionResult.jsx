@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Modal, toast } from '@/components/common';
 
-const ACCENT = '#0891B2';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 export default function SessionResult() {
   const SESSION = {
@@ -127,7 +127,7 @@ export default function SessionResult() {
         {/* Confirmed stamp */}
         <div
           className="px-5 py-3 flex items-center gap-3 border-b"
-          style={{ background: '#ECFEFF', borderColor: '#A5F3FC' }}
+          style={{ background: '#F3F4F6', borderColor: '#E5E7EB' }}
         >
           <div
             className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-black shrink-0"
@@ -163,7 +163,7 @@ export default function SessionResult() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span
-                className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#CFFAFE]"
+                className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#F3F4F6]"
                 style={{ color: ACCENT }}
               >
                 학생 공개

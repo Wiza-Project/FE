@@ -232,11 +232,12 @@ const WORK_ITEMS = [
   },
 ];
 
+// 업무유형 구분은 색상 대신 명도 단계(그레이스케일)로 표시합니다.
 const TYPE_COLORS = {
-  비교과신청: '#2563EB',
-  마일리지증빙: '#D97706',
-  상담예약: '#0891B2',
-  구인신청: '#059669',
+  비교과신청: '#1F2937',
+  마일리지증빙: '#4B5563',
+  상담예약: '#6B7280',
+  구인신청: '#9CA3AF',
 };
 
 // ─── Today's schedule ────────────────────────────────────────────────────────
@@ -260,38 +261,15 @@ const TODAY_SCHEDULE = [
 
 // ─── Running programs ────────────────────────────────────────────────────────
 
+// 개별 프로그램은 색상으로 구분하지 않고, 정원 임박 여부만 강조합니다(렌더링부에서 처리).
 const PROGRAMS = [
-  {
-    name: '해외문화체험 워크숍',
-    applied: 20,
-    capacity: 30,
-    deadline: '2026-08-16',
-    color: '#0891B2',
-  },
-  { name: '진로탐색 워크숍', applied: 15, capacity: 20, deadline: '2026-08-19', color: '#7C3AED' },
-  { name: '리더십 캠프', applied: 28, capacity: 30, deadline: '2026-08-20', color: '#059669' },
-  { name: '독서인증제', applied: 42, capacity: 50, deadline: '2026-09-01', color: '#D97706' },
-  {
-    name: 'NCS 직업기초 특강',
-    applied: 18,
-    capacity: 25,
-    deadline: '2026-08-25',
-    color: '#2563EB',
-  },
-  {
-    name: '빅데이터 분석 워크숍',
-    applied: 12,
-    capacity: 15,
-    deadline: '2026-08-22',
-    color: '#CF222E',
-  },
-  {
-    name: '창업 아이디어 경진대회',
-    applied: 8,
-    capacity: 20,
-    deadline: '2026-08-30',
-    color: '#059669',
-  },
+  { name: '해외문화체험 워크숍', applied: 20, capacity: 30, deadline: '2026-08-16' },
+  { name: '진로탐색 워크숍', applied: 15, capacity: 20, deadline: '2026-08-19' },
+  { name: '리더십 캠프', applied: 28, capacity: 30, deadline: '2026-08-20' },
+  { name: '독서인증제', applied: 42, capacity: 50, deadline: '2026-09-01' },
+  { name: 'NCS 직업기초 특강', applied: 18, capacity: 25, deadline: '2026-08-25' },
+  { name: '빅데이터 분석 워크숍', applied: 12, capacity: 15, deadline: '2026-08-22' },
+  { name: '창업 아이디어 경진대회', applied: 8, capacity: 20, deadline: '2026-08-30' },
 ];
 
 // ─── Semester summary ────────────────────────────────────────────────────────
@@ -388,7 +366,7 @@ export default function StaffDashboard() {
         breadcrumbs={[{ label: '교직원 포털' }, { label: '업무 대시보드' }]}
         title="업무 대시보드"
         subtitle={`김담당 · 비교과운영부서 · ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}`}
-        accentColor="#7C3AED"
+        accentColor="#374151"
         actions={
           <div className="flex gap-2">
             <Button
@@ -400,7 +378,7 @@ export default function StaffDashboard() {
             </Button>
             <Button
               size="sm"
-              style={{ background: '#7C3AED' }}
+              style={{ background: '#374151' }}
               onClick={() => toast('공지를 등록합니다.', 'info')}
             >
               공지 등록
@@ -418,8 +396,8 @@ export default function StaffDashboard() {
           accentColor="#D97706"
           trend={{ value: '어제 대비 +3', up: true }}
         />
-        <StatTile label="오늘 상담" value="2건" sub="14:00 다음 예정" accentColor="#0891B2" />
-        <StatTile label="운영중 프로그램" value="7개" sub="2026-1학기" accentColor="#2563EB" />
+        <StatTile label="오늘 상담" value="2건" sub="14:00 다음 예정" accentColor="#374151" />
+        <StatTile label="운영중 프로그램" value="7개" sub="2026-1학기" accentColor="#374151" />
         <StatTile
           label="이번 달 수료 처리"
           value="142건"
@@ -465,7 +443,7 @@ export default function StaffDashboard() {
                     <span className="flex items-center gap-1.5">
                       {t.label}
                       <span
-                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeTab === t.key ? 'bg-[#7C3AED] text-white' : 'bg-[#E5E7EB] text-[#9AA0A6]'}`}
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeTab === t.key ? 'bg-[#374151] text-white' : 'bg-[#E5E7EB] text-[#9AA0A6]'}`}
                       >
                         {t.count -
                           [...processedIds].filter(
@@ -477,7 +455,7 @@ export default function StaffDashboard() {
                 }))}
                 active={activeTab}
                 onChange={setActiveTab}
-                accentColor="#7C3AED"
+                accentColor="#374151"
               />
             </div>
 
@@ -517,7 +495,7 @@ export default function StaffDashboard() {
 
             {tabItems.length > 8 && (
               <div className="px-5 py-3 border-t border-[#E5E7EB] text-center">
-                <button className="text-[12px] text-[#7C3AED] font-bold hover:underline">
+                <button className="text-[12px] text-[#374151] font-bold hover:underline">
                   +{tabItems.length - 8}건 더 보기
                 </button>
               </div>
@@ -527,7 +505,7 @@ export default function StaffDashboard() {
           {/* ── Bottom: semester summary ── */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-1 h-4 rounded-full bg-[#7C3AED]" />
+              <div className="w-1 h-4 rounded-full bg-[#374151]" />
               <h2 className="text-[14px] font-bold text-[#1F2328]">이번 학기 운영 요약</h2>
               <span className="text-[11px] text-[#9AA0A6] ml-1">2026학년도 1학기</span>
             </div>
@@ -535,8 +513,8 @@ export default function StaffDashboard() {
               {/* Numbers */}
               <div className="flex flex-col gap-4">
                 {[
-                  { label: '프로그램 개설', value: '24개', color: '#2563EB' },
-                  { label: '총 참여 학생', value: '1,284명', color: '#7C3AED' },
+                  { label: '프로그램 개설', value: '24개', color: '#374151' },
+                  { label: '총 참여 학생', value: '1,284명', color: '#374151' },
                   { label: '총 수료 처리', value: '1,062건', color: '#059669' },
                   { label: '평균 만족도', value: '4.3 / 5.0', color: '#D97706' },
                 ].map((s) => (
@@ -597,7 +575,7 @@ export default function StaffDashboard() {
           {/* Today's schedule */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
             <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
-              <div className="w-1 h-4 rounded-full bg-[#0891B2]" />
+              <div className="w-1 h-4 rounded-full bg-[#374151]" />
               <h3 className="text-[13px] font-bold text-[#1F2328]">오늘의 일정</h3>
               <span className="ml-auto text-[11px] text-[#9AA0A6]">2026-08-13 (수)</span>
             </div>
@@ -605,11 +583,11 @@ export default function StaffDashboard() {
               {TODAY_SCHEDULE.map((s, i) => (
                 <div
                   key={i}
-                  className={`flex gap-3 p-3 rounded-[6px] border ${s.done ? 'bg-[#F9FAFB] border-[#E5E7EB] opacity-60' : 'bg-[#F0FDFE] border-[#A5F3FC]'}`}
+                  className={`flex gap-3 p-3 rounded-[6px] border ${s.done ? 'bg-[#F9FAFB] border-[#E5E7EB] opacity-60' : 'bg-[#F9FAFB] border-[#E5E7EB]'}`}
                 >
                   <div className="text-center flex-shrink-0">
                     <div
-                      className={`text-[14px] font-black ${s.done ? 'text-[#9AA0A6] line-through' : 'text-[#0891B2]'}`}
+                      className={`text-[14px] font-black ${s.done ? 'text-[#9AA0A6] line-through' : 'text-[#374151]'}`}
                     >
                       {s.time}
                     </div>
@@ -625,7 +603,7 @@ export default function StaffDashboard() {
                   </div>
                 </div>
               ))}
-              <button className="text-[11px] text-[#0891B2] font-bold text-center hover:underline">
+              <button className="text-[11px] text-[#374151] font-bold text-center hover:underline">
                 전체 일정 보기 →
               </button>
             </div>
@@ -634,9 +612,9 @@ export default function StaffDashboard() {
           {/* Running programs */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
             <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
-              <div className="w-1 h-4 rounded-full bg-[#2563EB]" />
+              <div className="w-1 h-4 rounded-full bg-[#374151]" />
               <h3 className="text-[13px] font-bold text-[#1F2328]">운영중 프로그램</h3>
-              <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#DBEAFE] text-[#0969DA]">
+              <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#374151]">
                 7개
               </span>
             </div>
@@ -656,7 +634,7 @@ export default function StaffDashboard() {
                         {p.applied}/{p.capacity}명
                       </span>
                     </div>
-                    <ProgressBar value={pct} color={nearFull ? '#CF222E' : p.color} showValue />
+                    <ProgressBar value={pct} color={nearFull ? '#CF222E' : '#9CA3AF'} showValue />
                     <div className="text-[10px] text-[#9AA0A6] mt-0.5">마감 {p.deadline}</div>
                   </div>
                 );
@@ -694,7 +672,7 @@ export default function StaffDashboard() {
               ))}
             </div>
             <div className="px-4 py-2.5 border-t border-[#F3F4F6]">
-              <button className="text-[11px] text-[#7C3AED] font-bold hover:underline w-full text-center">
+              <button className="text-[11px] text-[#374151] font-bold hover:underline w-full text-center">
                 공지 관리 →
               </button>
             </div>

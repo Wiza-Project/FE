@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button, Modal, StatTile, toast } from '@/components/common';
 
-const A = '#059669'; // accent emerald
+const A = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── shared helpers ────────────────────────────────────────────────────────────
 
@@ -138,7 +138,7 @@ const CERT_STYLE = {
   심사중: { bg: '#FEF3C7', text: '#D97706' },
 };
 const VERIFY_STYLE = {
-  검수대기: { bg: '#ECFEFF', text: '#0891B2' },
+  검수대기: { bg: '#F3F4F6', text: '#374151' },
   승인: { bg: '#D1FAE5', text: '#059669' },
   반려: { bg: '#FEE2E2', text: '#CF222E' },
   보완요청: { bg: '#FEF3C7', text: '#D97706' },
@@ -186,7 +186,7 @@ function TabJobReview() {
           trend={{ value: '전일 대비 +2', up: true }}
         />
         <StatTile label="게시중 공고" value="342" accentColor={A} />
-        <StatTile label="인증 대기 기업" value="3" accentColor="#D97706" />
+        <StatTile label="인증 대기 기업" value="3" accentColor={A} />
         <StatTile
           label="이번 달 지원"
           value="1,204"
@@ -326,7 +326,7 @@ function TabJobReview() {
               className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none bg-white focus:outline-none"
             />
           </div>
-          <div className="p-3 rounded-[8px] bg-[#ECFEFF] border border-[#A5F3FC] text-[11px] text-[#0E7490]">
+          <div className="p-3 rounded-[8px] bg-[#F3F4F6] border border-[#E5E7EB] text-[11px] text-[#374151]">
             검수자·사유·일시가 이력으로 보존됩니다.
           </div>
         </div>
@@ -886,7 +886,7 @@ const MATCH_STUDENTS = [
 ];
 const SOURCE_CHIP = {
   자동매칭: { bg: '#D1FAE5', text: '#059669' },
-  학과추천: { bg: '#DBEAFE', text: '#1D4ED8' },
+  학과추천: { bg: '#F3F4F6', text: '#374151' },
   기업요청: { bg: '#FEF3C7', text: '#D97706' },
 };
 const TALENT_REQUESTS = [
@@ -1330,7 +1330,7 @@ function TabEmploymentStats() {
                   return (
                     <tr
                       key={d.dept}
-                      className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] ${miss ? 'bg-[#FFF7F7]' : ''}`}
+                      className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] ${miss ? 'bg-[#F9FAFB]' : ''}`}
                     >
                       <TD cls="font-bold text-[#1F2328]">{d.dept}</TD>
                       <TD center cls="text-[#444D56]">
@@ -1486,7 +1486,7 @@ function TabEmploymentStats() {
                     <Chip label={r.type} bg="#D1FAE5" text={A} />
                   </TD>
                   <TD center>
-                    <Chip label={r.basis} bg="#DBEAFE" text="#1D4ED8" />
+                    <Chip label={r.basis} bg="#F3F4F6" text="#374151" />
                   </TD>
                   {[r.m3, r.m6, r.m11].map((v, i) => (
                     <TD key={i} center>

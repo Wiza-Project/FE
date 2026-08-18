@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { key: 'diagnosis', label: '진단 운영', icon: '▷', desc: '진단 회차 개설·결과 확인' },
 ];
 
-const ACCENT = '#7C3AED';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 /**
  * 교직원 핵심역량 관리 화면 허브. 좌측 네비게이션으로 역량/척도/문항/진단운영
@@ -49,7 +49,7 @@ export default function StaffCompetencyPage() {
               <button
                 key={item.key}
                 onClick={() => setNav(item.key)}
-                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors ${i > 0 ? 'border-t border-[#F3F4F6]' : ''} ${active ? 'bg-[#F5F3FF]' : 'hover:bg-[#FAFAFA]'}`}
+                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors ${i > 0 ? 'border-t border-[#F3F4F6]' : ''} ${active ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'}`}
               >
                 <span
                   className={`text-[14px] mt-0.5 shrink-0 ${active ? '' : 'opacity-50'}`}

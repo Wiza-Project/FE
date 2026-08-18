@@ -1,17 +1,7 @@
 import { useState } from 'react';
-import { Button, ConfirmDialog, Modal, toast } from '@/components/common';
+import { Button, ConfirmDialog, Modal, StatusBadge, toast } from '@/components/common';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
-
-const STATUS_STYLE = {
-  작성중: { bg: '#F3F4F6', text: '#6B7280', label: '작성중' },
-  심사요청: { bg: '#FEF3C7', text: '#D97706', label: '심사요청' },
-  승인: { bg: '#D1FAE5', text: '#059669', label: '승인' },
-  반려: { bg: '#FEE2E2', text: '#CF222E', label: '반려' },
-  모집중: { bg: '#DBEAFE', text: '#2563EB', label: '모집중' },
-  운영중: { bg: '#DBEAFE', text: '#1D4ED8', label: '운영중' },
-  종료: { bg: '#F3F4F6', text: '#9AA0A6', label: '종료' },
-};
 
 const PROGRAMS = [
   {
@@ -216,23 +206,11 @@ function canCloseRecruit(s) {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatusBadge({ status }) {
-  const { bg, text, label } = STATUS_STYLE[status];
-  return (
-    <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap"
-      style={{ background: bg, color: text }}
-    >
-      {label}
-    </span>
-  );
-}
-
 function ApplyBar({ applied, capacity }) {
   const pct = capacity > 0 ? Math.min(100, (applied / capacity) * 100) : 0;
   const full = pct >= 100;
   const near = pct >= 80;
-  const color = full ? '#CF222E' : near ? '#D97706' : '#2563EB';
+  const color = full ? '#CF222E' : near ? '#D97706' : '#374151';
   return (
     <div className="w-full">
       <div className="flex justify-between text-[10px] mb-0.5">
@@ -324,7 +302,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
           <Button variant="outline" onClick={onParticipation}>
             참여·결과 관리
           </Button>
-          <Button onClick={onNew} style={{ background: '#2563EB' }}>
+          <Button onClick={onNew} style={{ background: '#374151' }}>
             + 프로그램 등록
           </Button>
         </div>
@@ -343,7 +321,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
             <select
               value={f.value}
               onChange={(e) => f.set(e.target.value)}
-              className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB]"
+              className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
             >
               {f.opts.map((o) => (
                 <option key={o}>{o}</option>
@@ -359,7 +337,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="검색..."
-            className="w-full h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB]"
+            className="w-full h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
           />
         </div>
       </div>
@@ -368,7 +346,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
         <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
           <span className="text-[13px] font-bold text-[#1F2328]">프로그램 목록</span>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#DBEAFE] text-[#2563EB]">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#374151]">
             {filtered.length}개
           </span>
         </div>
@@ -427,14 +405,14 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
                       <ApplyBar applied={p.applied} capacity={p.capacity} />
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <StatusBadge status={p.status} />
+                      <StatusBadge status={p.status} size="sm" />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 justify-center flex-wrap">
                         <button
                           disabled={!canEdit(p.status)}
                           onClick={() => onEdit(p.id)}
-                          className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-[#EFF6FF] text-[#2563EB] hover:bg-[#DBEAFE]"
+                          className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-[#F3F4F6] text-[#374151] hover:bg-[#F3F4F6]"
                         >
                           수정
                         </button>
@@ -500,7 +478,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
           </div>
         }
       >
-        <div className="mb-4 p-3 rounded-[8px] bg-[#EFF6FF] border border-[#BFDBFE] text-[12px] text-[#1D4ED8]">
+        <div className="mb-4 p-3 rounded-[8px] bg-[#F3F4F6] border border-[#E5E7EB] text-[12px] text-[#374151]">
           <span className="font-bold">정원 초과 대기자 {waitlist.length}명</span>이 있습니다. 승격
           시 학생에게 자동 알림이 발송됩니다.
         </div>
@@ -530,7 +508,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
                   key={w.rank}
                   className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA]"
                 >
-                  <td className="px-3 py-3 text-center font-black text-[13px] text-[#2563EB]">
+                  <td className="px-3 py-3 text-center font-black text-[13px] text-[#374151]">
                     {w.rank}
                   </td>
                   <td className="px-3 py-3 text-center font-mono text-[11px] text-[#9AA0A6]">
