@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PageHeader, Button, Input, toast } from '@/components/common';
+import { PageHeader, Button, Input, StatusBadge, toast } from '@/components/common';
 
 const ACCENT = '#2563EB';
 
@@ -37,14 +37,6 @@ const INITIAL_MEMBERS = [
     requestedAt: '2026-08-10 09:10',
   },
 ];
-
-const STATUS_STYLES = {
-  대표: 'bg-[#DBEAFE] text-[#0969DA]',
-  '동의 완료': 'bg-[#DCFCE7] text-[#1A7F37]',
-  대기: 'bg-[#FEF3C7] text-[#D97706]',
-  거절: 'bg-[#FEE2E2] text-[#CF222E]',
-  만료: 'bg-[#F3F4F6] text-[#6E7781]',
-};
 
 /**
  * @param {Object} props
@@ -228,15 +220,17 @@ export default function GroupApply({ onBack, onComplete }) {
                         <td className="px-3 py-2.5 font-semibold text-[#1F2328]">{m.name}</td>
                         <td className="px-3 py-2.5 text-[#656D76]">{m.dept}</td>
                         <td className="px-3 py-2.5 text-center">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_STYLES[m.status]}`}
-                          >
-                            {m.status === '대표'
-                              ? '본인'
-                              : m.status === '대기'
-                                ? '대기 (D-1)'
-                                : m.status}
-                          </span>
+                          <StatusBadge
+                            status={m.status}
+                            label={
+                              m.status === '대표'
+                                ? '본인'
+                                : m.status === '대기'
+                                  ? '대기 (D-1)'
+                                  : undefined
+                            }
+                            size="sm"
+                          />
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           {m.status === '대기' && (
