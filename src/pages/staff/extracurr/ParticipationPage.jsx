@@ -19,7 +19,7 @@ function ProgramBar({ onBack }) {
       </div>
       <div className="ml-auto flex gap-4 flex-wrap shrink-0">
         {[
-          { label: '신청', value: 20, color: '#2563EB' },
+          { label: '신청', value: 20, color: '#374151' },
           { label: '승인', value: 14, color: '#059669' },
           { label: '대기', value: 4, color: '#D97706' },
           { label: '잔여 정원', value: 10, color: '#6B7280' },
@@ -474,7 +474,7 @@ function ApplicationReview() {
             <select
               value={f.value}
               onChange={(e) => f.set(e.target.value)}
-              className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#2563EB]"
+              className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
             >
               {f.opts.map((o) => (
                 <option key={o}>{o}</option>
@@ -488,12 +488,12 @@ function ApplicationReview() {
             value={keyword}
             onChange={(e) => setKw(e.target.value)}
             placeholder="검색..."
-            className="h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#2563EB]"
+            className="h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
           />
         </div>
         <button
           onClick={() => toast('엑셀 파일을 다운로드합니다.', 'info')}
-          className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors self-end"
+          className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#374151] hover:text-[#374151] transition-colors self-end"
         >
           엑셀 다운로드
         </button>
@@ -510,7 +510,7 @@ function ApplicationReview() {
                     type="checkbox"
                     checked={allChecked}
                     onChange={toggleAll}
-                    className="accent-[#2563EB] w-3.5 h-3.5 cursor-pointer"
+                    className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                   />
                 </th>
                 {['신청일', '학번', '성명', '학과', '학년', '자격검증', '상태', '처리'].map(
@@ -533,14 +533,14 @@ function ApplicationReview() {
                 return (
                   <tr
                     key={a.id}
-                    className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(a.id) ? 'bg-[#EFF6FF]' : ''}`}
+                    className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(a.id) ? 'bg-[#F3F4F6]' : ''}`}
                   >
                     <td className="px-4 py-3 text-center">
                       <input
                         type="checkbox"
                         checked={selected.has(a.id)}
                         onChange={() => toggle(a.id)}
-                        className="accent-[#2563EB] w-3.5 h-3.5 cursor-pointer"
+                        className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                       />
                     </td>
                     <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
@@ -659,7 +659,7 @@ function ApplicationReview() {
             <select
               value={rejectReason}
               onChange={(e) => setRjReason(e.target.value)}
-              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#2563EB]"
+              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
             >
               {REJECTION_REASONS.map((r) => (
                 <option key={r}>{r}</option>
@@ -675,7 +675,7 @@ function ApplicationReview() {
               onChange={(e) => setRjDetail(e.target.value)}
               rows={4}
               placeholder="학생에게 공개되는 사유를 작성해 주세요."
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white resize-none focus:outline-none focus:border-[#2563EB]"
+              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white resize-none focus:outline-none focus:border-[#374151]"
             />
           </div>
           <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[12px] text-[#92400E]">
@@ -755,7 +755,7 @@ function AttendanceManage() {
     <div>
       {/* QR button */}
       <div className="flex justify-end mb-4">
-        <Button onClick={openQr} style={{ background: '#2563EB' }}>
+        <Button onClick={openQr} style={{ background: '#374151' }}>
           QR 출석 코드 생성
         </Button>
       </div>
@@ -835,7 +835,7 @@ function AttendanceManage() {
             <Button variant="outline" onClick={() => setEditTarget(null)}>
               취소
             </Button>
-            <Button style={{ background: '#2563EB' }} onClick={confirmAttChange}>
+            <Button style={{ background: '#374151' }} onClick={confirmAttChange}>
               수정 확정
             </Button>
           </div>
@@ -843,7 +843,7 @@ function AttendanceManage() {
       >
         <div className="flex flex-col gap-4">
           {editTarget && (
-            <div className="p-3 rounded-[8px] bg-[#EFF6FF] border border-[#BFDBFE] text-[12px] text-[#1D4ED8]">
+            <div className="p-3 rounded-[8px] bg-[#F3F4F6] border border-[#E5E7EB] text-[12px] text-[#374151]">
               <span className="font-bold">
                 {students.find((s) => s.studentId === editTarget.sid)?.name}
               </span>{' '}
@@ -859,7 +859,7 @@ function AttendanceManage() {
               onChange={(e) => setEditReason(e.target.value)}
               rows={3}
               placeholder="수정 사유를 입력하세요. (필수)"
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white resize-none focus:outline-none focus:border-[#2563EB]"
+              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white resize-none focus:outline-none focus:border-[#374151]"
             />
           </div>
           <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[12px] text-[#92400E]">
@@ -935,7 +935,7 @@ function AttendanceManage() {
               )}
               {/* Logo center */}
               <rect x="76" y="76" width="28" height="28" rx="4" fill="white" />
-              <rect x="80" y="80" width="20" height="20" rx="3" fill="#2563EB" />
+              <rect x="80" y="80" width="20" height="20" rx="3" fill="#374151" />
               <text x="90" y="94" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">
                 QR
               </text>
@@ -948,13 +948,13 @@ function AttendanceManage() {
           </div>
 
           <div
-            className={`text-[32px] font-black tabular-nums ${countdown <= 30 ? 'text-[#CF222E]' : countdown <= 60 ? 'text-[#D97706]' : 'text-[#2563EB]'}`}
+            className={`text-[32px] font-black tabular-nums ${countdown <= 30 ? 'text-[#CF222E]' : countdown <= 60 ? 'text-[#D97706]' : 'text-[#374151]'}`}
           >
             {fmt(countdown)}
           </div>
           <p className="text-[12px] text-[#9AA0A6]">학생이 이 QR을 스캔하면 출석이 기록됩니다.</p>
           {countdown === 0 && (
-            <Button onClick={openQr} style={{ background: '#2563EB' }}>
+            <Button onClick={openQr} style={{ background: '#374151' }}>
               새 코드 생성
             </Button>
           )}
@@ -1093,7 +1093,7 @@ function ResultJudge() {
                     type="checkbox"
                     checked={allChecked}
                     onChange={toggleAll}
-                    className="accent-[#2563EB] w-3.5 h-3.5 cursor-pointer"
+                    className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                   />
                 </th>
                 {['학번', '성명', '출석률', '활동일지', '설문', '판정', '미수료 사유', '처리'].map(
@@ -1117,7 +1117,7 @@ function ResultJudge() {
                 return (
                   <tr
                     key={r.studentId}
-                    className={`border-b border-[#F3F4F6] last:border-0 transition-colors ${isFail ? 'bg-[#FFF5F5] hover:bg-[#FEE2E2]/40' : selected.has(r.studentId) ? 'bg-[#EFF6FF]' : 'hover:bg-[#FAFAFA]'}`}
+                    className={`border-b border-[#F3F4F6] last:border-0 transition-colors ${isFail ? 'bg-[#FFF5F5] hover:bg-[#FEE2E2]/40' : selected.has(r.studentId) ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'}`}
                   >
                     <td className="px-4 py-3 text-center">
                       <input
@@ -1125,7 +1125,7 @@ function ResultJudge() {
                         checked={selected.has(r.studentId)}
                         onChange={() => toggle(r.studentId)}
                         disabled={confirmed_}
-                        className="accent-[#2563EB] w-3.5 h-3.5 cursor-pointer disabled:opacity-40"
+                        className="accent-[#374151] w-3.5 h-3.5 cursor-pointer disabled:opacity-40"
                       />
                     </td>
                     <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
@@ -1175,7 +1175,7 @@ function ResultJudge() {
                               onChange={(e) =>
                                 setReasonEdit({ sid: r.studentId, val: e.target.value })
                               }
-                              className="flex-1 h-7 px-2 text-[11px] rounded-[4px] border border-[#2563EB] bg-white focus:outline-none"
+                              className="flex-1 h-7 px-2 text-[11px] rounded-[4px] border border-[#374151] bg-white focus:outline-none"
                             />
                             <button
                               onClick={() => {
@@ -1188,7 +1188,7 @@ function ResultJudge() {
                                 );
                                 setReasonEdit(null);
                               }}
-                              className="h-7 px-2 text-[10px] font-bold text-white rounded-[4px] bg-[#2563EB]"
+                              className="h-7 px-2 text-[10px] font-bold text-white rounded-[4px] bg-[#374151]"
                             >
                               저장
                             </button>
@@ -1356,7 +1356,7 @@ export default function ParticipationPage({ onBack }) {
       <ProgramBar onBack={onBack} />
 
       <div className="mb-5">
-        <Tabs tabs={TABS} active={tab} onChange={setTab} accentColor="#2563EB" />
+        <Tabs tabs={TABS} active={tab} onChange={setTab} accentColor="#374151" />
       </div>
 
       {tab === 'review' && <ApplicationReview />}

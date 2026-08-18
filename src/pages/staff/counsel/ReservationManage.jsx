@@ -1,14 +1,7 @@
 import { useState } from 'react';
-import { Button, Modal, toast } from '@/components/common';
+import { Button, Modal, StatusBadge, toast } from '@/components/common';
 
-const ACCENT = '#0891B2';
-
-const STATUS_STYLE = {
-  대기: { bg: '#ECFEFF', text: '#0891B2' },
-  확정: { bg: '#D1FAE5', text: '#059669' },
-  반려: { bg: '#FEE2E2', text: '#CF222E' },
-  취소: { bg: '#F3F4F6', text: '#9AA0A6' },
-};
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 const RESERVATIONS = [
   {
@@ -117,7 +110,7 @@ export default function ReservationManage() {
           </p>
         </div>
         <span
-          className="text-[12px] font-bold px-3 py-1 rounded-full bg-[#ECFEFF]"
+          className="text-[12px] font-bold px-3 py-1 rounded-full bg-[#F3F4F6]"
           style={{ color: ACCENT }}
         >
           대기 {pending.length}건
@@ -153,13 +146,11 @@ export default function ReservationManage() {
                     </p>
                     <p className="text-[10px] text-[#9AA0A6] font-mono">{s.id}</p>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">
-                    확정
-                  </span>
+                  <StatusBadge status="확정" size="sm" />
                 </div>
                 <div className="flex items-center gap-2 mb-3">
                   <div
-                    className="w-7 h-7 rounded-full bg-[#ECFEFF] flex items-center justify-center text-[11px] font-black"
+                    className="w-7 h-7 rounded-full bg-[#F3F4F6] flex items-center justify-center text-[11px] font-black"
                     style={{ color: ACCENT }}
                   >
                     {s.name[0]}
@@ -224,7 +215,6 @@ export default function ReservationManage() {
             </thead>
             <tbody>
               {rows.map((r) => {
-                const ss = STATUS_STYLE[r.status];
                 return (
                   <tr
                     key={r.id}
@@ -243,7 +233,7 @@ export default function ReservationManage() {
                     <td className="px-4 py-3 text-[#656D76]">{r.dept}</td>
                     <td className="px-4 py-3">
                       <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#ECFEFF]"
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6]"
                         style={{ color: ACCENT }}
                       >
                         {r.type}
@@ -253,12 +243,7 @@ export default function ReservationManage() {
                       {r.wishDate}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: ss.bg, color: ss.text }}
-                      >
-                        {r.status}
-                      </span>
+                      <StatusBadge status={r.status} size="sm" />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1.5 justify-center">
@@ -322,7 +307,7 @@ export default function ReservationManage() {
             <select
               value={rejectCode}
               onChange={(e) => setRejectCode(e.target.value)}
-              className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#0891B2]"
+              className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
             >
               {REJECT_REASONS.map((r) => (
                 <option key={r}>{r}</option>
@@ -338,7 +323,7 @@ export default function ReservationManage() {
               onChange={(e) => setRejectDetail(e.target.value)}
               rows={3}
               placeholder="학생에게 공개되는 사유를 입력하세요."
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none bg-white focus:outline-none focus:border-[#0891B2]"
+              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none bg-white focus:outline-none focus:border-[#374151]"
             />
           </div>
           <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[12px] text-[#92400E]">

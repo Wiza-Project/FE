@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, toast } from '@/components/common';
 
-const ACCENT = '#0891B2';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 const PROGRAMS_BY_COMP = {
   자기관리: ['진로탐색 워크숍', '독서인증제', '리더십 캠프'],
@@ -248,7 +248,7 @@ export default function SessionRecord() {
                 onChange={(e) => setPrivateNote(e.target.value)}
                 rows={6}
                 placeholder="비공개 상담 내용, 관찰 사항, 위기 징후 등을 기록하세요."
-                className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#0891B2] bg-[#FAFAFA]"
+                className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151] bg-[#FAFAFA]"
               />
               <p className="text-[10px] text-[#9AA0A6] mt-1 text-right">{privateNote.length}자</p>
             </div>
@@ -256,11 +256,11 @@ export default function SessionRecord() {
 
           {/* Public summary */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center gap-2 bg-[#ECFEFF]">
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#CFFAFE] text-[#0891B2]">
+            <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center gap-2 bg-[#F3F4F6]">
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#374151]">
                 학생 공개
               </span>
-              <span className="text-[11px] text-[#0891B2]">
+              <span className="text-[11px] text-[#374151]">
                 학생이 마이페이지에서 열람할 수 있습니다.
               </span>
             </div>
@@ -270,7 +270,7 @@ export default function SessionRecord() {
                 onChange={(e) => setPublicSummary(e.target.value)}
                 rows={4}
                 placeholder="학생에게 전달할 상담 요약을 작성하세요."
-                className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#0891B2] bg-white"
+                className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151] bg-white"
               />
             </div>
           </div>
@@ -283,7 +283,7 @@ export default function SessionRecord() {
               onChange={(e) => setActionPlan(e.target.value)}
               rows={3}
               placeholder="예) 1. 진로 탐색 워크숍 참여 2. 이력서 초안 작성 3. 다음 상담 예약"
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#0891B2] bg-white"
+              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151] bg-white"
             />
           </div>
 
@@ -301,7 +301,7 @@ export default function SessionRecord() {
                     setCompSel(e.target.value);
                     setProgSel(PROGRAMS_BY_COMP[e.target.value][0]);
                   }}
-                  className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#0891B2]"
+                  className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
                 >
                   {Object.keys(PROGRAMS_BY_COMP).map((c) => (
                     <option key={c}>{c}</option>
@@ -313,7 +313,7 @@ export default function SessionRecord() {
                 <select
                   value={progSel}
                   onChange={(e) => setProgSel(e.target.value)}
-                  className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#0891B2]"
+                  className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
                 >
                   {(PROGRAMS_BY_COMP[compSel] ?? []).map((p) => (
                     <option key={p}>{p}</option>
@@ -333,7 +333,7 @@ export default function SessionRecord() {
                 {recommended.map((r) => (
                   <span
                     key={r.prog}
-                    className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#ECFEFF] border border-[#A5F3FC]"
+                    className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#F3F4F6] border border-[#E5E7EB]"
                     style={{ color: ACCENT }}
                   >
                     <span className="text-[10px] text-[#9AA0A6]">{r.comp}</span>

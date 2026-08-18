@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Modal, Drawer, StatTile, toast } from '@/components/common';
 
-const A = '#D97706'; // accent amber
+const A = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── shared helpers ────────────────────────────────────────────────────────────
 
@@ -202,7 +202,7 @@ const AUTO_STYLE = {
   '유효기간 만료': { bg: '#FEE2E2', text: '#CF222E' },
 };
 const REVIEW_STYLE = {
-  대기: { bg: '#ECFEFF', text: '#0891B2' },
+  대기: { bg: '#F3F4F6', text: '#374151' },
   검토중: { bg: '#FEF3C7', text: '#D97706' },
   승인: { bg: '#D1FAE5', text: '#059669' },
   보완요청: { bg: '#FDE68A', text: '#92400E' },
@@ -258,7 +258,7 @@ function TabPolicySettings() {
   };
 
   const PATH_CHIP = (p) =>
-    p === 'AUTO' ? { bg: '#D1FAE5', text: '#059669' } : { bg: '#DBEAFE', text: '#1D4ED8' };
+    p === 'AUTO' ? { bg: '#D1FAE5', text: '#059669' } : { bg: '#F3F4F6', text: '#374151' };
   const DUP_LABELS = { NONE: '무제한', ONCE: '1회', PER_TERM: '학기당', PER_YEAR: '연도당' };
 
   return (

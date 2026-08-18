@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Drawer, Modal, toast } from '@/components/common';
 
-const ACCENT = '#0891B2';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -247,12 +247,12 @@ export default function MySchedule() {
   });
 
   const SLOT_COLORS = {
-    available: '#ECFEFF',
-    booked: '#0891B2',
+    available: '#F3F4F6',
+    booked: '#374151',
     holiday: '#F3F4F6',
   };
   const SLOT_TEXT = {
-    available: '#0891B2',
+    available: '#374151',
     booked: '#FFFFFF',
     holiday: '#9AA0A6',
   };
@@ -273,8 +273,8 @@ export default function MySchedule() {
         </div>
         <div className="flex items-center gap-3 text-[11px]">
           {[
-            { color: '#ECFEFF', border: '#A5F3FC', text: '#0891B2', label: '가능' },
-            { color: '#0891B2', border: '#0891B2', text: '#FFF', label: '예약됨' },
+            { color: '#F3F4F6', border: '#E5E7EB', text: '#374151', label: '가능' },
+            { color: '#374151', border: '#374151', text: '#FFF', label: '예약됨' },
             { color: '#F3F4F6', border: '#E5E7EB', text: '#9AA0A6', label: '휴무' },
           ].map((l) => (
             <span key={l.label} className="flex items-center gap-1.5">
@@ -302,7 +302,7 @@ export default function MySchedule() {
               <div
                 key={d}
                 className="py-2 text-center border-r border-[#E5E7EB] last:border-0"
-                style={isToday ? { background: '#ECFEFF' } : { background: '#F6F8FA' }}
+                style={isToday ? { background: '#F3F4F6' } : { background: '#F6F8FA' }}
               >
                 <p
                   className="text-[11px] font-bold"
@@ -358,7 +358,7 @@ export default function MySchedule() {
                   <div
                     key={key}
                     className="border-r border-[#F3F4F6] last:border-0 relative cursor-pointer transition-colors"
-                    style={isDragActive ? { background: '#CFFAFE' } : {}}
+                    style={isDragActive ? { background: '#F3F4F6' } : {}}
                     onMouseDown={() => !slot && handleMouseDown(di, hi)}
                     onMouseEnter={() => !slot && handleMouseEnter(di, hi)}
                     onClick={() => slot && handleCellClick(slot)}
@@ -369,7 +369,7 @@ export default function MySchedule() {
                         style={{
                           height: `${spanHalves * 28 - 4}px`,
                           background: SLOT_COLORS[slot.mode],
-                          border: `1px solid ${slot.mode === 'booked' ? '#0E7490' : slot.mode === 'holiday' ? '#E5E7EB' : '#A5F3FC'}`,
+                          border: `1px solid ${slot.mode === 'booked' ? '#374151' : slot.mode === 'holiday' ? '#E5E7EB' : '#E5E7EB'}`,
                         }}
                       >
                         <p
@@ -425,7 +425,7 @@ export default function MySchedule() {
                 <button
                   key={d}
                   onClick={() => setFDay(i)}
-                  className={`w-8 h-8 text-[12px] font-bold rounded-full border-2 transition-colors ${fDay === i ? 'text-white border-[#0891B2]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
+                  className={`w-8 h-8 text-[12px] font-bold rounded-full border-2 transition-colors ${fDay === i ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
                   style={fDay === i ? { background: ACCENT } : {}}
                 >
                   {d}
@@ -455,7 +455,7 @@ export default function MySchedule() {
                 <select
                   value={f.val}
                   onChange={(e) => f.set(Number(e.target.value))}
-                  className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#0891B2]"
+                  className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
                 >
                   {HALF_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -489,7 +489,7 @@ export default function MySchedule() {
                 min={1}
                 max={10}
                 onChange={(e) => setFCap(Number(e.target.value))}
-                className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#0891B2]"
+                className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
               />
             </div>
             <div>
@@ -501,7 +501,7 @@ export default function MySchedule() {
                   <button
                     key={m}
                     onClick={() => setFMethod(m)}
-                    className={`flex-1 h-9 text-[12px] font-semibold rounded-[6px] border-2 transition-colors ${fMethod === m ? 'text-white border-[#0891B2]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
+                    className={`flex-1 h-9 text-[12px] font-semibold rounded-[6px] border-2 transition-colors ${fMethod === m ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
                     style={fMethod === m ? { background: ACCENT } : {}}
                   >
                     {m}
@@ -524,7 +524,7 @@ export default function MySchedule() {
                 min={0}
                 max={7}
                 onChange={(e) => setFDead(Number(e.target.value))}
-                className="w-16 h-8 px-2 text-[13px] text-center rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#0891B2]"
+                className="w-16 h-8 px-2 text-[13px] text-center rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
               />
               <span className="text-[12px] text-[#656D76]">일 전 마감</span>
             </div>
@@ -537,7 +537,7 @@ export default function MySchedule() {
                 type="checkbox"
                 checked={fRepeat}
                 onChange={(e) => setFRepeat(e.target.checked)}
-                className="accent-[#0891B2] w-3.5 h-3.5"
+                className="accent-[#374151] w-3.5 h-3.5"
               />
               <span className="text-[12px] font-semibold text-[#444D56]">반복 등록</span>
             </label>
@@ -551,7 +551,7 @@ export default function MySchedule() {
                     value={fRepeatDay}
                     onChange={(e) => setFRD(e.target.value)}
                     placeholder="예) 매주 월·수·금"
-                    className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#0891B2]"
+                    className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
                   />
                 </div>
                 <div className="flex-1">
@@ -562,7 +562,7 @@ export default function MySchedule() {
                     type="date"
                     value={fRepeatEnd}
                     onChange={(e) => setFRE(e.target.value)}
-                    className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#0891B2]"
+                    className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
                   />
                 </div>
               </div>
@@ -619,7 +619,7 @@ export default function MySchedule() {
             <select
               value={altSlot}
               onChange={(e) => setAltSlot(e.target.value)}
-              className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#0891B2]"
+              className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
             >
               <option value="">— 대체 슬롯 선택 —</option>
               {slots

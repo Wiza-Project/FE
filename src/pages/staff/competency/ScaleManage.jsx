@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Modal, toast } from '@/components/common';
 
-const ACCENT = '#7C3AED';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -126,7 +126,7 @@ export default function ScaleManage() {
                 <tr
                   key={t.id}
                   onClick={() => setSelected(t.id)}
-                  className={`border-b border-[#F3F4F6] last:border-0 cursor-pointer transition-colors ${selected === t.id ? 'bg-[#F5F3FF]' : 'hover:bg-[#FAFAFA]'}`}
+                  className={`border-b border-[#F3F4F6] last:border-0 cursor-pointer transition-colors ${selected === t.id ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'}`}
                 >
                   <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">{t.id}</td>
                   <td className="px-4 py-3">
@@ -153,7 +153,7 @@ export default function ScaleManage() {
                   <td className="px-4 py-3 text-center text-[#656D76]">{t.usedCount}개</td>
                   <td className="px-4 py-3 text-center">
                     <button
-                      className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F5F3FF] hover:bg-[#EDE9FE] transition-colors"
+                      className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
                       style={{ color: ACCENT }}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -172,7 +172,7 @@ export default function ScaleManage() {
         {/* RIGHT: Template detail */}
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
           <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-3">
-            <div className="w-1 h-4 rounded-full bg-[#A78BFA]" />
+            <div className="w-1 h-4 rounded-full bg-[#9CA3AF]" />
             <span className="text-[13px] font-bold text-[#1F2328]">{detail.name}</span>
             <span
               className="text-[11px] font-black px-2 py-0.5 rounded-full text-white ml-1"
@@ -206,8 +206,8 @@ export default function ScaleManage() {
           </div>
 
           {detail.isDefault && (
-            <div className="px-5 py-2 bg-[#F5F3FF] border-b border-[#E5E7EB]">
-              <p className="text-[11px] text-[#7C3AED]">문항 등록 시 자동 선택될 템플릿입니다.</p>
+            <div className="px-5 py-2 bg-[#F3F4F6] border-b border-[#E5E7EB]">
+              <p className="text-[11px] text-[#374151]">문항 등록 시 자동 선택될 템플릿입니다.</p>
             </div>
           )}
 
@@ -271,7 +271,7 @@ export default function ScaleManage() {
                             onChange={(e) => setEditVal(e.target.value)}
                             onBlur={commitEdit}
                             onKeyDown={(e) => e.key === 'Enter' && commitEdit()}
-                            className="w-full h-8 px-2 text-[12px] rounded-[4px] border border-[#7C3AED] focus:outline-none"
+                            className="w-full h-8 px-2 text-[12px] rounded-[4px] border border-[#374151] focus:outline-none"
                           />
                         ) : (
                           <button
@@ -279,7 +279,7 @@ export default function ScaleManage() {
                               setEditingCell({ tid: detail.id, vi, field: 'anchor' });
                               setEditVal(item.anchor);
                             }}
-                            className="text-[12px] text-[#1F2328] hover:text-[#7C3AED] transition-colors hover:underline text-left"
+                            className="text-[12px] text-[#1F2328] hover:text-[#374151] transition-colors hover:underline text-left"
                           >
                             {item.anchor}
                           </button>
@@ -294,7 +294,7 @@ export default function ScaleManage() {
                             onChange={(e) => setEditVal(e.target.value)}
                             onBlur={commitEdit}
                             onKeyDown={(e) => e.key === 'Enter' && commitEdit()}
-                            className="w-16 h-8 px-2 text-[12px] rounded-[4px] border border-[#7C3AED] focus:outline-none text-center"
+                            className="w-16 h-8 px-2 text-[12px] rounded-[4px] border border-[#374151] focus:outline-none text-center"
                           />
                         ) : (
                           <button
@@ -302,7 +302,7 @@ export default function ScaleManage() {
                               setEditingCell({ tid: detail.id, vi, field: 'converted' });
                               setEditVal(String(item.converted));
                             }}
-                            className="text-[12px] font-bold hover:text-[#7C3AED] transition-colors hover:underline"
+                            className="text-[12px] font-bold hover:text-[#374151] transition-colors hover:underline"
                             style={{ color: ACCENT }}
                           >
                             {item.converted}점
@@ -369,7 +369,7 @@ export default function ScaleManage() {
             </label>
             <input
               placeholder="예) T04"
-              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#7C3AED]"
+              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151]"
             />
           </div>
           <div>
@@ -378,7 +378,7 @@ export default function ScaleManage() {
             </label>
             <input
               placeholder="예) 리커트 6점 척도"
-              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#7C3AED]"
+              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151]"
             />
           </div>
           <div>
@@ -389,7 +389,7 @@ export default function ScaleManage() {
               {[4, 5, 6, 7].map((p) => (
                 <button
                   key={p}
-                  className="h-9 w-12 text-[13px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#7C3AED] hover:text-[#7C3AED] transition-colors"
+                  className="h-9 w-12 text-[13px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#374151] hover:text-[#374151] transition-colors"
                 >
                   {p}점
                 </button>

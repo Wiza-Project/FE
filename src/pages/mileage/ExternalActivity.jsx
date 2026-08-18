@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { PageHeader, Stepper, Button, Input, FileUpload, toast } from '@/components/common';
+import {
+  PageHeader,
+  Stepper,
+  Button,
+  Input,
+  FileUpload,
+  StatusBadge,
+  toast,
+} from '@/components/common';
 
 const ACCENT = '#D97706';
 
@@ -74,14 +82,6 @@ const MY_APPS = [
     opinion: '자격증 사본이 흐릿합니다. 재제출 바랍니다.',
   },
 ];
-
-const STATUS_COLORS = {
-  제출: 'bg-[#DBEAFE] text-[#0969DA]',
-  검토중: 'bg-[#FEF3C7] text-[#D97706]',
-  적립완료: 'bg-[#DCFCE7] text-[#1A7F37]',
-  보완요청: 'bg-[#FEF3C7] text-[#D97706]',
-  반려: 'bg-[#FEE2E2] text-[#CF222E]',
-};
 
 // ── Dynamic form fields by category ──
 function LanguageFields() {
@@ -556,11 +556,7 @@ export default function ExternalActivity({ onBack }) {
                 <td className="px-4 py-3 font-semibold text-[#1F2328]">{a.name}</td>
                 <td className="px-4 py-3 text-center font-black text-[#D97706]">{a.score}점</td>
                 <td className="px-4 py-3 text-center">
-                  <span
-                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${STATUS_COLORS[a.status]}`}
-                  >
-                    {a.status}
-                  </span>
+                  <StatusBadge status={a.status} size="sm" />
                 </td>
                 <td className="px-4 py-3 text-center text-[#656D76]">{a.processedAt}</td>
                 <td className="px-4 py-3">

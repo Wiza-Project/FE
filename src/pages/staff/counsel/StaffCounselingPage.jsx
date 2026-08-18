@@ -5,7 +5,7 @@ import SessionRecord from './SessionRecord';
 import SessionResult from './SessionResult';
 import CenterIntake from './CenterIntake';
 
-const ACCENT = '#0891B2';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 const NAV_ITEMS = [
   { key: 'schedule', label: '내 일정', icon: '📅', desc: '가능 일정 등록·시간대 관리' },
@@ -54,7 +54,7 @@ export default function StaffCounselingPage() {
               <button
                 key={item.key}
                 onClick={() => setNav(item.key)}
-                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors ${i > 0 ? 'border-t border-[#F3F4F6]' : ''} ${active ? 'bg-[#ECFEFF]' : 'hover:bg-[#FAFAFA]'}`}
+                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors ${i > 0 ? 'border-t border-[#F3F4F6]' : ''} ${active ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'}`}
               >
                 <span className={`text-[14px] mt-0.5 shrink-0 ${active ? '' : 'opacity-50'}`}>
                   {item.icon}

@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Button, ConfirmDialog, Drawer, toast } from '@/components/common';
 
-const ACCENT = '#7C3AED';
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -405,7 +405,7 @@ export default function CompetencyManage() {
                     onDragOver={handleDragOver}
                     onDrop={() => handleDrop(idx)}
                     onClick={() => setSelected(c.code)}
-                    className={`border-b border-[#F3F4F6] last:border-0 cursor-pointer transition-colors ${selected === c.code ? 'bg-[#F5F3FF]' : 'hover:bg-[#FAFAFA]'} ${!c.active ? 'opacity-50' : ''}`}
+                    className={`border-b border-[#F3F4F6] last:border-0 cursor-pointer transition-colors ${selected === c.code ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'} ${!c.active ? 'opacity-50' : ''}`}
                   >
                     <td className="px-3 py-3 cursor-grab active:cursor-grabbing">
                       <DragHandle />
@@ -428,7 +428,7 @@ export default function CompetencyManage() {
                     </td>
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <button
-                        className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F5F3FF] hover:bg-[#EDE9FE] transition-colors"
+                        className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
                         style={{ color: ACCENT }}
                       >
                         수정
@@ -444,12 +444,12 @@ export default function CompetencyManage() {
         {/* RIGHT: Sub-competency table */}
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
           <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
-            <div className="w-1 h-4 rounded-full bg-[#A78BFA]" />
+            <div className="w-1 h-4 rounded-full bg-[#9CA3AF]" />
             <span className="text-[13px] font-bold text-[#1F2328]">
               {selectedCore?.name ?? ''} 하위역량
             </span>
             <span
-              className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F5F3FF]"
+              className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6]"
               style={{ color: ACCENT }}
             >
               {subs.length}개
@@ -500,7 +500,7 @@ export default function CompetencyManage() {
                           setEditSub(s);
                           setSubDrawer(true);
                         }}
-                        className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F5F3FF] hover:bg-[#EDE9FE] transition-colors"
+                        className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
                         style={{ color: ACCENT }}
                       >
                         수정
@@ -557,7 +557,7 @@ export default function CompetencyManage() {
                 value={f.value}
                 onChange={(e) => f.set(e.target.value)}
                 placeholder={f.placeholder}
-                className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#7C3AED] bg-white"
+                className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
               />
               {f.hint && <p className="text-[10px] text-[#9AA0A6] mt-1">{f.hint}</p>}
             </div>
@@ -569,7 +569,7 @@ export default function CompetencyManage() {
               onChange={(e) => setFDesc(e.target.value)}
               rows={3}
               placeholder="역량에 대한 설명을 입력하세요."
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#7C3AED] bg-white"
+              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151] bg-white"
             />
           </div>
           <div>
@@ -582,7 +582,7 @@ export default function CompetencyManage() {
               min={1}
               max={6}
               onChange={(e) => setFAxis(Number(e.target.value))}
-              className="w-24 h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#7C3AED] bg-white"
+              className="w-24 h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -635,7 +635,7 @@ export default function CompetencyManage() {
               <input
                 defaultValue={f.val}
                 placeholder={f.ph}
-                className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#7C3AED] bg-white"
+                className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
               />
             </div>
           ))}
@@ -645,7 +645,7 @@ export default function CompetencyManage() {
               defaultValue={editSub?.description ?? ''}
               rows={3}
               placeholder="하위역량에 대한 설명을 입력하세요."
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#7C3AED] bg-white"
+              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151] bg-white"
             />
           </div>
           <div>
@@ -656,7 +656,7 @@ export default function CompetencyManage() {
               type="number"
               defaultValue={editSub?.order ?? subs.length + 1}
               min={1}
-              className="w-24 h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#7C3AED] bg-white"
+              className="w-24 h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
             />
           </div>
         </div>

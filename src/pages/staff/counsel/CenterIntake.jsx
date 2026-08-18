@@ -1,13 +1,7 @@
 import { useState } from 'react';
-import { Button, Modal, toast } from '@/components/common';
+import { Button, Modal, StatusBadge, toast } from '@/components/common';
 
-const ACCENT = '#0891B2';
-
-const STATUS_STYLE = {
-  미배정: { bg: '#FEF3C7', text: '#D97706' },
-  배정완료: { bg: '#D1FAE5', text: '#059669' },
-  취소: { bg: '#F3F4F6', text: '#9AA0A6' },
-};
+const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 const COUNSELORS = [
   '선택하세요',
@@ -92,11 +86,12 @@ const INITIAL = [
   },
 ];
 
+// 상담 유형 구분은 색상 대신 배경 명도 단계로만 표시합니다(무채색 기조).
 const TYPE_COLORS = {
-  '진로·역량': { bg: '#DBEAFE', text: '#1D4ED8' },
-  학업고민: { bg: '#E0E7FF', text: '#4338CA' },
-  '심리·정서': { bg: '#FCE7F3', text: '#BE185D' },
-  대인관계: { bg: '#D1FAE5', text: '#065F46' },
+  '진로·역량': { bg: '#E5E7EB', text: '#1F2937' },
+  학업고민: { bg: '#F3F4F6', text: '#374151' },
+  '심리·정서': { bg: '#F3F4F6', text: '#4B5563' },
+  대인관계: { bg: '#F3F4F6', text: '#6B7280' },
 };
 
 export default function CenterIntake() {
@@ -154,7 +149,7 @@ export default function CenterIntake() {
             </span>
           )}
           <span
-            className="text-[10px] font-bold px-2 py-1 rounded-full bg-[#ECFEFF]"
+            className="text-[10px] font-bold px-2 py-1 rounded-full bg-[#F3F4F6]"
             style={{ color: ACCENT }}
           >
             센터장·직원 전용
@@ -165,7 +160,7 @@ export default function CenterIntake() {
       {/* Summary tiles */}
       <div className="grid grid-cols-3 gap-4 mb-5">
         {[
-          { label: '전체 접수', value: rows.length, color: ACCENT, bg: '#ECFEFF' },
+          { label: '전체 접수', value: rows.length, color: ACCENT, bg: '#F3F4F6' },
           {
             label: '미배정',
             value: rows.filter((r) => r.status === '미배정').length,
@@ -236,7 +231,6 @@ export default function CenterIntake() {
             </thead>
             <tbody>
               {filtered.map((r) => {
-                const ss = STATUS_STYLE[r.status];
                 const tc = TYPE_COLORS[r.type] ?? { bg: '#F3F4F6', text: '#656D76' };
                 return (
                   <tr
@@ -265,12 +259,7 @@ export default function CenterIntake() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: ss.bg, color: ss.text }}
-                      >
-                        {r.status}
-                      </span>
+                      <StatusBadge status={r.status} size="sm" />
                     </td>
                     <td className="px-4 py-3 text-center">
                       {r.counselor ? (
@@ -294,7 +283,7 @@ export default function CenterIntake() {
                           <button
                             onClick={() => openAssign(r)}
                             className="h-6 px-2 text-[9px] font-bold rounded-[4px] whitespace-nowrap transition-colors"
-                            style={{ background: '#ECFEFF', color: ACCENT }}
+                            style={{ background: '#F3F4F6', color: ACCENT }}
                           >
                             {r.status === '배정완료' ? '재배정' : '배정'}
                           </button>

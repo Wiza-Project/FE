@@ -18,6 +18,7 @@ import StaffCompetencyPage from '@/pages/staff/competency/StaffCompetencyPage';
 import StaffMileagePage from '@/pages/staff/mileage/StaffMileagePage';
 import StaffEmploymentPage from '@/pages/staff/career/StaffEmploymentPage';
 import StaffCounselingPage from '@/pages/staff/counsel/StaffCounselingPage';
+import StudentRecords from '@/pages/staff/students/StudentRecords';
 import LoginPage from '@/pages/auth/LoginPage';
 import ConsentPage from '@/pages/auth/ConsentPage';
 import ForbiddenPage from '@/pages/ForbiddenPage';
@@ -32,7 +33,9 @@ import NotFoundPage from '@/pages/NotFoundPage';
  *   /mileage       마일리지         P4100
  *   /career        취창업관리       P5100
  *   /staff/*       교직원 포털
- *   /admin/*       관리자 포털 (향후 추가)
+ *
+ * ADMIN 포털은 별도로 만들지 않기로 결정했습니다(2026-08-18). USER_TYPE.ADMIN 값
+ * 자체는 백엔드 계정 분류상 유지되지만, 이 값을 가진 계정을 위한 전용 화면은 없습니다.
  *
  * 로그인/동의 화면과 로그인 이후 포털(학생·교직원)은 각각 전체 화면 디자인을 갖고 있어
  * RootLayout(공개 페이지용 헤더·푸터)을 쓰지 않고 최상위 라우트로 분리했습니다.
@@ -103,6 +106,7 @@ export const router = createBrowserRouter([
           { path: '/staff/programs', element: <StaffExtracurrPage /> },
           { path: '/staff/competency', element: <StaffCompetencyPage /> },
           { path: '/staff/counsel', element: <StaffCounselingPage /> },
+          { path: '/staff/students', element: <StudentRecords /> },
           { path: '/staff/mileage', element: <StaffMileagePage /> },
           { path: '/staff/career', element: <StaffEmploymentPage /> },
           { path: '/staff/career/statistics', element: <StaffEmploymentPage /> },
@@ -110,18 +114,4 @@ export const router = createBrowserRouter([
       },
     ],
   },
-
-  // ── 관리자 포털 ────────────────────────────────────────
-  // TODO: ADMIN 포털 페이지 구현 예정
-  // {
-  //   element: <ProtectedRoute allow={[USER_TYPE.ADMIN]} />,
-  //   children: [
-  //     {
-  //       element: <PortalShell />,
-  //       children: [
-  //         // admin pages
-  //       ],
-  //     },
-  //   ],
-  // },
 ]);
