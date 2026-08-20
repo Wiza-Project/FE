@@ -1,227 +1,13 @@
 import { useState, useRef } from 'react';
-import { Button, ConfirmDialog, Drawer, toast } from '@/components/common';
+import { useMutation } from '@tanstack/react-query';
+import { Button, ConfirmDialog, Drawer, EmptyState, toast } from '@/components/common';
+import { registerCompetency } from '@/api/competency';
+import { ApiError } from '@/api/client';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
-
-const INITIAL_CORES = [
-  {
-    code: 'C1',
-    name: '자기관리',
-    nameEn: 'Self-Management',
-    subCount: 3,
-    qCount: 15,
-    axisOrder: 1,
-    active: true,
-  },
-  {
-    code: 'C2',
-    name: '의사소통',
-    nameEn: 'Communication',
-    subCount: 3,
-    qCount: 15,
-    axisOrder: 2,
-    active: true,
-  },
-  {
-    code: 'C3',
-    name: '대인관계',
-    nameEn: 'Interpersonal Skills',
-    subCount: 5,
-    qCount: 25,
-    axisOrder: 3,
-    active: true,
-  },
-  {
-    code: 'C4',
-    name: '글로벌',
-    nameEn: 'Global Competency',
-    subCount: 3,
-    qCount: 15,
-    axisOrder: 4,
-    active: true,
-  },
-  {
-    code: 'C5',
-    name: '문제해결',
-    nameEn: 'Problem Solving',
-    subCount: 3,
-    qCount: 15,
-    axisOrder: 5,
-    active: true,
-  },
-  {
-    code: 'C6',
-    name: '직업윤리',
-    nameEn: 'Professional Ethics',
-    subCount: 2,
-    qCount: 10,
-    axisOrder: 6,
-    active: true,
-  },
-];
-
-const SUB_COMPS = [
-  // C1
-  {
-    code: 'C1S1',
-    coreCode: 'C1',
-    name: '자아정체성',
-    description: '자신의 강약점 및 가치관을 명확히 이해하는 역량',
-    qCount: 5,
-    order: 1,
-  },
-  {
-    code: 'C1S2',
-    coreCode: 'C1',
-    name: '자기조절',
-    description: '감정·행동·시간을 효과적으로 관리하는 역량',
-    qCount: 5,
-    order: 2,
-  },
-  {
-    code: 'C1S3',
-    coreCode: 'C1',
-    name: '진로설계',
-    description: '주도적으로 진로를 탐색하고 계획하는 역량',
-    qCount: 5,
-    order: 3,
-  },
-  // C2
-  {
-    code: 'C2S1',
-    coreCode: 'C2',
-    name: '언어능력',
-    description: '구어·문어로 정확하게 의사를 전달하는 역량',
-    qCount: 5,
-    order: 1,
-  },
-  {
-    code: 'C2S2',
-    coreCode: 'C2',
-    name: '발표능력',
-    description: '청중 앞에서 논리적으로 내용을 전달하는 역량',
-    qCount: 5,
-    order: 2,
-  },
-  {
-    code: 'C2S3',
-    coreCode: 'C2',
-    name: '문서작성',
-    description: '목적에 맞는 문서를 작성하는 역량',
-    qCount: 5,
-    order: 3,
-  },
-  // C3
-  {
-    code: 'C3S1',
-    coreCode: 'C3',
-    name: '협업',
-    description: '팀 구성원과 협력하여 공동 목표를 달성하는 역량',
-    qCount: 5,
-    order: 1,
-  },
-  {
-    code: 'C3S2',
-    coreCode: 'C3',
-    name: '리더십',
-    description: '목표 달성을 위해 팀을 이끌고 동기부여하는 역량',
-    qCount: 5,
-    order: 2,
-  },
-  {
-    code: 'C3S3',
-    coreCode: 'C3',
-    name: '갈등관리',
-    description: '갈등 상황을 건설적으로 해결하는 역량',
-    qCount: 5,
-    order: 3,
-  },
-  {
-    code: 'C3S4',
-    coreCode: 'C3',
-    name: '배려',
-    description: '타인의 감정과 상황을 이해하고 공감하는 역량',
-    qCount: 5,
-    order: 4,
-  },
-  {
-    code: 'C3S5',
-    coreCode: 'C3',
-    name: '네트워킹',
-    description: '다양한 관계를 형성하고 유지하는 역량',
-    qCount: 5,
-    order: 5,
-  },
-  // C4
-  {
-    code: 'C4S1',
-    coreCode: 'C4',
-    name: '외국어능력',
-    description: '영어 등 외국어로 의사소통하는 역량',
-    qCount: 5,
-    order: 1,
-  },
-  {
-    code: 'C4S2',
-    coreCode: 'C4',
-    name: '다문화이해',
-    description: '타문화를 존중하고 다양성을 수용하는 역량',
-    qCount: 5,
-    order: 2,
-  },
-  {
-    code: 'C4S3',
-    coreCode: 'C4',
-    name: '국제감각',
-    description: '글로벌 이슈에 관심을 갖고 적응하는 역량',
-    qCount: 5,
-    order: 3,
-  },
-  // C5
-  {
-    code: 'C5S1',
-    coreCode: 'C5',
-    name: '비판적사고',
-    description: '정보를 분석·평가하여 합리적 판단을 내리는 역량',
-    qCount: 5,
-    order: 1,
-  },
-  {
-    code: 'C5S2',
-    coreCode: 'C5',
-    name: '창의성',
-    description: '새롭고 유용한 아이디어를 생성하는 역량',
-    qCount: 5,
-    order: 2,
-  },
-  {
-    code: 'C5S3',
-    coreCode: 'C5',
-    name: '정보분석',
-    description: '다양한 정보를 수집·처리하여 의사결정에 활용하는 역량',
-    qCount: 5,
-    order: 3,
-  },
-  // C6
-  {
-    code: 'C6S1',
-    coreCode: 'C6',
-    name: '책임감',
-    description: '맡은 일에 책임을 다하는 역량',
-    qCount: 5,
-    order: 1,
-  },
-  {
-    code: 'C6S2',
-    coreCode: 'C6',
-    name: '공동체의식',
-    description: '공동체 가치와 규범을 이해하고 실천하는 역량',
-    qCount: 5,
-    order: 2,
-  },
-];
+// BE CompetencyService.MAX_TOP_LEVEL_COMPETENCY 와 동일 (핵심역량은 최대 6개, 서버에서도 검증함)
+const MAX_CORE_COMPETENCY = 6;
 
 // ─── Drag handle SVG ─────────────────────────────────────────────────────────
 
@@ -263,8 +49,10 @@ function Toggle({ checked, onChange, disabled }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function CompetencyManage() {
-  const [cores, setCores] = useState(INITIAL_CORES);
-  const [selected, setSelected] = useState('C1');
+  // TODO: GET /api/admin/competencies 목록 조회 API 나오면 useQuery로 교체 (담당: 어드민 파트).
+  // 그 전까지는 등록한 것만 세션 내에서 보이고 새로고침하면 사라짐.
+  const [cores, setCores] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [deactTarget, setDeactTarget] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editSub, setEditSub] = useState(null);
@@ -273,15 +61,13 @@ export default function CompetencyManage() {
   // Drag state for axis reorder
   const dragItem = useRef(null);
 
-  // Drawer form state
-  const [fCode, setFCode] = useState('');
+  // Drawer form state (등록 폼 — 역량코드/축순서/사용여부는 서버가 결정하므로 입력란 없음)
   const [fName, setFName] = useState('');
   const [fNameEn, setFNameEn] = useState('');
   const [fDesc, setFDesc] = useState('');
-  const [fAxis, setFAxis] = useState(1);
-  const [fActive, setFActive] = useState(true);
 
-  const subs = SUB_COMPS.filter((s) => s.coreCode === selected).sort((a, b) => a.order - b.order);
+  // 하위역량 등록(#3) API가 아직 없어 실제 데이터가 없음. 생기면 selectedCore 기준으로 조회하도록 교체.
+  const subs = [];
   const selectedCore = cores.find((c) => c.code === selected);
 
   const handleDragStart = (idx) => {
@@ -317,34 +103,49 @@ export default function CompetencyManage() {
   };
 
   const openNew = () => {
-    setFCode('');
+    if (cores.length >= MAX_CORE_COMPETENCY) {
+      toast(`핵심역량은 최대 ${MAX_CORE_COMPETENCY}개까지 등록할 수 있습니다.`, 'error');
+      return;
+    }
     setFName('');
     setFNameEn('');
     setFDesc('');
-    setFAxis(cores.length + 1);
-    setFActive(true);
     setDrawerOpen(true);
   };
 
+  const registerMutation = useMutation({
+    mutationFn: registerCompetency,
+    onSuccess: (created) => {
+      setCores((prev) => [
+        ...prev,
+        {
+          code: created.competencyCode,
+          name: created.competencyName,
+          nameEn: created.englishName ?? '',
+          subCount: 0,
+          qCount: 0,
+          axisOrder: created.displayOrder,
+          active: created.active,
+        },
+      ]);
+      setDrawerOpen(false);
+      toast(`'${created.competencyName}' 역량이 ${created.competencyCode}(으)로 등록되었습니다.`, 'success');
+    },
+    onError: (e) => {
+      toast(e instanceof ApiError ? e.message : '역량 등록에 실패했습니다.', 'error');
+    },
+  });
+
   const saveCore = () => {
-    if (!fCode || !fName) {
-      toast('코드와 역량명은 필수입니다.', 'error');
+    if (!fName.trim()) {
+      toast('역량명은 필수입니다.', 'error');
       return;
     }
-    setCores((prev) => [
-      ...prev,
-      {
-        code: fCode,
-        name: fName,
-        nameEn: fNameEn,
-        subCount: 0,
-        qCount: 0,
-        axisOrder: fAxis,
-        active: fActive,
-      },
-    ]);
-    setDrawerOpen(false);
-    toast(`'${fName}' 역량이 등록되었습니다.`, 'success');
+    registerMutation.mutate({
+      competencyName: fName.trim(),
+      englishName: fNameEn.trim() || undefined,
+      description: fDesc.trim() || undefined,
+    });
   };
 
   return (
@@ -356,7 +157,11 @@ export default function CompetencyManage() {
             핵심역량 코드·구조 정의 및 하위역량 관리
           </p>
         </div>
-        <Button onClick={openNew} style={{ background: ACCENT }}>
+        <Button
+          onClick={openNew}
+          disabled={cores.length >= MAX_CORE_COMPETENCY}
+          style={{ background: ACCENT }}
+        >
           + 역량 등록
         </Button>
       </div>
@@ -446,71 +251,84 @@ export default function CompetencyManage() {
           <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
             <div className="w-1 h-4 rounded-full bg-[#9CA3AF]" />
             <span className="text-[13px] font-bold text-[#1F2328]">
-              {selectedCore?.name ?? ''} 하위역량
+              {selectedCore ? `${selectedCore.name} 하위역량` : '하위역량'}
             </span>
-            <span
-              className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6]"
-              style={{ color: ACCENT }}
-            >
-              {subs.length}개
-            </span>
-            <button
-              onClick={() => {
-                setEditSub(null);
-                setSubDrawer(true);
-              }}
-              className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] text-white ml-1"
-              style={{ background: ACCENT }}
-            >
-              + 추가
-            </button>
+            {selectedCore && (
+              <>
+                <span
+                  className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6]"
+                  style={{ color: ACCENT }}
+                >
+                  {subs.length}개
+                </span>
+                <button
+                  onClick={() => {
+                    setEditSub(null);
+                    setSubDrawer(true);
+                  }}
+                  className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] text-white ml-1"
+                  style={{ background: ACCENT }}
+                >
+                  + 추가
+                </button>
+              </>
+            )}
           </div>
-          <div className="flex-1 overflow-auto">
-            <table className="w-full border-collapse text-[12px]">
-              <thead>
-                <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                  {['코드', '하위역량명', '설명', '문항', '순서', '관리'].map((h, i) => (
-                    <th
-                      key={h}
-                      className={`px-3 py-2.5 text-[10px] font-semibold text-[#656D76] whitespace-nowrap ${i >= 3 ? 'text-center' : 'text-left'}`}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {subs.map((s) => (
-                  <tr
-                    key={s.code}
-                    className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
-                  >
-                    <td className="px-3 py-3 font-mono text-[10px] text-[#9AA0A6]">{s.code}</td>
-                    <td className="px-3 py-3 font-bold text-[#1F2328] whitespace-nowrap">
-                      {s.name}
-                    </td>
-                    <td className="px-3 py-3 text-[11px] text-[#656D76] max-w-[120px]">
-                      <p className="line-clamp-2 leading-snug">{s.description}</p>
-                    </td>
-                    <td className="px-3 py-3 text-center text-[#656D76]">{s.qCount}</td>
-                    <td className="px-3 py-3 text-center text-[#9AA0A6]">{s.order}</td>
-                    <td className="px-3 py-3 text-center">
-                      <button
-                        onClick={() => {
-                          setEditSub(s);
-                          setSubDrawer(true);
-                        }}
-                        className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
-                        style={{ color: ACCENT }}
+          {!selectedCore ? (
+            <EmptyState message="왼쪽에서 핵심역량을 클릭하면 하위역량을 확인합니다." />
+          ) : subs.length === 0 ? (
+            <EmptyState
+              message="등록된 하위역량이 없습니다."
+              sub="하위역량 등록 기능은 아직 준비 중입니다."
+            />
+          ) : (
+            <div className="flex-1 overflow-auto">
+              <table className="w-full border-collapse text-[12px]">
+                <thead>
+                  <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
+                    {['코드', '하위역량명', '설명', '문항', '순서', '관리'].map((h, i) => (
+                      <th
+                        key={h}
+                        className={`px-3 py-2.5 text-[10px] font-semibold text-[#656D76] whitespace-nowrap ${i >= 3 ? 'text-center' : 'text-left'}`}
                       >
-                        수정
-                      </button>
-                    </td>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {subs.map((s) => (
+                    <tr
+                      key={s.code}
+                      className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
+                    >
+                      <td className="px-3 py-3 font-mono text-[10px] text-[#9AA0A6]">{s.code}</td>
+                      <td className="px-3 py-3 font-bold text-[#1F2328] whitespace-nowrap">
+                        {s.name}
+                      </td>
+                      <td className="px-3 py-3 text-[11px] text-[#656D76] max-w-[120px]">
+                        <p className="line-clamp-2 leading-snug">{s.description}</p>
+                      </td>
+                      <td className="px-3 py-3 text-center text-[#656D76]">{s.qCount}</td>
+                      <td className="px-3 py-3 text-center text-[#9AA0A6]">{s.order}</td>
+                      <td className="px-3 py-3 text-center">
+                        <button
+                          onClick={() => {
+                            setEditSub(s);
+                            setSubDrawer(true);
+                          }}
+                          className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
+                          style={{ color: ACCENT }}
+                        >
+                          수정
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
@@ -523,24 +341,29 @@ export default function CompetencyManage() {
         title="역량 등록"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDrawerOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setDrawerOpen(false)}
+              disabled={registerMutation.isPending}
+            >
               취소
             </Button>
-            <Button style={{ background: ACCENT }} onClick={saveCore}>
+            <Button
+              style={{ background: ACCENT }}
+              onClick={saveCore}
+              loading={registerMutation.isPending}
+            >
               저장
             </Button>
           </div>
         }
       >
         <div className="flex flex-col gap-5">
+          <p className="text-[11px] text-[#9AA0A6] bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
+            역량 코드는 등록 순서에 따라 자동 채번(C1~C6)되고, 축순서도 등록 순서로 자동
+            지정됩니다. 등록 후 이 화면에 표시됩니다.
+          </p>
           {[
-            {
-              label: '역량 코드',
-              value: fCode,
-              set: setFCode,
-              placeholder: '예) C7',
-              hint: '영문·숫자 2~4자',
-            },
             { label: '역량명(한글)', value: fName, set: setFName, placeholder: '예) 창의·혁신' },
             {
               label: '영문명',
@@ -559,7 +382,6 @@ export default function CompetencyManage() {
                 placeholder={f.placeholder}
                 className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
               />
-              {f.hint && <p className="text-[10px] text-[#9AA0A6] mt-1">{f.hint}</p>}
             </div>
           ))}
           <div>
@@ -571,24 +393,6 @@ export default function CompetencyManage() {
               placeholder="역량에 대한 설명을 입력하세요."
               className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151] bg-white"
             />
-          </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-              축순서 (1~6)
-            </label>
-            <input
-              type="number"
-              value={fAxis}
-              min={1}
-              max={6}
-              onChange={(e) => setFAxis(Number(e.target.value))}
-              className="w-24 h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <label className="text-[11px] font-semibold text-[#656D76]">사용여부</label>
-            <Toggle checked={fActive} onChange={setFActive} />
-            <span className="text-[11px] text-[#9AA0A6]">{fActive ? '사용' : '미사용'}</span>
           </div>
         </div>
       </Drawer>
