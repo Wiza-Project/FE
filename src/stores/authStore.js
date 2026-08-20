@@ -50,6 +50,15 @@ export const useAuthStore = create((set, get) => ({
     const user = get().user;
     return user != null && types.includes(user.userType);
   },
+
+  /**
+   * 현재 사용자가 주어진 role_code 중 하나라도 가지고 있는가.
+   * user.roleCodes 는 겸임을 포함한 배열이라 일부만 일치해도 true.
+   */
+  hasRole: (...roleCodes) => {
+    const user = get().user;
+    return user != null && (user.roleCodes ?? []).some((code) => roleCodes.includes(code));
+  },
 }));
 
 // client.js 는 authStore.js 를 import 할 수 없으므로(순환 참조),

@@ -42,6 +42,28 @@ export const DEPARTMENT_LABEL = {
   D400: '취창업지원과',
 };
 
+/**
+ * 사용자 역할(role_code) — 백엔드 USER_ROLE 공통코드 시드 기준.
+ * userType(대분류)과 별개로, 한 계정이 겸임 등의 이유로 여러 role_code를 가질 수 있습니다
+ * (로그인 응답의 user.roleCodes: string[] — 빈 배열이면 겸임 없음, null 아님).
+ * ProtectedRoute의 allowRole, authStore.hasRole()과 함께 쓰세요.
+ */
+export const USER_ROLE = {
+  STUDENT: 'SD100',
+  STAFF: 'ST100',
+  COUNSELOR: 'ST200',
+  PROFESSOR: 'ST300',
+  ADMIN: 'AD100',
+};
+
+export const USER_ROLE_LABEL = {
+  SD100: '학생',
+  ST100: '일반교직원',
+  ST200: '카운셀러',
+  ST300: '교수',
+  AD100: '관리자',
+};
+
 /** 승인 상태 — 프로그램 신청, 참여신청, 마일리지 실적신청 공통 */
 export const APPROVAL_STATUS = {
   REQUESTED: 'REQUESTED',
@@ -71,6 +93,7 @@ export const APPROVAL_STATUS_LABEL = {
  * @property {string} loginId
  * @property {string} name
  * @property {string} userType
+ * @property {string[]} roleCodes 겸임 role_code 목록 (WP-82). 없으면 빈 배열([]), null 아님
  * @property {string|null} email
  * @property {string|null} phone
  * @property {string|null} department
