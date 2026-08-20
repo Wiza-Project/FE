@@ -73,6 +73,8 @@ export const APPROVAL_STATUS_LABEL = {
  * @property {string} loginId
  * @property {string} name
  * @property {string} userType
+ * @property {string|null} email
+ * @property {string|null} phone
  * @property {string|null} department
- * @property {string|null} studentNo
+ * @property {string|null} departmentName
  */
