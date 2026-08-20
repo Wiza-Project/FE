@@ -1,116 +1,27 @@
-import { useState } from 'react';
-import { PROGRAMS } from '@/data/dummy';
+import { useEffect, useState } from 'react';
+import { fetchPrograms } from '@/api/programs';
 import { PageHeader, StatusBadge, Pagination, Button } from '@/components/common';
 
 const ACCENT = '#2563EB';
 
-// Extended programs with more detail
-const ALL_PROGRAMS = [
-  ...PROGRAMS,
-  {
-    id: 'P016',
-    name: '해외문화체험 워크숍',
-    category: '글로벌',
-    period: '2026-08-01 ~ 2026-08-15',
-    capacity: 30,
-    applied: 20,
-    status: '마감임박',
-    competency: '글로벌',
-    credit: 4,
-    dept: '국제교류처',
-    mileage: 200,
-    mode: '오프라인',
-    isGroup: false,
-  },
-  {
-    id: 'P017',
-    name: '영어 프레젠테이션 클리닉',
-    category: '글로벌',
-    period: '2026-08-05 ~ 2026-08-20',
-    capacity: 25,
-    applied: 12,
-    status: '모집중',
-    competency: '글로벌',
-    credit: 2,
-    dept: '교양교육원',
-    mileage: 80,
-    mode: '온·오프라인',
-    isGroup: false,
-  },
-  {
-    id: 'P018',
-    name: '캡스톤디자인 경진대회',
-    category: '전공역량',
-    period: '2026-08-10 ~ 2026-08-31',
-    capacity: 10,
-    applied: 6,
-    status: '모집중',
-    competency: '종합적 사고력',
-    credit: 3,
-    dept: '공과대학',
-    mileage: 150,
-    mode: '오프라인',
-    isGroup: true,
-  },
-  {
-    id: 'P019',
-    name: '진로탐색 워크숍',
-    category: '진로·취업',
-    period: '2026-08-12 ~ 2026-08-28',
-    capacity: 40,
-    applied: 8,
-    status: '모집중',
-    competency: '자기관리',
-    credit: 2,
-    dept: '진로취업처',
-    mileage: 100,
-    mode: '오프라인',
-    isGroup: false,
-  },
-  {
-    id: 'P020',
-    name: '독서인증제',
-    category: '자기계발',
-    period: '상시',
-    capacity: 0,
-    applied: 0,
-    status: '진행중',
-    competency: '자원·정보·기술 활용',
-    credit: 1,
-    dept: '학술정보원',
-    mileage: 50,
-    mode: '온라인',
-    isGroup: false,
-  },
-  {
-    id: 'P021',
-    name: '리더십 캠프',
-    category: '리더십',
-    period: '2026-07-20 ~ 2026-08-05',
-    capacity: 30,
-    applied: 30,
-    status: '종료',
-    competency: '대인관계',
-    credit: 3,
-    dept: '학생처',
-    mileage: 130,
-    mode: '오프라인',
-    isGroup: false,
-  },
-];
+const formatDate = (iso) => (iso ? iso.slice(0, 10) : '');
 
-// Add dept/mileage/mode/isGroup to original programs
-const ENRICHED = ALL_PROGRAMS.map((p) => ({
-  ...p,
-  dept:
-    p.dept ??
-    ['국제교류처', '교양교육원', '공과대학', '진로취업처', '학술정보원', '학생처', '창업지원단'][
-      parseInt(p.id.replace('P', '')) % 7
-    ],
-  mileage: p.mileage ?? p.credit * 30,
-  mode: p.mode ?? (parseInt(p.id.replace('P', '')) % 3 === 0 ? '온라인' : '오프라인'),
-  isGroup: p.isGroup ?? false,
-}));
+// ProgramListItemResponseDTO(GET /api/students/programs) -> 목록 화면에서 쓰는 행 모양으로 변환.
+// 신청인원(applied)/연계역량(competency)/적립점수(mileage)/그룹여부(isGroup)는 해당 API가 아직
+// 내려주지 않아 화면이 깨지지 않도록 안전한 기본값을 채운다.
+const toRow = (dto) => ({
+  id: dto.programId,
+  name: dto.programName,
+  category: dto.programTypeCodeName,
+  dept: dto.operatingUnitCodeName,
+  period: `${formatDate(dto.recruitmentStartsAt)} ~ ${formatDate(dto.recruitmentEndsAt)}`,
+  capacity: dto.capacity ?? 0,
+  status: dto.programStatusLabel,
+  applied: 0,
+  competency: null,
+  mileage: 0,
+  isGroup: false,
+});
 
 const COMP_OPTIONS = [
   { value: '', label: '핵심역량 전체' },
@@ -193,16 +104,54 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
   const [comp, setComp] = useState('');
   const [dept, setDept] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
+  const [programs, setPrograms] = useState([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const PAGE_SIZE = 10;
 
-  const filtered = ENRICHED.filter(
-    (p) =>
-      (!comp || p.competency === comp) &&
-      (!dept || p.dept === dept) &&
-      (!keyword || p.name.includes(keyword)),
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchPrograms({
+      keyword: submittedKeyword || undefined,
+      page: page - 1,
+      size: PAGE_SIZE,
+      sort: 'createdAt,desc',
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setPrograms(res.content.map(toRow));
+        setTotalItems(res.totalElements);
+        setTotalPages(res.totalPages || 1);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.message ?? '프로그램 목록을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [page, submittedKeyword]);
+
+  // 핵심역량/주관부서 필터는 백엔드가 아직 쿼리 파라미터로 지원하지 않아,
+  // 현재 페이지에 이미 내려온 데이터 안에서만 걸러진다(서버 페이지네이션과는 별개).
+  const filtered = programs.filter(
+    (p) => (!comp || p.competency === comp) && (!dept || p.dept === dept),
   );
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paged = filtered;
+
+  const runSearch = () => {
+    setPage(1);
+    setSubmittedKeyword(keyword);
+  };
 
   return (
     <div>
@@ -267,13 +216,14 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                 setDept('');
                 setKeyword('');
                 setPage(1);
+                setSubmittedKeyword('');
               }}
               className="h-9 px-4 text-[13px] font-semibold text-[#656D76] border border-[#E5E7EB] rounded-[6px] hover:bg-[#F9FAFB] transition-colors"
             >
               초기화
             </button>
             <button
-              onClick={() => setPage(1)}
+              onClick={runSearch}
               className="h-9 px-4 text-[13px] font-bold text-white rounded-[6px] transition-colors"
               style={{ background: ACCENT }}
             >
@@ -339,8 +289,19 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
         </div>
       </div>
 
+      {error && (
+        <div className="bg-white rounded-[8px] border border-[#FEE2E2] px-4 py-8 mb-4 text-center text-[13px] text-[#CF222E]">
+          {error}
+        </div>
+      )}
+      {loading && !error && (
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-8 mb-4 text-center text-[13px] text-[#656D76]">
+          불러오는 중...
+        </div>
+      )}
+
       {/* TABLE VIEW */}
-      {viewMode === 'table' && (
+      {!loading && !error && viewMode === 'table' && (
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
@@ -403,7 +364,11 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                         {p.dept}
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <CompBadge label={p.competency} />
+                        {p.competency ? (
+                          <CompBadge label={p.competency} />
+                        ) : (
+                          <span className="text-[#9AA0A6]">-</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 text-center text-[#656D76] whitespace-nowrap text-[12px]">
                         {p.period}
@@ -447,12 +412,12 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
             </table>
           </div>
           <div className="px-4 py-3 border-t border-[#E5E7EB] flex items-center justify-between">
-            <span className="text-[12px] text-[#656D76]">총 {filtered.length}건</span>
+            <span className="text-[12px] text-[#656D76]">총 {totalItems}건</span>
             <Pagination
               page={page}
-              totalPages={Math.ceil(filtered.length / PAGE_SIZE)}
+              totalPages={totalPages}
               onChange={setPage}
-              totalItems={filtered.length}
+              totalItems={totalItems}
               pageSize={PAGE_SIZE}
             />
           </div>
@@ -460,7 +425,7 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
       )}
 
       {/* CARD VIEW */}
-      {viewMode === 'card' && (
+      {!loading && !error && viewMode === 'card' && (
         <>
           <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-2">
             {paged.map((p) => {
@@ -478,7 +443,7 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="flex gap-1 mb-1.5 flex-wrap">
-                          <CompBadge label={p.competency} />
+                          {p.competency && <CompBadge label={p.competency} />}
                           {isUrgent && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
                               마감임박
@@ -561,9 +526,9 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
           <div className="mt-4">
             <Pagination
               page={page}
-              totalPages={Math.ceil(filtered.length / PAGE_SIZE)}
+              totalPages={totalPages}
               onChange={setPage}
-              totalItems={filtered.length}
+              totalItems={totalItems}
               pageSize={PAGE_SIZE}
             />
           </div>
