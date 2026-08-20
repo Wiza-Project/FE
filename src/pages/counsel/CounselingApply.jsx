@@ -1,33 +1,19 @@
 import { useState } from 'react';
-import { PageHeader, Stepper, Button, ConfirmDialog, toast } from '@/components/common';
+import { useQuery } from '@tanstack/react-query';
+import {
+  PageHeader,
+  Stepper,
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  SkeletonLoader,
+  toast,
+} from '@/components/common';
+import { fetchCounselingTypes } from '@/api/counsel';
 
 const ACCENT = '#0891B2';
 
 // ─── Data ────────────────────────────────────────────────────────────────────
-
-const COUNSELING_TYPES = [
-  {
-    key: 'A',
-    title: '지도교수 진로·역량 상담',
-    desc: '신청 즉시 일정 확정 · 1회 상담 진행. 상담 후 상담일지와 실행계획서를 제공합니다.',
-    tags: ['1회 상담', '일정 즉시 확정', '실행계획 제공'],
-    color: '#0891B2',
-  },
-  {
-    key: 'B',
-    title: '상담센터 개인상담',
-    desc: '접수면접 후 상담자 배정 · 다회기 심층 상담 진행. 심리적 어려움 및 대인관계 등을 다룹니다.',
-    tags: ['다회기', '접수면접 후 배정', '심층 상담'],
-    color: '#7C3AED',
-  },
-  {
-    key: 'C',
-    title: '심리검사 · 해석상담',
-    desc: '검사 실시 후 결과 처리 · 별도 해석상담 예약. MBTI, MMPI 등 다양한 검사를 제공합니다.',
-    tags: ['심리검사', '해석상담 포함', 'MBTI·MMPI'],
-    color: '#D97706',
-  },
-];
 
 const COUNSELORS = [
   {
@@ -222,6 +208,16 @@ function SlotCard({ slot, isSelected, onClick }) {
  */
 export default function CounselingApply({ onComplete, onBack }) {
   const [step, setStep] = useState(0);
+  const {
+    data: counselingTypes = [],
+    isLoading: isCounselingTypesLoading,
+    isError: hasCounselingTypesError,
+    isFetching: isCounselingTypesFetching,
+    refetch: refetchCounselingTypes,
+  } = useQuery({
+    queryKey: ['counselingTypes'],
+    queryFn: fetchCounselingTypes,
+  });
 
   // Step 0 — consent
   const [agreed, setAgreed] = useState(false);
@@ -243,7 +239,7 @@ export default function CounselingApply({ onComplete, onBack }) {
 
   const chosenSlot = slots.find((s) => s.id === selectedSlot);
   const chosenCounselor = COUNSELORS.find((c) => c.id === selectedCounselor);
-  const chosenType = COUNSELING_TYPES.find((t) => t.key === selectedType);
+  const chosenType = counselingTypes.find((type) => type.typeCode === selectedType);
 
   const handleSlotClick = (slot) => {
     if (selectedSlot === slot.id) {
@@ -312,8 +308,8 @@ export default function CounselingApply({ onComplete, onBack }) {
             <div className="px-5 py-5 text-[13px] leading-relaxed text-[#444D56]">
               <p className="font-bold text-[#1F2328] mb-3">한국대학교 학생상담 정보 처리 방침</p>
               <p className="mb-3">
-                한국대학교(이하 &quot;학교&quot;)는 학생의 심리적 건강 증진과 성장 지원을 목적으로 상담
-                서비스를 운영하며, 이 과정에서 수집되는 개인정보를 다음과 같이 처리합니다.
+                한국대학교(이하 &quot;학교&quot;)는 학생의 심리적 건강 증진과 성장 지원을 목적으로
+                상담 서비스를 운영하며, 이 과정에서 수집되는 개인정보를 다음과 같이 처리합니다.
               </p>
               <ol className="list-decimal list-inside space-y-2 text-[12px] text-[#656D76] mb-4">
                 <li>
@@ -425,7 +421,7 @@ export default function CounselingApply({ onComplete, onBack }) {
 
           <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1.3fr' }}>
             {/* Left: Type selection */}
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3" aria-live="polite">
               <h3 className="text-[13px] font-bold text-[#1F2328] flex items-center gap-2">
                 <div
                   className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white"
@@ -435,13 +431,44 @@ export default function CounselingApply({ onComplete, onBack }) {
                 </div>
                 상담 유형 선택
               </h3>
-              {COUNSELING_TYPES.map((t) => {
-                const isSelected = selectedType === t.key;
+              {isCounselingTypesLoading && <SkeletonLoader rows={3} cols={2} />}
+              {hasCounselingTypesError && (
+                <div
+                  role="alert"
+                  className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-4 py-4"
+                >
+                  <p className="text-[13px] font-bold text-[#7F1D1D]">
+                    상담 유형을 불러오지 못했습니다.
+                  </p>
+                  <p className="text-[12px] text-[#CF222E] mt-1 mb-3">
+                    잠시 후 다시 시도해 주세요.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={isCounselingTypesFetching}
+                    onClick={() => refetchCounselingTypes()}
+                  >
+                    다시 시도
+                  </Button>
+                </div>
+              )}
+              {!isCounselingTypesLoading &&
+                !hasCounselingTypesError &&
+                counselingTypes.length === 0 && (
+                  <EmptyState
+                    message="신청 가능한 상담 유형이 없습니다."
+                    sub="상담센터에 문의해 주세요."
+                  />
+                )}
+              {counselingTypes.map((type) => {
+                const isSelected = selectedType === type.typeCode;
                 return (
                   <button
-                    key={t.key}
+                    key={type.typeCode}
+                    aria-pressed={isSelected}
                     onClick={() => {
-                      setSelectedType(t.key);
+                      setSelectedType(type.typeCode);
                       setSelectedCounselor(null);
                     }}
                     className={`w-full text-left rounded-[10px] border-2 p-4 transition-all ${isSelected ? 'bg-[#ECFEFF] shadow-[0_0_0_1px_rgba(8,145,178,0.2)]' : 'bg-white border-[#E5E7EB] hover:border-[#A5F3FC]'}`}
@@ -451,7 +478,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                       <p
                         className={`text-[13px] font-bold leading-snug ${isSelected ? 'text-[#0E7490]' : 'text-[#1F2328]'}`}
                       >
-                        {t.title}
+                        {type.typeName}
                       </p>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ml-2 transition-colors ${isSelected ? '' : 'border-[#D1D5DB]'}`}
@@ -472,21 +499,31 @@ export default function CounselingApply({ onComplete, onBack }) {
                         )}
                       </div>
                     </div>
-                    <p className="text-[11px] text-[#656D76] leading-snug mb-2.5">{t.desc}</p>
                     <div className="flex flex-wrap gap-1">
-                      {t.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                          style={{
-                            background: isSelected ? `${ACCENT}18` : '#F3F4F6',
-                            color: isSelected ? ACCENT : '#656D76',
-                          }}
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={{
+                          background: isSelected ? `${ACCENT}18` : '#F3F4F6',
+                          color: isSelected ? ACCENT : '#656D76',
+                        }}
+                      >
+                        신청 경로: {type.applicationRoute}
+                      </span>
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={{
+                          background: isSelected ? `${ACCENT}18` : '#F3F4F6',
+                          color: isSelected ? ACCENT : '#656D76',
+                        }}
+                      >
+                        상담 방식: {type.counselingMethod}
+                      </span>
                     </div>
+                    {type.precedingProcedure && (
+                      <p className="text-[11px] text-[#656D76] leading-snug mt-2.5">
+                        선행 절차: {type.precedingProcedure}
+                      </p>
+                    )}
                   </button>
                 );
               })}
@@ -616,7 +653,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                 {chosenCounselor?.name} {chosenCounselor?.role}
               </span>
               <span className="mx-2 text-[#A5F3FC]">·</span>
-              <span className="text-[#0E7490]">{chosenType?.title}</span>
+              <span className="text-[#0E7490]">{chosenType?.typeName}</span>
             </div>
           </div>
 
@@ -790,7 +827,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                       </span>
                     ),
                   },
-                  { label: '상담유형', value: chosenType?.title },
+                  { label: '상담유형', value: chosenType?.typeName },
                   { label: '상담사', value: `${chosenCounselor?.name} ${chosenCounselor?.role}` },
                   {
                     label: '일시',
