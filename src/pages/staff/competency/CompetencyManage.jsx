@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Button, ConfirmDialog, Drawer, EmptyState, toast } from '@/components/common';
-import { changeCompetencyDisplayOrder, registerCompetency } from '@/api/competency';
+import {
+  changeCompetencyActiveStatus,
+  changeCompetencyDisplayOrder,
+  registerCompetency,
+} from '@/api/competency';
 import { ApiError } from '@/api/client';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
@@ -83,20 +87,32 @@ export default function CompetencyManage() {
     orderMutation.mutate({ competencyId: core.id, displayOrder: nextOrder });
   };
 
+  const activeMutation = useMutation({
+    mutationFn: changeCompetencyActiveStatus,
+    onSuccess: (updated) => {
+      setCores((prev) =>
+        prev.map((c) => (c.id === updated.competencyId ? { ...c, active: updated.active } : c)),
+      );
+      if (!updated.active) {
+        toast(`'${updated.competencyName}' 역량이 비활성 처리되었습니다.`, 'info');
+      }
+      setDeactTarget(null);
+    },
+    onError: (e) => {
+      toast(e instanceof ApiError ? e.message : '사용여부 변경에 실패했습니다.', 'error');
+      setDeactTarget(null);
+    },
+  });
+
   const handleToggle = (c) => {
     if (c.active) setDeactTarget(c);
-    else {
-      setCores((prev) => prev.map((x) => (x.code === c.code ? { ...x, active: true } : x)));
-    }
+    else activeMutation.mutate({ competencyId: c.id, active: true });
   };
 
   const confirmDeactivate = () => {
-    if (!deactTarget) return;
-    setCores((prev) =>
-      prev.map((x) => (x.code === deactTarget.code ? { ...x, active: false } : x)),
-    );
-    setDeactTarget(null);
-    toast(`'${deactTarget.name}' 역량이 비활성 처리되었습니다.`, 'info');
+    // isPending 가드: 응답 대기 중 확인 버튼을 다시 누르면 PATCH가 중복으로 나간다.
+    if (!deactTarget || activeMutation.isPending) return;
+    activeMutation.mutate({ competencyId: deactTarget.id, active: false });
   };
 
   const openNew = () => {
@@ -235,7 +251,12 @@ export default function CompetencyManage() {
                       </select>
                     </td>
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <Toggle checked={c.active} onChange={() => handleToggle(c)} />
+                      <Toggle
+                        checked={c.active}
+                        onChange={() => handleToggle(c)}
+                        // 요청 진행 중 중복 클릭 방지
+                        disabled={activeMutation.isPending}
+                      />
                     </td>
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <button
@@ -480,7 +501,11 @@ export default function CompetencyManage() {
         confirmLabel="비활성 처리"
         danger
         onConfirm={confirmDeactivate}
-        onCancel={() => setDeactTarget(null)}
+        onCancel={() => {
+          // 요청이 아직 진행 중일 때 닫으면, 응답이 뒤늦게 도착해 취소한 줄 알던 사용자
+          // 모르게 사용여부가 바뀐다 — 응답이 온 뒤(성공/실패 핸들러)에만 닫는다.
+          if (!activeMutation.isPending) setDeactTarget(null);
+        }}
       />
     </div>
   );

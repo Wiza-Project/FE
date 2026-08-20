@@ -36,3 +36,18 @@ export const changeCompetencyDisplayOrder = async ({ competencyId, displayOrder 
   });
   return data;
 };
+
+/**
+ * 사용여부 관리 (SCR-A01). 응답 이력이 있는 역량도 삭제 대신 비활성 처리로 과거 기록을 보존한다.
+ *
+ * @param {Object} params
+ * @param {number} params.competencyId
+ * @param {boolean} params.active
+ * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, englishName: string|null, description: string|null, displayOrder: number, active: boolean}>}
+ */
+export const changeCompetencyActiveStatus = async ({ competencyId, active }) => {
+  const { data } = await apiClient.patch(`/admin/competencies/${competencyId}/active-status`, {
+    active,
+  });
+  return data;
+};
