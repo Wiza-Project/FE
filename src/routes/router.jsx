@@ -81,21 +81,10 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // ── 교사(교수) 포털 ────────────────────────────────────
-  // TODO: PROFESSOR 포털 페이지 구현 예정
-  // {
-  //   element: <ProtectedRoute allow={[USER_TYPE.PROFESSOR]} />,
-  //   children: [
-  //     {
-  //       element: <PortalShell />,
-  //       children: [
-  //         // professor pages
-  //       ],
-  //     },
-  //   ],
-  // },
-
   // ── 교직원 포털 ────────────────────────────────────────
+  // 교수도 별도 포털 없이 이 교직원 포털을 그대로 사용(2026-08-21 확인).
+  // role_code 기반 화면/권한 분기가 필요해지면
+  // ProtectedRoute의 role_code 쪽에서 처리
   {
     element: <ProtectedRoute allow={[USER_TYPE.STAFF]} />,
     children: [
