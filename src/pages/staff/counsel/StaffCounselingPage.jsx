@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import MySchedule from './MySchedule';
 import ReservationManage from './ReservationManage';
 import SessionRecord from './SessionRecord';
 import SessionResult from './SessionResult';
 import CenterIntake from './CenterIntake';
+import MySchedule from './MySchedule';
+import { useAuthStore } from '@/stores/authStore';
+import { USER_ROLE } from '@/constants/domain';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 const NAV_ITEMS = [
-  { key: 'schedule', label: '내 일정', icon: '📅', desc: '가능 일정 등록·시간대 관리' },
+  { key: 'schedule', label: '내 일정', icon: '📅', desc: '가능 시간대 관리' },
   {
     key: 'reservation',
     label: '예약 관리',
@@ -21,14 +23,18 @@ const NAV_ITEMS = [
   { key: 'intake', label: '접수·배정', icon: '🏥', desc: '센터 전용 — 접수 및 상담사 배정' },
 ];
 
+
 /**
- * 교직원(상담사) 상담 운영 화면 허브. 내 일정/예약 관리/상담 기록/상담 결과/접수·배정
- * 5개 하위 화면을 로컬 상태로 전환합니다. 상담사는 교직원(STAFF)의 하위 분류이므로
- * 별도 권한 체계 없이 STAFF 라우트 하나로 접근합니다.
+ * 일반 교직원의 상담 운영 화면 허브입니다. 예약 관리·상담 기록·상담 결과·접수·배정을
+ * 로컬 상태로 전환합니다. 상담사에게만 본인 일정 탭을 제공합니다.
  */
 export default function StaffCounselingPage() {
-  const [nav, setNav] = useState('schedule');
-  const current = NAV_ITEMS.find((n) => n.key === nav);
+  const isCounselor = useAuthStore((state) =>
+    (state.user?.roleCodes ?? []).includes(USER_ROLE.COUNSELOR),
+  );
+  const navItems = isCounselor ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.key !== 'schedule');
+  const [nav, setNav] = useState(isCounselor ? 'schedule' : 'reservation');
+  const current = navItems.find((item) => item.key === nav) ?? navItems[0];
 
   return (
     <div className="flex gap-0 min-h-[calc(100vh-120px)]">
@@ -48,7 +54,7 @@ export default function StaffCounselingPage() {
         </div>
 
         <nav className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden">
-          {NAV_ITEMS.map((item, i) => {
+          {navItems.map((item, i) => {
             const active = nav === item.key;
             return (
               <button
@@ -108,7 +114,7 @@ export default function StaffCounselingPage() {
           </span>
         </div>
 
-        {nav === 'schedule' && <MySchedule />}
+        {isCounselor && nav === 'schedule' && <MySchedule />}
         {nav === 'reservation' && <ReservationManage />}
         {nav === 'record' && <SessionRecord />}
         {nav === 'result' && <SessionResult />}
