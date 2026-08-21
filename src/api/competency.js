@@ -51,3 +51,28 @@ export const changeCompetencyActiveStatus = async ({ competencyId, active }) => 
   });
   return data;
 };
+
+/**
+ * 진단문항 엑셀 일괄 업로드 (SCR-A03). 엑셀(상위역량|하위역량|문항번호|평가문항)의
+ * 상위역량 컬럼으로 핵심역량에 매핑되며, 하위역량·문항번호 컬럼은 서버에서 무시된다.
+ * 응답옵션(5점 리커트)과 역문항 여부(false 고정)는 서버가 채운다.
+ *
+ * @param {File} file
+ * @returns {Promise<{
+ *   totalRows: number,
+ *   successCount: number,
+ *   failureCount: number,
+ *   failures: Array<{excelRowNo: number, reason: string}>,
+ *   warnings: string[],
+ * }>}
+ */
+export const uploadAssessmentQuestions = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  // apiClient 기본 Content-Type(application/json)을 지워야 axios가 FormData를 JSON으로
+  // 직렬화하지 않고, 브라우저가 boundary를 붙인 multipart/form-data로 보낸다.
+  const { data } = await apiClient.post('/admin/assessment-questions/upload', formData, {
+    headers: { 'Content-Type': undefined },
+  });
+  return data;
+};
