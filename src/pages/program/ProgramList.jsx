@@ -377,7 +377,10 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                       </td>
                       <td className="px-3 py-3 text-center">
                         {isFull ? (
-                          <button className="h-7 px-3 text-[12px] font-bold text-[#2563EB] border border-[#2563EB] rounded-[5px] hover:bg-[#EFF6FF] transition-colors">
+                          <button
+                            onClick={() => onDetail(p.id)}
+                            className="h-7 px-3 text-[12px] font-bold text-[#2563EB] border border-[#2563EB] rounded-[5px] hover:bg-[#EFF6FF] transition-colors"
+                          >
                             대기신청
                           </button>
                         ) : (

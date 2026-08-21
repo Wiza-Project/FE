@@ -27,7 +27,7 @@ const toRow = (dto) => ({
   applicationStatus: dto.applicationStatus,
   status: STATUS_LABEL[dto.completionStatus] ?? dto.applicationStatusLabel,
   waitlistOrder: dto.waitlistOrder,
-  attendance: dto.attendanceRate ?? 0,
+  attendance: dto.attendanceRate ?? null,
   completed: dto.completionStatus === 'COMPLETED',
   completionStatus: dto.completionStatus,
   mileage: dto.earnedMileagePoints ?? 0,
@@ -39,7 +39,7 @@ const toRow = (dto) => ({
 const CANCELABLE = new Set(['APPLIED', 'WAITLISTED', 'APPROVED']);
 
 const BTN_MAP = {
-  수료: { label: '수료증', variant: 'outline' },
+  수료: { label: '만족도 설문', variant: 'outline' },
   신청완료: { label: '취소', variant: 'outline' },
   승인: { label: '취소', variant: 'danger' },
   반려: { label: '사유확인', variant: 'secondary' },
@@ -220,110 +220,112 @@ export default function MyApplications({ onActivity, onSurvey }) {
 
       {/* Table */}
       {!loading && !error && (
-      <div className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <table className="w-full border-collapse text-[13px]">
-          <thead>
-            <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-              {['신청일', '프로그램명', '상태', '출석률', '수료', '적립', '관리'].map(
-                (h) => (
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
+                {['신청일', '프로그램명', '상태', '출석률', '수료', '적립', '관리'].map((h) => (
                   <th
                     key={h}
                     className={`px-3 py-3 text-[11px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${h === '프로그램명' ? 'text-left' : 'text-center'}`}
                   >
                     {h}
                   </th>
-                ),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((app, i) => {
-              const btn = BTN_MAP[app.status];
-              return (
-                <tr
-                  key={app.id}
-                  className={`border-b border-[#E5E7EB] last:border-0 hover:bg-[#FAFAFA] transition-colors ${i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}
-                >
-                  <td className="px-3 py-3 text-center text-[#9AA0A6] text-[12px]">
-                    {app.appliedAt}
-                  </td>
-                  <td className="px-3 py-3 font-semibold text-[#1F2328]">{app.name}</td>
-                  <td className="px-3 py-3 text-center">
-                    <StatusBadge status={app.status} size="sm" />
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    {app.attendance > 0 ? (
-                      <div className="flex items-center gap-1.5 justify-center">
-                        <div className="w-16 h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${app.attendance}%`,
-                              background: app.attendance >= 80 ? '#1A7F37' : '#CF222E',
-                            }}
-                          />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((app, i) => {
+                const btn = BTN_MAP[app.status];
+                return (
+                  <tr
+                    key={app.id}
+                    className={`border-b border-[#E5E7EB] last:border-0 hover:bg-[#FAFAFA] transition-colors ${i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}
+                  >
+                    <td className="px-3 py-3 text-center text-[#9AA0A6] text-[12px]">
+                      {app.appliedAt}
+                    </td>
+                    <td className="px-3 py-3 font-semibold text-[#1F2328]">{app.name}</td>
+                    <td className="px-3 py-3 text-center">
+                      <StatusBadge status={app.status} size="sm" />
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {app.attendance != null ? (
+                        <div className="flex items-center gap-1.5 justify-center">
+                          <div className="w-16 h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${app.attendance}%`,
+                                background: app.attendance >= 80 ? '#1A7F37' : '#CF222E',
+                              }}
+                            />
+                          </div>
+                          <span
+                            className={`text-[11px] font-bold ${app.attendance >= 80 ? 'text-[#1A7F37]' : 'text-[#CF222E]'}`}
+                          >
+                            {app.attendance}%
+                          </span>
                         </div>
-                        <span
-                          className={`text-[11px] font-bold ${app.attendance >= 80 ? 'text-[#1A7F37]' : 'text-[#CF222E]'}`}
-                        >
-                          {app.attendance}%
+                      ) : (
+                        <span className="text-[#9AA0A6] text-[12px]">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {app.completed ? (
+                        <span className="text-[12px] font-bold text-[#1A7F37]">✓ 수료</span>
+                      ) : (
+                        <span className="text-[12px] text-[#9AA0A6]">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {app.mileage > 0 ? (
+                        <span className="text-[12px] font-bold text-[#D97706]">
+                          {app.mileage}점
                         </span>
+                      ) : (
+                        <span className="text-[#9AA0A6] text-[12px]">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <div className="flex items-center gap-1.5 justify-center">
+                        <button
+                          onClick={() => onActivity({ programId: app.programId })}
+                          className="h-7 px-3 text-[11px] font-bold rounded-[5px] border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors"
+                        >
+                          출결
+                        </button>
+                        <button
+                          onClick={() => handleBtn(app)}
+                          disabled={app.status === '취소'}
+                          className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                            app.status === '반려'
+                              ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
+                              : 'border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'
+                          }`}
+                          style={
+                            app.status === '수료' ? { background: '#7C3AED', color: 'white' } : {}
+                          }
+                        >
+                          {btn?.label ?? app.status}
+                        </button>
                       </div>
-                    ) : (
-                      <span className="text-[#9AA0A6] text-[12px]">-</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    {app.completed ? (
-                      <span className="text-[12px] font-bold text-[#1A7F37]">✓ 수료</span>
-                    ) : (
-                      <span className="text-[12px] text-[#9AA0A6]">-</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    {app.mileage > 0 ? (
-                      <span className="text-[12px] font-bold text-[#D97706]">{app.mileage}점</span>
-                    ) : (
-                      <span className="text-[#9AA0A6] text-[12px]">-</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    <div className="flex items-center gap-1.5 justify-center">
-                      <button
-                        onClick={() => onActivity({ programId: app.programId })}
-                        className="h-7 px-3 text-[11px] font-bold rounded-[5px] border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors"
-                      >
-                        출결
-                      </button>
-                      <button
-                        onClick={() => handleBtn(app)}
-                        disabled={app.status === '취소'}
-                        className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                          app.status === '반려'
-                            ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
-                            : 'border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'
-                        }`}
-                        style={app.status === '수료' ? { background: '#7C3AED', color: 'white' } : {}}
-                      >
-                        {btn?.label ?? app.status}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <div className="px-4 py-3 border-t border-[#E5E7EB]">
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onChange={setPage}
-            totalItems={totalItems}
-            pageSize={PAGE_SIZE}
-          />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="px-4 py-3 border-t border-[#E5E7EB]">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onChange={setPage}
+              totalItems={totalItems}
+              pageSize={PAGE_SIZE}
+            />
+          </div>
         </div>
-      </div>
       )}
 
       <Modal

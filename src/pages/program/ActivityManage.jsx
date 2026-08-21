@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PageHeader, ProgressBar, Button } from '@/components/common';
 import { fetchProgramDetail, fetchMyAttendance } from '@/api/programs';
-import { formatDate } from '@/utils/date';
+import { formatDate, formatDateTime } from '@/utils/date';
 
 const ACCENT = '#2563EB';
 
@@ -50,8 +50,8 @@ export default function ActivityManage({ programId, onBack }) {
 
   const presentCount = attendance.filter((a) => a.attendanceStatus === 'PRESENT').length;
   const absentCount = attendance.filter((a) => a.attendanceStatus === 'ABSENT').length;
-  const attendRate =
-    attendance.length > 0 ? Math.round((presentCount / attendance.length) * 100) : 0;
+  const confirmedCount = presentCount + absentCount;
+  const attendRate = confirmedCount > 0 ? Math.round((presentCount / confirmedCount) * 100) : null;
   const now = Date.now();
 
   return (
@@ -101,7 +101,7 @@ export default function ActivityManage({ programId, onBack }) {
                   {program.managerUserName && <span>👤 담당자: {program.managerUserName}</span>}
                 </div>
               </div>
-              {attendance.length > 0 && (
+              {attendRate != null && (
                 <div className="text-right">
                   <div
                     className={`text-[24px] font-black ${attendRate >= 80 ? 'text-[#1A7F37]' : 'text-[#CF222E]'}`}
@@ -112,28 +112,28 @@ export default function ActivityManage({ programId, onBack }) {
                 </div>
               )}
             </div>
+            {attendRate != null && (
+              <ProgressBar
+                value={attendRate}
+                color={attendRate >= 80 ? '#1A7F37' : '#CF222E'}
+                showValue
+              />
+            )}
             {attendance.length > 0 && (
-              <>
-                <ProgressBar
-                  value={attendRate}
-                  color={attendRate >= 80 ? '#1A7F37' : '#CF222E'}
-                  showValue
-                />
-                <div className="flex gap-4 mt-3 text-[12px] text-[#656D76]">
-                  <span>
-                    출석 <strong className="text-[#1A7F37]">{presentCount}회</strong>
-                  </span>
-                  <span>
-                    결석 <strong className="text-[#CF222E]">{absentCount}회</strong>
-                  </span>
-                  <span>
-                    미확인{' '}
-                    <strong className="text-[#6E7781]">
-                      {attendance.length - presentCount - absentCount}회
-                    </strong>
-                  </span>
-                </div>
-              </>
+              <div className="flex gap-4 mt-3 text-[12px] text-[#656D76]">
+                <span>
+                  출석 <strong className="text-[#1A7F37]">{presentCount}회</strong>
+                </span>
+                <span>
+                  결석 <strong className="text-[#CF222E]">{absentCount}회</strong>
+                </span>
+                <span>
+                  미확인{' '}
+                  <strong className="text-[#6E7781]">
+                    {attendance.length - presentCount - absentCount}회
+                  </strong>
+                </span>
+              </div>
             )}
           </div>
 
@@ -166,7 +166,8 @@ export default function ActivityManage({ programId, onBack }) {
                 ) : (
                   attendance.map((a, i) => {
                     const label = STATUS_LABEL[a.attendanceStatus] ?? '미확인';
-                    const isToday = new Date(a.startsAt).toDateString() === new Date(now).toDateString();
+                    const isToday =
+                      new Date(a.startsAt).toDateString() === new Date(now).toDateString();
                     return (
                       <tr
                         key={a.programSessionId}
@@ -181,7 +182,7 @@ export default function ActivityManage({ programId, onBack }) {
                           )}
                         </td>
                         <td className="px-4 py-3 text-[#656D76]">
-                          {formatDate(a.startsAt)} ~ {formatDate(a.endsAt)}
+                          {formatDateTime(a.startsAt)} ~ {formatDateTime(a.endsAt)}
                         </td>
                         <td className="px-4 py-3 text-[#656D76]">{a.location || '-'}</td>
                         <td className="px-4 py-3 text-center">
