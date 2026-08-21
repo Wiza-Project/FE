@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Button, Drawer, Modal, toast } from '@/components/common';
+import { useMutation } from '@tanstack/react-query';
+import { Button, Drawer, FileUpload, Modal, toast } from '@/components/common';
+import { uploadAssessmentQuestions } from '@/api/competency';
+import { ApiError } from '@/api/client';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
@@ -281,6 +284,11 @@ export default function QuestionManage() {
   const [editTarget, setEditTarget] = useState(null);
   const [versionWarn, setVersionWarn] = useState(null);
 
+  // Excel upload (SCR-A03)
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadResult, setUploadResult] = useState(null);
+
   // Drawer form
   const [fSub, setFSub] = useState('C1S1 자아정체성');
   const [fContent, setFContent] = useState('');
@@ -340,6 +348,33 @@ export default function QuestionManage() {
     toast(`문항이 ${verb}되었습니다.`, 'success');
   };
 
+  const openUpload = () => {
+    setUploadFile(null);
+    setUploadResult(null);
+    setUploadOpen(true);
+  };
+
+  const uploadMutation = useMutation({
+    mutationFn: uploadAssessmentQuestions,
+    onSuccess: (result) => {
+      setUploadResult(result);
+      if (result.failureCount === 0) {
+        toast(`${result.successCount}건의 문항이 등록되었습니다.`, 'success');
+      }
+    },
+    onError: (e) => {
+      toast(e instanceof ApiError ? e.message : '엑셀 업로드에 실패했습니다.', 'error');
+    },
+  });
+
+  const submitUpload = () => {
+    if (!uploadFile) {
+      toast('업로드할 엑셀 파일을 선택해 주세요.', 'error');
+      return;
+    }
+    uploadMutation.mutate(uploadFile);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -350,9 +385,14 @@ export default function QuestionManage() {
             <span className="font-bold text-[#1F2328] ml-1">총 90문항</span>
           </p>
         </div>
-        <Button onClick={openNew} style={{ background: ACCENT }}>
-          + 문항 등록
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={openUpload}>
+            엑셀 업로드
+          </Button>
+          <Button onClick={openNew} style={{ background: ACCENT }}>
+            + 문항 등록
+          </Button>
+        </div>
       </div>
 
       {/* FilterBar */}
@@ -701,6 +741,100 @@ export default function QuestionManage() {
               새 버전은 다음 진단 회차부터 적용됩니다.
             </div>
           </div>
+        </div>
+      </Modal>
+
+      {/* ── Excel upload modal (SCR-A03) ── */}
+      <Modal
+        open={uploadOpen}
+        onClose={() => {
+          if (!uploadMutation.isPending) setUploadOpen(false);
+        }}
+        title="진단문항 엑셀 업로드"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setUploadOpen(false)}
+              disabled={uploadMutation.isPending}
+            >
+              닫기
+            </Button>
+            {!uploadResult && (
+              <Button
+                style={{ background: ACCENT }}
+                onClick={submitUpload}
+                loading={uploadMutation.isPending}
+              >
+                업로드
+              </Button>
+            )}
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="p-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[11px] text-[#656D76] leading-relaxed">
+            엑셀 컬럼(상위역량 | 하위역량 | 문항번호 | 평가문항)에서 <strong>상위역량</strong>·
+            <strong>평가문항</strong>만 사용됩니다. 응답옵션(5점 리커트)은 서버가 자동으로
+            채우며, 역문항 여부는 전량 &apos;일반문항&apos;으로 등록됩니다.
+          </div>
+
+          {!uploadResult && (
+            <FileUpload
+              accept=".xlsx,.xls"
+              maxSize="10MB"
+              onFiles={(files) => setUploadFile(files[0] ?? null)}
+            />
+          )}
+
+          {uploadResult && (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-[8px] border border-[#E5E7EB] p-3 text-center">
+                  <p className="text-[10px] text-[#9AA0A6] mb-1">전체</p>
+                  <p className="text-[16px] font-black text-[#1F2328]">
+                    {uploadResult.totalRows}
+                  </p>
+                </div>
+                <div className="rounded-[8px] border border-[#D1FAE5] bg-[#ECFDF5] p-3 text-center">
+                  <p className="text-[10px] text-[#059669] mb-1">성공</p>
+                  <p className="text-[16px] font-black text-[#059669]">
+                    {uploadResult.successCount}
+                  </p>
+                </div>
+                <div className="rounded-[8px] border border-[#FEE2E2] bg-[#FEF2F2] p-3 text-center">
+                  <p className="text-[10px] text-[#DC2626] mb-1">실패</p>
+                  <p className="text-[16px] font-black text-[#DC2626]">
+                    {uploadResult.failureCount}
+                  </p>
+                </div>
+              </div>
+
+              {uploadResult.warnings.length > 0 && (
+                <div className="p-3 rounded-[8px] bg-[#FFFBEB] border border-[#FDE68A] text-[11px] text-[#92400E] leading-relaxed">
+                  {uploadResult.warnings.map((w) => (
+                    <p key={w}>⚠ {w}</p>
+                  ))}
+                </div>
+              )}
+
+              {uploadResult.failures.length > 0 && (
+                <div className="rounded-[8px] border border-[#E5E7EB] max-h-40 overflow-auto">
+                  {uploadResult.failures.map((f) => (
+                    <div
+                      key={f.excelRowNo}
+                      className="flex items-start gap-2 px-3 py-2 border-b border-[#F3F4F6] last:border-0"
+                    >
+                      <span className="text-[10px] font-mono text-[#9AA0A6] shrink-0">
+                        {f.excelRowNo}행
+                      </span>
+                      <span className="text-[11px] text-[#CF222E]">{f.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Modal>
     </div>
