@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { fetchPrograms } from '@/api/programs';
 import { PageHeader, StatusBadge, Pagination, Button } from '@/components/common';
 import { formatDate } from '@/utils/date';
+import { useCommonCode } from '@/hooks/useCommonCode';
 
 const ACCENT = '#2563EB';
 
 // ProgramListItemResponseDTO(GET /api/students/programs) -> 목록 화면에서 쓰는 행 모양으로 변환.
-// 신청인원(applied)/연계역량(competency)/적립점수(mileage)/그룹여부(isGroup)는 해당 API가 아직
+// 신청인원(applied)/연계역량(competency)/적립점수(mileage)는 해당 API가 아직
 // 내려주지 않아 화면이 깨지지 않도록 안전한 기본값을 채운다.
 const toRow = (dto) => ({
   id: dto.programId,
@@ -19,7 +20,6 @@ const toRow = (dto) => ({
   applied: 0,
   competency: null,
   mileage: 0,
-  isGroup: false,
 });
 
 const COMP_OPTIONS = [
@@ -30,16 +30,6 @@ const COMP_OPTIONS = [
   { value: '대인관계', label: '대인관계' },
   { value: '종합적 사고력', label: '종합적 사고력' },
   { value: '자원·정보·기술 활용', label: '자원·정보·기술 활용' },
-];
-
-const DEPT_OPTIONS = [
-  { value: '', label: '주관부서 전체' },
-  { value: '국제교류처', label: '국제교류처' },
-  { value: '교양교육원', label: '교양교육원' },
-  { value: '공과대학', label: '공과대학' },
-  { value: '진로취업처', label: '진로취업처' },
-  { value: '학술정보원', label: '학술정보원' },
-  { value: '학생처', label: '학생처' },
 ];
 
 const SORT_OPTIONS = [
@@ -93,10 +83,9 @@ function getStatusBadges(p) {
 /**
  * @param {Object} props
  * @param {(id: string) => void} props.onDetail
- * @param {(id: string) => void} props.onGroupApply
  * @param {() => void} [props.onMyApplications]
  */
-export default function ProgramList({ onDetail, onGroupApply, onMyApplications }) {
+export default function ProgramList({ onDetail, onMyApplications }) {
   const [viewMode, setViewMode] = useState('table');
   const [chip, setChip] = useState('전체');
   const [sort, setSort] = useState('new');
@@ -111,6 +100,12 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const PAGE_SIZE = 10;
+
+  const { data: departmentCodes = [] } = useCommonCode('DEPARTMENT');
+  const deptOptions = [
+    { value: '', label: '주관부서 전체' },
+    ...departmentCodes.map((c) => ({ value: c.code, label: c.codeName })),
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -192,7 +187,7 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
               onChange={(e) => setDept(e.target.value)}
               className="h-9 px-3 pr-7 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white appearance-none focus:outline-none focus:border-[#2563EB]"
             >
-              {DEPT_OPTIONS.map((o) => (
+              {deptOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -352,11 +347,6 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                               정원마감
                             </span>
                           )}
-                          {p.isGroup && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#DBEAFE] text-[#0969DA]">
-                              그룹
-                            </span>
-                          )}
                         </div>
                       </td>
                       <td className="px-3 py-3 text-center text-[#656D76] whitespace-nowrap">
@@ -375,8 +365,7 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                       <td className="px-3 py-3 text-center">
                         {p.capacity > 0 ? (
                           <span className={isFull ? 'text-[#CF222E] font-bold' : ''}>
-                            {p.applied}/{p.capacity}
-                            {p.isGroup ? '팀' : '명'}
+                            {p.applied}/{p.capacity}명
                           </span>
                         ) : (
                           <span className="text-[#9AA0A6]">-</span>
@@ -395,12 +384,12 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                           </button>
                         ) : (
                           <button
-                            onClick={() => (p.isGroup ? onGroupApply(p.id) : onDetail(p.id))}
+                            onClick={() => onDetail(p.id)}
                             disabled={p.status === '종료'}
                             className="h-7 px-3 text-[12px] font-bold text-white rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ background: p.status === '종료' ? '#9AA0A6' : ACCENT }}
                           >
-                            {p.status === '종료' ? '종료' : p.isGroup ? '팀신청' : '신청'}
+                            {p.status === '종료' ? '종료' : '신청'}
                           </button>
                         )}
                       </td>
@@ -453,11 +442,6 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                               정원마감
                             </span>
                           )}
-                          {p.isGroup && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#DBEAFE] text-[#0969DA]">
-                              그룹
-                            </span>
-                          )}
                         </div>
                         <button
                           onClick={() => onDetail(p.id)}
@@ -501,20 +485,14 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                     <div className="flex items-center justify-between pt-2 border-t border-[#F3F4F6] mt-auto">
                       <span className="text-[12px] font-bold text-[#D97706]">🏅 {p.mileage}점</span>
                       <button
-                        onClick={() => (p.isGroup ? onGroupApply(p.id) : onDetail(p.id))}
+                        onClick={() => onDetail(p.id)}
                         disabled={p.status === '종료'}
                         className={`h-7 px-3 text-[12px] font-bold rounded-[5px] transition-colors disabled:opacity-40 ${isFull ? 'text-[#2563EB] border border-[#2563EB] hover:bg-[#EFF6FF]' : 'text-white'}`}
                         style={
                           isFull ? {} : { background: p.status === '종료' ? '#9AA0A6' : ACCENT }
                         }
                       >
-                        {p.status === '종료'
-                          ? '종료'
-                          : isFull
-                            ? '대기신청'
-                            : p.isGroup
-                              ? '팀신청'
-                              : '신청'}
+                        {p.status === '종료' ? '종료' : isFull ? '대기신청' : '신청'}
                       </button>
                     </div>
                   </div>

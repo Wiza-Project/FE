@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, ConfirmDialog, Modal, StatusBadge, toast } from '@/components/common';
+import { useCommonCode } from '@/hooks/useCommonCode';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -13,7 +14,7 @@ const PROGRAMS = [
     applied: 20,
     capacity: 30,
     status: '모집중',
-    dept: '비교과운영부서',
+    dept: '학생역량센터',
     semester: '2026-1',
   },
   {
@@ -25,7 +26,7 @@ const PROGRAMS = [
     applied: 15,
     capacity: 20,
     status: '모집중',
-    dept: '취업지원팀',
+    dept: '비교과운영부서',
     semester: '2026-1',
   },
   {
@@ -37,7 +38,7 @@ const PROGRAMS = [
     applied: 28,
     capacity: 30,
     status: '운영중',
-    dept: '학생지원팀',
+    dept: '진로심리상담센터',
     semester: '2026-1',
   },
   {
@@ -49,7 +50,7 @@ const PROGRAMS = [
     applied: 42,
     capacity: 50,
     status: '운영중',
-    dept: '비교과운영부서',
+    dept: '취창업지원과',
     semester: '2026-1',
   },
   {
@@ -61,7 +62,7 @@ const PROGRAMS = [
     applied: 18,
     capacity: 25,
     status: '모집중',
-    dept: '취업지원팀',
+    dept: '학생역량센터',
     semester: '2026-1',
   },
   {
@@ -85,7 +86,7 @@ const PROGRAMS = [
     applied: 8,
     capacity: 20,
     status: '승인',
-    dept: '창업지원센터',
+    dept: '진로심리상담센터',
     semester: '2026-1',
   },
   {
@@ -97,7 +98,7 @@ const PROGRAMS = [
     applied: 0,
     capacity: 20,
     status: '심사요청',
-    dept: '교양교육원',
+    dept: '취창업지원과',
     semester: '2026-1',
   },
   {
@@ -109,7 +110,7 @@ const PROGRAMS = [
     applied: 0,
     capacity: 15,
     status: '작성중',
-    dept: '어학교육원',
+    dept: '학생역량센터',
     semester: '2026-1',
   },
   {
@@ -121,7 +122,7 @@ const PROGRAMS = [
     applied: 24,
     capacity: 24,
     status: '종료',
-    dept: '사회봉사팀',
+    dept: '비교과운영부서',
     semester: '2025-2',
   },
   {
@@ -133,7 +134,7 @@ const PROGRAMS = [
     applied: 60,
     capacity: 60,
     status: '종료',
-    dept: '취업지원팀',
+    dept: '진로심리상담센터',
     semester: '2025-2',
   },
   {
@@ -145,7 +146,7 @@ const PROGRAMS = [
     applied: 0,
     capacity: 30,
     status: '반려',
-    dept: '비교과운영부서',
+    dept: '취창업지원과',
     semester: '2026-1',
   },
 ];
@@ -184,16 +185,6 @@ const WAITLIST = [
 const SEMESTERS = ['전체', '2026-1', '2025-2', '2025-1'];
 const STATUS_LIST = ['전체', '작성중', '심사요청', '승인', '반려', '모집중', '운영중', '종료'];
 const CATEGORIES = ['전체', '학습', '진로', '취업', '리더십', '글로벌', '봉사', '창업', '문화'];
-const DEPTS = [
-  '전체',
-  '비교과운영부서',
-  '취업지원팀',
-  '학생지원팀',
-  '창업지원센터',
-  '교양교육원',
-  '어학교육원',
-  '사회봉사팀',
-];
 
 // ─── Which actions are available per status ───────────────────────────────────
 
@@ -248,6 +239,9 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
   const [waitlistTarget, setWaitlistTarget] = useState(null);
   const [waitlist, setWaitlist] = useState(WAITLIST);
   const [promoteTarget, setPromoteTarget] = useState(null);
+
+  const { data: departmentCodes = [] } = useCommonCode('DEPARTMENT');
+  const depts = ['전체', ...departmentCodes.map((c) => c.codeName)];
 
   const filtered = PROGRAMS.filter(
     (p) =>
@@ -314,7 +308,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
           { label: '학기', value: semester, set: setSemester, opts: SEMESTERS },
           { label: '상태', value: status, set: setStatus, opts: STATUS_LIST },
           { label: '분류', value: category, set: setCategory, opts: CATEGORIES },
-          { label: '주관부서', value: dept, set: setDept, opts: DEPTS },
+          { label: '주관부서', value: dept, set: setDept, opts: depts },
         ].map((f) => (
           <div key={f.label}>
             <label className="block text-[10px] font-semibold text-[#656D76] mb-1">{f.label}</label>
