@@ -4,23 +4,10 @@ import { UNIVERSITY_NAME } from '@/data/dummy';
 import { useAuthStore } from '@/stores/authStore';
 import { login as loginApi } from '@/api/auth';
 import { USER_TYPE } from '@/constants/domain';
-import { toast } from '@/components/common';
 
 const PORTAL_CONFIG = {
   student: { label: '학생', color: '#2563EB', idLabel: '학번', idPlaceholder: '학번 8자리 입력' },
   staff: { label: '교직원', color: '#7C3AED', idLabel: '교번', idPlaceholder: '교번 입력' },
-  admin: {
-    label: '관리자',
-    color: '#6B7280',
-    idLabel: '관리자 ID',
-    idPlaceholder: '관리자 ID 입력',
-  },
-  enterprise: {
-    label: '기업',
-    color: '#059669',
-    idLabel: '기업 ID',
-    idPlaceholder: '기업 회원 ID 입력',
-  },
 };
 
 // 로그인 화면 진입 사유(자동 로그아웃)별 안내 문구.
@@ -38,8 +25,8 @@ const FIRST_LOGIN_KEY = 'sicms_first_login_done';
 /**
  * 로그인 화면.
  *
- * 학생/교직원 포털만 실제 인증 API(/api/auth/login)에 연결되어 있습니다.
- * 관리자/기업 탭은 아직 전용 포털이 없어 안내 토스트만 띄웁니다(라우터 미연결).
+ * 포털 탭은 학생/교직원 2개만 노출
+ *   TODO: 관리자 로그인이 실제로 필요해지면 별도 경로(/admin/login 등)로 분리예정
  */
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -88,12 +75,6 @@ export default function LoginPage() {
     }
     if (!pw) {
       setError('비밀번호를 입력해주세요.');
-      return;
-    }
-
-    // 관리자/기업 포털은 아직 라우터에 연결되지 않았습니다 — 실제 API를 호출하지 않습니다.
-    if (portal === 'admin' || portal === 'enterprise') {
-      toast(`${cfg.label} 포털은 다음 단계에서 연결됩니다.`, 'info');
       return;
     }
 
@@ -274,7 +255,7 @@ export default function LoginPage() {
                   포털 선택
                 </p>
                 <div className="flex gap-2">
-                  {['student', 'staff', 'admin', 'enterprise'].map((p) => (
+                  {['student', 'staff'].map((p) => (
                     <button
                       key={p}
                       type="button"

@@ -2,11 +2,7 @@ import { useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button, FileUpload, toast } from '@/components/common';
 import { createProgram, fetchCompetencyOptions } from '@/api/programs';
-import {
-  OPERATING_UNIT_OPTIONS,
-  PROGRAM_TYPE_OPTIONS,
-  MILEAGE_POLICY_OPTIONS,
-} from '@/data/programOptions';
+import { MILEAGE_POLICY_OPTIONS } from '@/data/programOptions';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
@@ -253,10 +249,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     // 실제 첨부 업로드 API가 아직 없어 이번엔 항상 생략 (백엔드에서 optional)
     fileGroupId: null,
     // 운영단위·프로그램분류는 아직 공통코드 조회 API가 없어 화면에서 선택받지 않는다.
-    // 백엔드가 둘 다 필수(@NotNull)로 요구하므로 임시로 목업 옵션의 첫 값을 고정 전송한다.
-    // 실제 운영단위 선택 UI가 필요해지면 IdSelect + OPERATING_UNIT_OPTIONS/PROGRAM_TYPE_OPTIONS로 되살리면 됨.
-    operatingUnitCodeId: OPERATING_UNIT_OPTIONS[0].id,
-    programTypeCodeId: PROGRAM_TYPE_OPTIONS[0].id,
+    // operatingUnitCodeId/programTypeCodeId는 백엔드 default 값에 위임하고 FE는 값을 보내지 않는다.
     competencyId: Number(competencyId),
     mileagePolicyId: mileagePolicyId ? Number(mileagePolicyId) : null,
     programName: name.trim(),
