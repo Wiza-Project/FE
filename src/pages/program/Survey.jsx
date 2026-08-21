@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PageHeader, Button, ProgressBar, toast } from '@/components/common';
+import { completeSurvey } from '@/api/programApplications';
 
 const ACCENT = '#2563EB';
 
@@ -20,10 +21,16 @@ const LIKERT = [
 ];
 
 /**
+ * 문항별 응답을 저장하는 백엔드 API는 없고, 설문 완료 여부(surveyCompleted) 플래그만 서버에
+ * 반영된다. 아래 문항/리커트 UI는 그대로 유지하되, 제출 시 실제로 서버에 전송되는 것은
+ * "완료" 신호뿐이며 개별 답변 내용은 저장되지 않는다.
+ *
  * @param {Object} props
+ * @param {number} props.programId
+ * @param {number} props.applicationId
  * @param {() => void} props.onBack
  */
-export default function Survey({ onBack }) {
+export default function Survey({ programId, applicationId, onBack }) {
   const [view, setView] = useState('survey');
   const [answers, setAnswers] = useState({});
   const [feedback, setFeedback] = useState('');
@@ -40,11 +47,16 @@ export default function Survey({ onBack }) {
       return;
     }
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSubmitting(false);
-    setSubmitted(true);
-    toast('설문이 제출되었습니다. 수료증을 발급받으실 수 있습니다.', 'success');
-    setTimeout(() => setView('cert'), 600);
+    try {
+      await completeSurvey(programId, applicationId);
+      setSubmitted(true);
+      toast('설문이 제출되었습니다. 수료증을 발급받으실 수 있습니다.', 'success');
+      setTimeout(() => setView('cert'), 600);
+    } catch (err) {
+      toast(err.message ?? '설문 제출에 실패했습니다.', 'danger');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

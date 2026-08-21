@@ -25,6 +25,16 @@ export const fetchPrograms = async (params) => {
 };
 
 /**
+ * 학생용 비교과 프로그램 상세 조회. GET /api/students/programs/{programId}
+ * @param {number} programId
+ * @returns {Promise<Object>} ProgramDetailResponseDTO
+ */
+export const fetchProgramDetail = async (programId) => {
+  const { data } = await apiClient.get(`/students/programs/${programId}`);
+  return data;
+};
+
+/**
  * 프로그램 등록 폼의 "연계 핵심역량" select용 목록 조회. GET /api/admin/programs/competencies
  * 최상위(상위역량 없음) + 사용 중인 역량만 displayOrder 순으로 내려온다.
  * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number}[]>}

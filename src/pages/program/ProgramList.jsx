@@ -7,8 +7,6 @@ import { useCommonCode } from '@/hooks/useCommonCode';
 const ACCENT = '#2563EB';
 
 // ProgramListItemResponseDTO(GET /api/students/programs) -> 목록 화면에서 쓰는 행 모양으로 변환.
-// 신청인원(applied)/연계역량(competency)/적립점수(mileage)는 해당 API가 아직
-// 내려주지 않아 화면이 깨지지 않도록 안전한 기본값을 채운다.
 const toRow = (dto) => ({
   id: dto.programId,
   name: dto.programName,
@@ -17,9 +15,9 @@ const toRow = (dto) => ({
   period: `${formatDate(dto.recruitmentStartsAt)} ~ ${formatDate(dto.recruitmentEndsAt)}`,
   capacity: dto.capacity ?? 0,
   status: dto.programStatusLabel,
-  applied: 0,
-  competency: null,
-  mileage: 0,
+  applied: dto.applicantCount ?? 0,
+  competency: dto.competencyName ?? null,
+  mileage: dto.mileagePoints ?? 0,
 });
 
 const COMP_OPTIONS = [

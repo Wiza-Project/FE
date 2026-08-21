@@ -11,7 +11,8 @@ import Survey from './Survey';
  */
 export default function ExtracurrPage() {
   const [view, setView] = useState('list');
-  const [selectedProgram, setSelectedProgram] = useState('P016');
+  const [selectedProgramId, setSelectedProgramId] = useState(null);
+  const [selectedApplication, setSelectedApplication] = useState(null);
 
   const goList = () => setView('list');
 
@@ -19,7 +20,7 @@ export default function ExtracurrPage() {
     case 'detail':
       return (
         <ProgramDetail
-          programId={selectedProgram}
+          programId={selectedProgramId}
           onBack={goList}
           onApplySuccess={() => setView('my-applications')}
         />
@@ -28,11 +29,11 @@ export default function ExtracurrPage() {
       return (
         <MyApplications
           onActivity={(id) => {
-            setSelectedProgram(id);
+            setSelectedProgramId(id);
             setView('activity');
           }}
-          onSurvey={(id) => {
-            setSelectedProgram(id);
+          onSurvey={({ programId, applicationId }) => {
+            setSelectedApplication({ programId, applicationId });
             setView('survey');
           }}
         />
@@ -40,12 +41,18 @@ export default function ExtracurrPage() {
     case 'activity':
       return <ActivityManage onBack={() => setView('my-applications')} />;
     case 'survey':
-      return <Survey onBack={() => setView('my-applications')} />;
+      return (
+        <Survey
+          programId={selectedApplication?.programId}
+          applicationId={selectedApplication?.applicationId}
+          onBack={() => setView('my-applications')}
+        />
+      );
     default:
       return (
         <ProgramList
           onDetail={(id) => {
-            setSelectedProgram(id);
+            setSelectedProgramId(id);
             setView('detail');
           }}
           onMyApplications={() => setView('my-applications')}

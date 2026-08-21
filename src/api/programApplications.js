@@ -1,6 +1,30 @@
 import { apiClient } from './client';
 
 /**
+ * 비교과 프로그램 참여 신청. POST /api/students/programs/{programId}/applications
+ * @param {number} programId
+ * @returns {Promise<{applicationId: number, programId: number, applicationStatus: string, applicationStatusLabel: string, waitlistOrder: number|null, appliedAt: string}>}
+ */
+export const applyToProgram = async (programId) => {
+  const { data } = await apiClient.post(`/students/programs/${programId}/applications`);
+  return data;
+};
+
+/**
+ * 만족도 설문 완료 처리. POST /api/students/programs/{programId}/applications/{applicationId}/survey-complete
+ * 문항별 응답을 저장하는 API는 없고, 완료 여부(surveyCompleted) 플래그만 서버에 반영된다.
+ * @param {number} programId
+ * @param {number} applicationId
+ * @returns {Promise<{applicationId: number, surveyCompleted: boolean}>}
+ */
+export const completeSurvey = async (programId, applicationId) => {
+  const { data } = await apiClient.post(
+    `/students/programs/${programId}/applications/${applicationId}/survey-complete`,
+  );
+  return data;
+};
+
+/**
  * 로그인한 학생 본인의 비교과 프로그램 참여 신청 현황 조회. GET /api/students/programs/applications
  * @param {Object} [params]
  * @param {number} [params.page] 0-base 페이지 번호.

@@ -18,8 +18,6 @@ const ACCENT = '#2563EB';
 const STATUS_LABEL = { COMPLETED: '수료', FAILED: '미수료' };
 
 // ProgramApplicationSummaryResponseDTO(GET /api/students/programs/applications) -> 목록 행으로 변환.
-// 출석률(attendance), 적립 마일리지(mileage)는 이 API가 아직 내려주지 않아
-// 화면이 깨지지 않도록 안전한 기본값을 채운다.
 const toRow = (dto) => ({
   id: dto.applicationId,
   programId: dto.programId,
@@ -29,10 +27,10 @@ const toRow = (dto) => ({
   applicationStatus: dto.applicationStatus,
   status: STATUS_LABEL[dto.completionStatus] ?? dto.applicationStatusLabel,
   waitlistOrder: dto.waitlistOrder,
-  attendance: 0,
+  attendance: dto.attendanceRate ?? 0,
   completed: dto.completionStatus === 'COMPLETED',
   completionStatus: dto.completionStatus,
-  mileage: 0,
+  mileage: dto.earnedMileagePoints ?? 0,
   decisionReason: dto.decisionReason,
   processedAt: dto.processedAt,
   cancellationReason: dto.cancellationReason,
@@ -52,7 +50,7 @@ const BTN_MAP = {
 
 /**
  * @param {Object} props
- * @param {(id: string) => void} props.onSurvey
+ * @param {(target: {programId: number, applicationId: number}) => void} props.onSurvey
  */
 export default function MyApplications({ onSurvey }) {
   const [page, setPage] = useState(1);
@@ -91,7 +89,7 @@ export default function MyApplications({ onSurvey }) {
     };
   }, [page, reloadKey]);
 
-  // 전체 신청 건수는 서버 페이지네이션 totalElements(정확), 승인/수료/적립 마일리지는
+  // 전체 신청 건수는 서버 페이지네이션 totalElements(정확), 승인/수료 건수는
   // 별도 집계 API가 없어 현재 페이지에 내려온 데이터 기준 근사치다.
   const approvedCount = apps.filter((a) => a.applicationStatus === 'APPROVED').length;
   const completedCount = apps.filter((a) => a.completed).length;
@@ -115,7 +113,7 @@ export default function MyApplications({ onSurvey }) {
 
   const handleBtn = (app) => {
     if (app.status === '수료') {
-      onSurvey(app.id);
+      onSurvey({ programId: app.programId, applicationId: app.applicationId });
       return;
     }
     if (app.status === '반려') {
@@ -138,8 +136,7 @@ export default function MyApplications({ onSurvey }) {
         accentColor={ACCENT}
       />
 
-      {/* Stat tiles: 승인/수료/적립 마일리지는 별도 집계 API가 없어 현재 페이지 데이터 기준 근사치, 적립
-          마일리지는 이 API가 mileage 값을 내려주지 않아 항상 0으로 표시된다. */}
+      {/* Stat tiles: 승인/수료/적립 마일리지는 별도 집계 API가 없어 현재 페이지 데이터 기준 근사치다. */}
       <div className="grid grid-cols-4 gap-4 mb-5">
         <StatTile label="전체 신청" value={`${totalItems}건`} sub="전체" accentColor={ACCENT} />
         <StatTile
