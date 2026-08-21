@@ -7,8 +7,11 @@ import { USER_TYPE } from '@/constants/domain';
 
 const PORTAL_CONFIG = {
   student: { label: '학생', color: '#2563EB', idLabel: '학번', idPlaceholder: '학번 8자리 입력' },
-  staff: { label: '교직원', color: '#7C3AED', idLabel: '교번', idPlaceholder: '교번 입력' },
+  staff: { label: '교직원', color: '#7C3AED', idLabel: '교번', idPlaceholder: '교번 8자리 입력' },
 };
+
+// 학번/교번 모두 숫자 8자리(university_no) 형식.
+const ID_MAX_LENGTH = 8;
 
 // 로그인 화면 진입 사유(자동 로그아웃)별 안내 문구.
 // ProtectedRoute(유휴 타임아웃 / 세션 만료)가 location.state.reason 으로 넘겨줍니다.
@@ -157,8 +160,9 @@ export default function LoginPage() {
                     inputMode="numeric"
                     value={id}
                     onChange={(e) => {
-                      // 학번/교번은 숫자로만 구성됩니다 — 숫자 이외 입력은 즉시 제거.
-                      setId(e.target.value.replace(/\D/g, ''));
+                      // 학번/교번은 숫자 8자리 — 숫자 이외 입력은 제거하고 8자리를 넘는 입력은 자릅니다.
+                      // (붙여넣기로 "2024-1234" 같은 형식이 들어와도 숫자만 추출해 앞 8자리까지 반영)
+                      setId(e.target.value.replace(/\D/g, '').slice(0, ID_MAX_LENGTH));
                       setError('');
                     }}
                     placeholder={cfg.idPlaceholder}
