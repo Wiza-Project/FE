@@ -68,6 +68,13 @@ export default function LoginPage() {
       setError('아이디를 입력해주세요.');
       return;
     }
+    // onChange 필터링은 "입력 중" 8자리 초과만 잘라내므로 1~7자리 값이나,
+    // onChange를 거치지 않고 복원된 localStorage 저장값은 여기서 막아야 합니다.
+    // 백엔드 LoginRequest의 @Pattern("\d{8}") 검증 메시지와 문구를 맞췄습니다.
+    if (!/^\d{8}$/.test(id)) {
+      setError('아이디는 숫자 8자리로 입력해주세요.');
+      return;
+    }
     if (!pw) {
       setError('비밀번호를 입력해주세요.');
       return;
@@ -91,6 +98,9 @@ export default function LoginPage() {
         // 반영이 먼저 실행되기 때문입니다. 즉 이 메시지가 뜨는 시점엔 이미 잠긴 상태이므로
         // "계속 실패하면"처럼 미래형으로 경고하지 않고 잠겼다고 바로 안내합니다.
         // (다음 시도부터는 백엔드가 U005로 응답 — 아래 U004/U005/U006 분기 참고)
+
+        // ApiResponse에는 잔여 횟수/잠금여부가 없음
+        //TODO: 백엔드 U003 응답바디에 실제 잔여 횟수/잠금 여부를 내려주고 여기서 그 값을 쓰도록 수정할 예정
         const next = attempts + 1;
         setAttempts(next);
         setError(
@@ -154,8 +164,11 @@ export default function LoginPage() {
               <form onSubmit={handleLogin} className="px-8 py-5 flex flex-col gap-4">
                 {/* ID */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-[13px] font-semibold text-[#1F2328]">아이디</label>
+                  <label htmlFor="login-id" className="text-[13px] font-semibold text-[#1F2328]">
+                    아이디
+                  </label>
                   <input
+                    id="login-id"
                     type="text"
                     inputMode="numeric"
                     value={id}
