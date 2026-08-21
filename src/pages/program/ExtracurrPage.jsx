@@ -32,8 +32,8 @@ export default function ExtracurrPage() {
             setSelectedApplication({ programId });
             setView('activity');
           }}
-          onSurvey={({ programId, applicationId }) => {
-            setSelectedApplication({ programId, applicationId });
+          onSurvey={({ programId, applicationId, programName }) => {
+            setSelectedApplication({ programId, applicationId, programName });
             setView('survey');
           }}
         />
@@ -50,6 +50,7 @@ export default function ExtracurrPage() {
         <Survey
           programId={selectedApplication?.programId}
           applicationId={selectedApplication?.applicationId}
+          programName={selectedApplication?.programName}
           onBack={() => setView('my-applications')}
         />
       );

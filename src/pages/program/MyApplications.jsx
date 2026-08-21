@@ -51,7 +51,7 @@ const BTN_MAP = {
 /**
  * @param {Object} props
  * @param {(target: {programId: number}) => void} props.onActivity
- * @param {(target: {programId: number, applicationId: number}) => void} props.onSurvey
+ * @param {(target: {programId: number, applicationId: number, programName: string}) => void} props.onSurvey
  */
 export default function MyApplications({ onActivity, onSurvey }) {
   const [page, setPage] = useState(1);
@@ -114,7 +114,7 @@ export default function MyApplications({ onActivity, onSurvey }) {
 
   const handleBtn = (app) => {
     if (app.status === '수료') {
-      onSurvey({ programId: app.programId, applicationId: app.applicationId });
+      onSurvey({ programId: app.programId, applicationId: app.applicationId, programName: app.name });
       return;
     }
     if (app.status === '반려') {

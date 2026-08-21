@@ -26,7 +26,11 @@ export default function ActivityManage({ programId, onBack }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!programId) return;
+    if (!programId) {
+      setLoading(false);
+      setError('프로그램 정보를 찾을 수 없습니다.');
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);

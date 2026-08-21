@@ -28,9 +28,10 @@ const LIKERT = [
  * @param {Object} props
  * @param {number} props.programId
  * @param {number} props.applicationId
+ * @param {string} [props.programName]
  * @param {() => void} props.onBack
  */
-export default function Survey({ programId, applicationId, onBack }) {
+export default function Survey({ programId, applicationId, programName, onBack }) {
   const [answers, setAnswers] = useState({});
   const [feedback, setFeedback] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -101,7 +102,7 @@ export default function Survey({ programId, applicationId, onBack }) {
             <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-5 py-4 mb-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
               <div className="flex items-center justify-between text-[12px] mb-2">
                 <span className="font-semibold text-[#1F2328]">
-                  해외문화체험 워크숍 만족도 조사
+                  {programName ? `${programName} 만족도 조사` : '만족도 조사'}
                 </span>
                 <span className="text-[#9AA0A6]">
                   {answered}/{SURVEY_QUESTIONS.length} 문항 완료
@@ -173,8 +174,9 @@ export default function Survey({ programId, applicationId, onBack }) {
                     rows={4}
                     className="w-full px-3 py-2.5 text-[13px] border border-[#E5E7EB] rounded-[6px] resize-none focus:outline-none focus:border-[#2563EB] placeholder:text-[#9AA0A6]"
                   />
-                  <div className="text-right text-[11px] text-[#9AA0A6] mt-1">
-                    {feedback.length}자
+                  <div className="flex items-center justify-between text-[11px] text-[#9AA0A6] mt-1">
+                    <span>입력하신 의견은 별도로 저장되지 않으며, 설문 완료 여부만 반영됩니다.</span>
+                    <span>{feedback.length}자</span>
                   </div>
                 </div>
               </div>

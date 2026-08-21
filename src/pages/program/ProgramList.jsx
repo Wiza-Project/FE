@@ -379,9 +379,10 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                         {isFull ? (
                           <button
                             onClick={() => onDetail(p.id)}
-                            className="h-7 px-3 text-[12px] font-bold text-[#2563EB] border border-[#2563EB] rounded-[5px] hover:bg-[#EFF6FF] transition-colors"
+                            disabled={p.status === '종료'}
+                            className="h-7 px-3 text-[12px] font-bold text-[#2563EB] border border-[#2563EB] rounded-[5px] hover:bg-[#EFF6FF] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           >
-                            대기신청
+                            {p.status === '종료' ? '종료' : '대기신청'}
                           </button>
                         ) : (
                           <button
