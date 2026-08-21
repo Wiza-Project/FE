@@ -18,7 +18,7 @@ const ACCENT = '#2563EB';
 const STATUS_LABEL = { COMPLETED: '수료', FAILED: '미수료' };
 
 // ProgramApplicationSummaryResponseDTO(GET /api/students/programs/applications) -> 목록 행으로 변환.
-// 구분(개인/그룹), 출석률(attendance), 적립 마일리지(mileage)는 이 API가 아직 내려주지 않아
+// 출석률(attendance), 적립 마일리지(mileage)는 이 API가 아직 내려주지 않아
 // 화면이 깨지지 않도록 안전한 기본값을 채운다.
 const toRow = (dto) => ({
   id: dto.applicationId,
@@ -26,7 +26,6 @@ const toRow = (dto) => ({
   applicationId: dto.applicationId,
   appliedAt: formatDate(dto.appliedAt),
   name: dto.programName,
-  type: '개인',
   applicationStatus: dto.applicationStatus,
   status: STATUS_LABEL[dto.completionStatus] ?? dto.applicationStatusLabel,
   waitlistOrder: dto.waitlistOrder,
@@ -227,7 +226,7 @@ export default function MyApplications({ onSurvey }) {
         <table className="w-full border-collapse text-[13px]">
           <thead>
             <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-              {['신청일', '프로그램명', '구분', '상태', '출석률', '수료', '적립', '관리'].map(
+              {['신청일', '프로그램명', '상태', '출석률', '수료', '적립', '관리'].map(
                 (h) => (
                   <th
                     key={h}
@@ -251,13 +250,6 @@ export default function MyApplications({ onSurvey }) {
                     {app.appliedAt}
                   </td>
                   <td className="px-3 py-3 font-semibold text-[#1F2328]">{app.name}</td>
-                  <td className="px-3 py-3 text-center">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${app.type === '그룹' ? 'bg-[#DBEAFE] text-[#0969DA]' : 'bg-[#F3F4F6] text-[#6E7781]'}`}
-                    >
-                      {app.type}
-                    </span>
-                  </td>
                   <td className="px-3 py-3 text-center">
                     <StatusBadge status={app.status} size="sm" />
                   </td>

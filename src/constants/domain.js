@@ -64,6 +64,17 @@ export const USER_ROLE_LABEL = {
   AD100: '관리자',
 };
 
+/** 상담사 본인 일정의 서버 상태. */
+export const COUNSELOR_SCHEDULE_STATUS = {
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED',
+};
+
+export const COUNSELOR_SCHEDULE_STATUS_LABEL = {
+  [COUNSELOR_SCHEDULE_STATUS.OPEN]: '예약 가능',
+  [COUNSELOR_SCHEDULE_STATUS.CLOSED]: '마감',
+};
+
 /** 승인 상태 — 프로그램 신청, 참여신청, 마일리지 실적신청 공통 */
 export const APPROVAL_STATUS = {
   REQUESTED: 'REQUESTED',
