@@ -154,9 +154,11 @@ export default function LoginPage() {
                   <label className="text-[13px] font-semibold text-[#1F2328]">{cfg.idLabel}</label>
                   <input
                     type="text"
+                    inputMode="numeric"
                     value={id}
                     onChange={(e) => {
-                      setId(e.target.value);
+                      // 학번/교번은 숫자로만 구성됩니다 — 숫자 이외 입력은 즉시 제거.
+                      setId(e.target.value.replace(/\D/g, ''));
                       setError('');
                     }}
                     placeholder={cfg.idPlaceholder}
