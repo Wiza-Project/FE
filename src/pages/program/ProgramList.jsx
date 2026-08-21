@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { fetchPrograms } from '@/api/programs';
 import { PageHeader, StatusBadge, Pagination, Button } from '@/components/common';
+import { formatDate } from '@/utils/date';
 
 const ACCENT = '#2563EB';
-
-const formatDate = (iso) => (iso ? iso.slice(0, 10) : '');
 
 // ProgramListItemResponseDTO(GET /api/students/programs) -> 목록 화면에서 쓰는 행 모양으로 변환.
 // 신청인원(applied)/연계역량(competency)/적립점수(mileage)/그룹여부(isGroup)는 해당 API가 아직

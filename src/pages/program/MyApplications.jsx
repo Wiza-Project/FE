@@ -9,10 +9,9 @@ import {
   Modal,
   toast,
 } from '@/components/common';
+import { formatDate } from '@/utils/date';
 
 const ACCENT = '#2563EB';
-
-const formatDate = (iso) => (iso ? iso.slice(0, 10) : '');
 
 // 이수 판정(completionStatus)이 나온 건은 그 결과를, 아직이면 신청 처리 상태 라벨을 그대로 보여준다.
 // FE 디자인의 "활동진행"/"수정요청" 상태는 백엔드에 대응 개념이 없어 표현할 수 없다.
@@ -33,6 +32,7 @@ const toRow = (dto) => ({
   waitlistOrder: dto.waitlistOrder,
   attendance: 0,
   completed: dto.completionStatus === 'COMPLETED',
+  completionStatus: dto.completionStatus,
   mileage: 0,
   decisionReason: dto.decisionReason,
   processedAt: dto.processedAt,
@@ -123,7 +123,7 @@ export default function MyApplications({ onSurvey }) {
       setRejectTarget(app);
       return;
     }
-    if (CANCELABLE.has(app.applicationStatus)) {
+    if (CANCELABLE.has(app.applicationStatus) && !app.completionStatus) {
       runCancel(app);
       return;
     }
