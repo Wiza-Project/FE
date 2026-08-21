@@ -5,10 +5,9 @@ import { useAuthStore } from '@/stores/authStore';
 import { login as loginApi } from '@/api/auth';
 import { USER_TYPE } from '@/constants/domain';
 
-const PORTAL_CONFIG = {
-  student: { label: '학생', color: '#2563EB', idLabel: '학번', idPlaceholder: '학번 8자리 입력' },
-  staff: { label: '교직원', color: '#7C3AED', idLabel: '교번', idPlaceholder: '교번 8자리 입력' },
-};
+// 포털(학생/교직원)을 화면에서 따로 선택받지 않고 학생 브랜드 컬러를 기본값으로 씁니다.
+// 로그인 후 completeLogin()이 응답에 담긴 user.userType으로 화면을 분기합니다.
+const BRAND_COLOR = '#2563EB';
 
 // 학번/교번 모두 숫자 8자리(university_no) 형식.
 const ID_MAX_LENGTH = 8;
@@ -28,7 +27,8 @@ const FIRST_LOGIN_KEY = 'sicms_first_login_done';
 /**
  * 로그인 화면.
  *
- * 포털 탭은 학생/교직원 2개만 노출
+ * 학생/교직원 포털을 화면에서 따로 선택받지 않고 하나의 폼으로 로그인합니다.
+ * 로그인 성공 응답의 user.userType으로 completeLogin()이 이후 화면만 분기합니다.
  *   TODO: 관리자 로그인이 실제로 필요해지면 별도 경로(/admin/login 등)로 분리예정
  */
 export default function LoginPage() {
@@ -36,7 +36,6 @@ export default function LoginPage() {
   const location = useLocation();
   const authLogin = useAuthStore((s) => s.login);
 
-  const [portal, setPortal] = useState('student');
   const [id, setId] = useState(() => localStorage.getItem(SAVE_ID_KEY) ?? '');
   const [pw, setPw] = useState('');
   const [saveId, setSaveId] = useState(() => !!localStorage.getItem(SAVE_ID_KEY));
@@ -47,14 +46,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [attempts, setAttempts] = useState(0);
 
-  const cfg = PORTAL_CONFIG[portal];
-
-  const selectPortal = (p) => {
-    setPortal(p);
-    setError('');
-    setAttempts(0);
-  };
-
+  // 학생/교직원 모두 이 화면에서 로그인하고, 로그인 성공 후 응답의 user.userType으로만 분기합니다.
   const completeLogin = (user) => {
     if (user.userType === USER_TYPE.STUDENT) {
       const isFirst = !localStorage.getItem(FIRST_LOGIN_KEY);
@@ -91,14 +83,22 @@ export default function LoginPage() {
       completeLogin(data.user);
     } catch (err) {
       if (err.code === 'U003') {
-        // 아이디/비밀번호 불일치. 클라이언트에서 계정을 잠그는 건 아니므로
-        // "잠겼다"고 단정하지 않고, 반복 실패 시 비밀번호 찾기를 안내합니다.
+        // 아이디/비밀번호 불일치.
+        // 1~2회는 단순 오타일 가능성이 높아 카운트 없이 안내만 하고,
+        // 3회차부터 남은 횟수를 보여줘 잠금이 다가온다는 걸 알립니다.
+        // 백엔드는 MAX_ATTEMPTS번째 실패(=지금 이 응답)에서 이미 계정을 LOCKED로
+        // 전환한 뒤에도 그 시도 자체는 U003으로 응답합니다 — 상태 판정보다 실패 카운트
+        // 반영이 먼저 실행되기 때문입니다. 즉 이 메시지가 뜨는 시점엔 이미 잠긴 상태이므로
+        // "계속 실패하면"처럼 미래형으로 경고하지 않고 잠겼다고 바로 안내합니다.
+        // (다음 시도부터는 백엔드가 U005로 응답 — 아래 U004/U005/U006 분기 참고)
         const next = attempts + 1;
         setAttempts(next);
         setError(
           next >= MAX_ATTEMPTS
-            ? `${err.message}\n계속 실패하신다면 아이디를 다시 확인하시거나 '비밀번호 찾기'를 이용해주세요.`
-            : `${err.message} (${next}/${MAX_ATTEMPTS}회)`,
+            ? '계정이 잠겼습니다. 비밀번호 찾기를 이용하거나 관리자에게 문의하세요.'
+            : next >= 3
+              ? `${err.message} (${next}/${MAX_ATTEMPTS}회)`
+              : err.message,
         );
       } else if (err.code === 'U004' || err.code === 'U005' || err.code === 'U006') {
         // 휴면/잠금/탈퇴 — 백엔드가 내려준 안내 문구를 그대로 보여줍니다. 실패 횟수로 세지 않습니다.
@@ -141,7 +141,7 @@ export default function LoginPage() {
             {/* Login card */}
             <div className="bg-white rounded-[12px] border border-[#E5E7EB] shadow-[0_4px_28px_rgba(0,0,0,0.08)] overflow-hidden">
               {/* Color bar */}
-              <div className="h-1" style={{ background: cfg.color }} />
+              <div className="h-1" style={{ background: BRAND_COLOR }} />
 
               {/* Title */}
               <div className="px-8 pt-7 pb-1">
@@ -154,7 +154,7 @@ export default function LoginPage() {
               <form onSubmit={handleLogin} className="px-8 py-5 flex flex-col gap-4">
                 {/* ID */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-[13px] font-semibold text-[#1F2328]">{cfg.idLabel}</label>
+                  <label className="text-[13px] font-semibold text-[#1F2328]">아이디</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -165,7 +165,7 @@ export default function LoginPage() {
                       setId(e.target.value.replace(/\D/g, '').slice(0, ID_MAX_LENGTH));
                       setError('');
                     }}
-                    placeholder={cfg.idPlaceholder}
+                    placeholder="아이디 8자리 입력"
                     autoFocus
                     className="h-10 rounded-[6px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] text-[#1F2328] placeholder:text-[#9AA0A6] focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-colors disabled:bg-[#F9FAFB] disabled:text-[#9AA0A6]"
                   />
@@ -199,7 +199,7 @@ export default function LoginPage() {
                     onChange={(e) => setSaveId(e.target.checked)}
                     className="w-4 h-4 rounded-[3px] border-[#D1D5DB] accent-[#2563EB]"
                   />
-                  <span className="text-[13px] text-[#656D76]">학번 저장</span>
+                  <span className="text-[13px] text-[#656D76]">아이디 저장</span>
                 </label>
 
                 {/* Error */}
@@ -231,49 +231,14 @@ export default function LoginPage() {
                   type="submit"
                   disabled={loading}
                   className="h-11 w-full rounded-[6px] text-white font-bold text-[14px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-1"
-                  style={{ background: cfg.color }}
+                  style={{ background: BRAND_COLOR }}
                 >
                   {loading && (
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   )}
                   로그인
                 </button>
-
-                {/* Fail count bar */}
-                {attempts > 0 && (
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-[#CF222E] rounded-full transition-all"
-                        style={{ width: `${Math.min((attempts / MAX_ATTEMPTS) * 100, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-[11px] text-[#CF222E] font-semibold">
-                      {attempts}/{MAX_ATTEMPTS}
-                    </span>
-                  </div>
-                )}
               </form>
-
-              {/* Portal tabs */}
-              <div className="border-t border-[#F3F4F6] px-8 py-4 bg-[#FAFAFA]">
-                <p className="text-[11px] font-semibold text-[#9AA0A6] uppercase tracking-wide mb-2.5">
-                  포털 선택
-                </p>
-                <div className="flex gap-2">
-                  {['student', 'staff'].map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => selectPortal(p)}
-                      className={`px-3 py-1.5 rounded-[999px] text-[12px] font-bold transition-all border ${portal === p ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'}`}
-                      style={portal === p ? { background: PORTAL_CONFIG[p].color } : {}}
-                    >
-                      {PORTAL_CONFIG[p].label}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* Bottom links */}
