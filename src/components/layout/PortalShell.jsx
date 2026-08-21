@@ -4,6 +4,13 @@ import { useAuthStore } from '@/stores/authStore';
 import { USER_TYPE } from '@/constants/domain';
 import { UNIVERSITY_NAME, SEMESTERS } from '@/data/dummy';
 import { toast } from '@/components/common';
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotifications,
+  useUnreadNotificationCount,
+} from '@/hooks/useNotifications';
+import { formatRelativeTime } from '@/utils/date';
 
 // ─── Icon primitives ─────────────────────────────────────────────────────────
 
@@ -149,26 +156,8 @@ const PORTAL_LABELS = { student: '학생 포털', staff: '교직원 포털' };
 // 학생 포털은 브랜드 블루 유지, 교직원 포털은 행정시스템 톤(거의 무채색)의 단일 포인트컬러 사용
 const PORTAL_COLORS = { student: '#2563EB', staff: '#1F2937' };
 
-const NOTIFICATIONS = [
-  {
-    title: '진로탐색 워크숍 마감 임박',
-    sub: '신청 마감 3일 전입니다.',
-    time: '10분 전',
-    dot: '#D97706',
-  },
-  {
-    title: '마일리지 적립 완료',
-    sub: '독서인증제 참여 마일리지 20점이 적립되었습니다.',
-    time: '2시간 전',
-    dot: '#1A7F37',
-  },
-  {
-    title: '상담 예약 확정',
-    sub: '2026-03-20 14:00 상담 예약이 확정되었습니다.',
-    time: '1일 전',
-    dot: '#0969DA',
-  },
-];
+// 알림 드롭다운에 보여줄 개수. 상세 목록/유형별 필터는 이번 스코프 밖입니다.
+const NOTIFICATION_DROPDOWN_SIZE = 5;
 
 const PROFILE_MENU = [
   { label: '내 정보 수정', icon: '✎' },
@@ -192,6 +181,27 @@ export default function PortalShell() {
   const [semester, setSemester] = useState(SEMESTERS[1] ?? SEMESTERS[0]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+
+  // 뱃지는 상시 폴링, 목록은 드롭다운이 열렸을 때만 요청합니다.
+  const { data: unreadCount = 0 } = useUnreadNotificationCount();
+  const { data: notificationPage, isLoading: notificationsLoading } = useNotifications(
+    { size: NOTIFICATION_DROPDOWN_SIZE },
+    notifOpen,
+  );
+  const notifications = notificationPage?.content ?? [];
+  const markReadMutation = useMarkNotificationRead();
+  const markAllReadMutation = useMarkAllNotificationsRead();
+
+  const handleNotificationClick = (n) => {
+    if (n.readStatus !== 'READ') {
+      markReadMutation.mutate(n.notificationId);
+    }
+  };
+
+  const handleMarkAllRead = () => {
+    if (markAllReadMutation.isPending || unreadCount === 0) return;
+    markAllReadMutation.mutate();
+  };
 
   const activeItem =
     nav
@@ -322,30 +332,57 @@ export default function PortalShell() {
               className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#656D76] transition-colors relative"
             >
               <Icon.Bell />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#CF222E] rounded-full border-2 border-white" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#CF222E] rounded-full border-2 border-white" />
+              )}
             </button>
             {notifOpen && (
               <div className="absolute right-0 top-11 w-80 bg-white rounded-[8px] border border-[#E5E7EB] shadow-xl z-50">
                 <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center justify-between">
                   <span className="text-[13px] font-bold text-[#1F2328]">알림</span>
-                  <button className="text-[11px] text-[#2563EB] font-semibold hover:underline">
+                  <button
+                    onClick={handleMarkAllRead}
+                    disabled={markAllReadMutation.isPending || unreadCount === 0}
+                    className="text-[11px] text-[#2563EB] font-semibold hover:underline disabled:text-[#9AA0A6] disabled:no-underline disabled:cursor-not-allowed"
+                  >
                     모두 읽음
                   </button>
                 </div>
-                <div className="divide-y divide-[#F3F4F6]">
-                  {NOTIFICATIONS.map((n, i) => (
-                    <div key={i} className="px-4 py-3 hover:bg-[#F9FAFB] cursor-pointer flex gap-3">
-                      <div
-                        className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
-                        style={{ background: n.dot }}
-                      />
-                      <div>
-                        <div className="text-[13px] font-semibold text-[#1F2328]">{n.title}</div>
-                        <div className="text-[12px] text-[#656D76] mt-0.5">{n.sub}</div>
-                        <div className="text-[11px] text-[#9AA0A6] mt-1">{n.time}</div>
-                      </div>
+                <div className="divide-y divide-[#F3F4F6] max-h-96 overflow-y-auto">
+                  {notificationsLoading ? (
+                    <div className="px-4 py-6 text-center text-[12px] text-[#9AA0A6]">
+                      불러오는 중...
                     </div>
-                  ))}
+                  ) : notifications.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-[12px] text-[#9AA0A6]">
+                      새 알림이 없습니다.
+                    </div>
+                  ) : (
+                    notifications.map((n) => {
+                      const unread = n.readStatus !== 'READ';
+                      return (
+                        <div
+                          key={n.notificationId}
+                          onClick={() => handleNotificationClick(n)}
+                          className="px-4 py-3 hover:bg-[#F9FAFB] cursor-pointer flex gap-3"
+                        >
+                          <div
+                            className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
+                            style={{ background: unread ? '#2563EB' : '#D0D7DE' }}
+                          />
+                          <div>
+                            <div className="text-[13px] font-semibold text-[#1F2328]">
+                              {n.title}
+                            </div>
+                            <div className="text-[12px] text-[#656D76] mt-0.5">{n.content}</div>
+                            <div className="text-[11px] text-[#9AA0A6] mt-1">
+                              {formatRelativeTime(n.createdAt)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}
