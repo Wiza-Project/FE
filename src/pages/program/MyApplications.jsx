@@ -50,9 +50,10 @@ const BTN_MAP = {
 
 /**
  * @param {Object} props
+ * @param {(target: {programId: number}) => void} props.onActivity
  * @param {(target: {programId: number, applicationId: number}) => void} props.onSurvey
  */
-export default function MyApplications({ onSurvey }) {
+export default function MyApplications({ onActivity, onSurvey }) {
   const [page, setPage] = useState(1);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [apps, setApps] = useState([]);
@@ -287,18 +288,26 @@ export default function MyApplications({ onSurvey }) {
                     )}
                   </td>
                   <td className="px-3 py-3 text-center">
-                    <button
-                      onClick={() => handleBtn(app)}
-                      disabled={app.status === '취소'}
-                      className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                        app.status === '반려'
-                          ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
-                          : 'border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'
-                      }`}
-                      style={app.status === '수료' ? { background: '#7C3AED', color: 'white' } : {}}
-                    >
-                      {btn?.label ?? app.status}
-                    </button>
+                    <div className="flex items-center gap-1.5 justify-center">
+                      <button
+                        onClick={() => onActivity({ programId: app.programId })}
+                        className="h-7 px-3 text-[11px] font-bold rounded-[5px] border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors"
+                      >
+                        출결
+                      </button>
+                      <button
+                        onClick={() => handleBtn(app)}
+                        disabled={app.status === '취소'}
+                        className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                          app.status === '반려'
+                            ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
+                            : 'border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'
+                        }`}
+                        style={app.status === '수료' ? { background: '#7C3AED', color: 'white' } : {}}
+                      >
+                        {btn?.label ?? app.status}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

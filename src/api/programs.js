@@ -35,6 +35,17 @@ export const fetchProgramDetail = async (programId) => {
 };
 
 /**
+ * 로그인한 학생 본인의 회차별 출결 현황 조회. GET /api/students/programs/{programId}/attendances
+ * 아직 기록되지 않은 회차는 attendanceStatus 등 출결 관련 필드가 null로 내려온다.
+ * @param {number} programId
+ * @returns {Promise<Array<{programSessionId: number, sessionNo: number, sessionName: string|null, startsAt: string, endsAt: string, location: string|null, attendanceStatus: string|null, attendedMinutes: number|null, note: string|null}>>}
+ */
+export const fetchMyAttendance = async (programId) => {
+  const { data } = await apiClient.get(`/students/programs/${programId}/attendances`);
+  return data;
+};
+
+/**
  * 프로그램 등록 폼의 "연계 핵심역량" select용 목록 조회. GET /api/admin/programs/competencies
  * 최상위(상위역량 없음) + 사용 중인 역량만 displayOrder 순으로 내려온다.
  * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number}[]>}

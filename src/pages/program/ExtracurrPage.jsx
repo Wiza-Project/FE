@@ -28,8 +28,8 @@ export default function ExtracurrPage() {
     case 'my-applications':
       return (
         <MyApplications
-          onActivity={(id) => {
-            setSelectedProgramId(id);
+          onActivity={({ programId }) => {
+            setSelectedApplication({ programId });
             setView('activity');
           }}
           onSurvey={({ programId, applicationId }) => {
@@ -39,7 +39,12 @@ export default function ExtracurrPage() {
         />
       );
     case 'activity':
-      return <ActivityManage onBack={() => setView('my-applications')} />;
+      return (
+        <ActivityManage
+          programId={selectedApplication?.programId}
+          onBack={() => setView('my-applications')}
+        />
+      );
     case 'survey':
       return (
         <Survey
