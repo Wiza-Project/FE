@@ -1,0 +1,63 @@
+# CodeRabbit 설정 파일 - scms-fe (Vite)
+# 참고: https://docs.coderabbit.ai/reference/configuration
+
+language: "ko-KR"
+
+tone_instructions: >
+  모든 리뷰 코멘트와 요약은 한국어로 작성해주세요. 존댓말을 사용하고,
+  적절한 대체어가 없는 기술 용어는 영어를 그대로 사용해도 됩니다.
+
+early_access: false
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    base_branches:
+      - "^develop$"
+      - "^main$"
+    labels:
+      - "✨ Feature"
+      - "🐛 BugFix"
+      - "🔧 Refactor"
+      - "⚙️ Setting"
+
+  # 리뷰 대상에서 제외할 경로 (gitignore 문법, ! 로 시작하면 제외)
+  path_filters:
+    # 테스트 코드 제외
+    - "!**/*.test.js"
+    - "!**/*.test.jsx"
+    - "!**/*.test.ts"
+    - "!**/*.test.tsx"
+    - "!**/*.spec.js"
+    - "!**/*.spec.jsx"
+    - "!**/*.spec.ts"
+    - "!**/*.spec.tsx"
+    - "!**/__tests__/**"
+    # 패키지/의존성 관련 파일 제외
+    - "!package.json"
+    - "!package-lock.json"
+    - "!yarn.lock"
+    - "!pnpm-lock.yaml"
+    # 빌드 산출물 / 의존성 디렉토리 제외
+    - "!dist/**"
+    - "!node_modules/**"
+
+  path_instructions:
+    - path: "src/**/*.{js,jsx,ts,tsx}"
+      instructions: |
+        Vite 기반 프론트엔드 코드입니다. 다음을 중점적으로 검토해주세요:
+        - 컴포넌트 재사용성과 상태 관리(state/props) 설계
+        - 불필요한 리렌더링 등 성능 이슈
+        - 접근성(a11y) 및 예외/에러 처리 누락 여부
+
+chat:
+  auto_reply: true
