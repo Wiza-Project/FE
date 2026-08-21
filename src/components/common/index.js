@@ -7,6 +7,7 @@ export { ComingSoon } from './ComingSoon';
 export { Button } from './Button';
 export { Input } from './Input';
 export { Select } from './Select';
+export { CommonCodeSelect } from './CommonCodeSelect';
 export { PageHeader } from './PageHeader';
 export { StatTile } from './StatTile';
 export { FilterBar } from './FilterBar';

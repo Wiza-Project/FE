@@ -1,7 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Button, ConfirmDialog, Drawer, EmptyState, toast } from '@/components/common';
-import { registerCompetency } from '@/api/competency';
+import {
+  changeCompetencyActiveStatus,
+  changeCompetencyDisplayOrder,
+  registerCompetency,
+} from '@/api/competency';
 import { ApiError } from '@/api/client';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
@@ -9,25 +13,8 @@ const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 
 // BE CompetencyService.MAX_TOP_LEVEL_COMPETENCY 와 동일 (핵심역량은 최대 6개, 서버에서도 검증함)
 const MAX_CORE_COMPETENCY = 6;
 
-// ─── Drag handle SVG ─────────────────────────────────────────────────────────
-
-function DragHandle() {
-  return (
-    <svg
-      width="12"
-      height="16"
-      viewBox="0 0 12 16"
-      fill="none"
-      className="text-[#9AA0A6] hover:text-[#656D76]"
-    >
-      {[2, 6, 10].flatMap((x) =>
-        [4, 8, 12].map((y) => (
-          <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5" fill="currentColor" />
-        )),
-      )}
-    </svg>
-  );
-}
+// 축순서 후보 (BE CompetencyDisplayOrderRequest @Min(1) @Max(6))
+const AXIS_ORDERS = Array.from({ length: MAX_CORE_COMPETENCY }, (_, i) => i + 1);
 
 // ─── Toggle ──────────────────────────────────────────────────────────────────
 
@@ -58,9 +45,6 @@ export default function CompetencyManage() {
   const [editSub, setEditSub] = useState(null);
   const [subDrawer, setSubDrawer] = useState(false);
 
-  // Drag state for axis reorder
-  const dragItem = useRef(null);
-
   // Drawer form state (등록 폼 — 역량코드/축순서/사용여부는 서버가 결정하므로 입력란 없음)
   const [fName, setFName] = useState('');
   const [fNameEn, setFNameEn] = useState('');
@@ -70,36 +54,65 @@ export default function CompetencyManage() {
   const subs = [];
   const selectedCore = cores.find((c) => c.code === selected);
 
-  const handleDragStart = (idx) => {
-    dragItem.current = idx;
+  // 표에 보이는 순서 자체가 방사형 차트의 축 순서다.
+  const orderedCores = [...cores].sort((a, b) => a.axisOrder - b.axisOrder);
+
+  const orderMutation = useMutation({
+    mutationFn: changeCompetencyDisplayOrder,
+    onSuccess: (updatedList) => {
+      setCores((prev) =>
+        prev.map((c) => {
+          const updated = updatedList.find((u) => u.competencyId === c.id);
+          return updated ? { ...c, axisOrder: updated.displayOrder } : c;
+        }),
+      );
+      // 서버가 스왑 시 [이동한 역량, 자리를 내준 역량] 2개를, 빈 슬롯 이동 시 1개만 반환한다.
+      const [mover, swapped] = updatedList;
+      if (swapped) {
+        toast(
+          `'${mover.competencyName}' ↔ '${swapped.competencyName}' 축순서가 서로 맞바뀌었습니다 (${mover.displayOrder}번 ↔ ${swapped.displayOrder}번).`,
+          'success',
+        );
+      } else {
+        toast(`'${mover.competencyName}' 축순서가 ${mover.displayOrder}번으로 변경되었습니다.`, 'success');
+      }
+    },
+    onError: (e) => {
+      toast(e instanceof ApiError ? e.message : '축순서 변경에 실패했습니다.', 'error');
+    },
+  });
+
+  const handleAxisOrderChange = (core, nextOrder) => {
+    if (nextOrder === core.axisOrder) return;
+    orderMutation.mutate({ competencyId: core.id, displayOrder: nextOrder });
   };
-  const handleDragOver = (e) => e.preventDefault();
-  const handleDrop = (idx) => {
-    const from = dragItem.current;
-    if (from === null || from === idx) return;
-    const next = [...cores];
-    const [moved] = next.splice(from, 1);
-    next.splice(idx, 0, moved);
-    const reordered = next.map((c, i) => ({ ...c, axisOrder: i + 1 }));
-    setCores(reordered);
-    dragItem.current = null;
-    toast('축순서가 변경되었습니다.', 'success');
-  };
+
+  const activeMutation = useMutation({
+    mutationFn: changeCompetencyActiveStatus,
+    onSuccess: (updated) => {
+      setCores((prev) =>
+        prev.map((c) => (c.id === updated.competencyId ? { ...c, active: updated.active } : c)),
+      );
+      if (!updated.active) {
+        toast(`'${updated.competencyName}' 역량이 비활성 처리되었습니다.`, 'info');
+      }
+      setDeactTarget(null);
+    },
+    onError: (e) => {
+      toast(e instanceof ApiError ? e.message : '사용여부 변경에 실패했습니다.', 'error');
+      setDeactTarget(null);
+    },
+  });
 
   const handleToggle = (c) => {
     if (c.active) setDeactTarget(c);
-    else {
-      setCores((prev) => prev.map((x) => (x.code === c.code ? { ...x, active: true } : x)));
-    }
+    else activeMutation.mutate({ competencyId: c.id, active: true });
   };
 
   const confirmDeactivate = () => {
-    if (!deactTarget) return;
-    setCores((prev) =>
-      prev.map((x) => (x.code === deactTarget.code ? { ...x, active: false } : x)),
-    );
-    setDeactTarget(null);
-    toast(`'${deactTarget.name}' 역량이 비활성 처리되었습니다.`, 'info');
+    // isPending 가드: 응답 대기 중 확인 버튼을 다시 누르면 PATCH가 중복으로 나간다.
+    if (!deactTarget || activeMutation.isPending) return;
+    activeMutation.mutate({ competencyId: deactTarget.id, active: false });
   };
 
   const openNew = () => {
@@ -119,6 +132,7 @@ export default function CompetencyManage() {
       setCores((prev) => [
         ...prev,
         {
+          id: created.competencyId,
           code: created.competencyCode,
           name: created.competencyName,
           nameEn: created.englishName ?? '',
@@ -170,7 +184,8 @@ export default function CompetencyManage() {
       <div className="flex items-center gap-2 mb-3 text-[11px] text-[#9AA0A6] bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
         <span>ℹ</span>
         <span>
-          축순서는 방사형 차트의 표시 순서(1~6)입니다. 좌측 ⠿ 핸들을 드래그해 순서를 변경하세요.
+          축순서는 방사형 차트의 표시 순서(1~6)입니다. 축순서 열에서 번호를 고르면 바로 저장됩니다.
+          이미 다른 역량이 쓰고 있는 번호를 고르면 두 역량의 축순서가 서로 맞바뀝니다(스왑).
         </span>
       </div>
 
@@ -188,7 +203,6 @@ export default function CompetencyManage() {
             <table className="w-full border-collapse text-[12px]">
               <thead>
                 <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                  <th className="w-8 px-3 py-3" />
                   {['코드', '역량명', '영문명', '하위역량', '문항', '축순서', '사용', '관리'].map(
                     (h, i) => (
                       <th
@@ -202,19 +216,12 @@ export default function CompetencyManage() {
                 </tr>
               </thead>
               <tbody>
-                {cores.map((c, idx) => (
+                {orderedCores.map((c) => (
                   <tr
                     key={c.code}
-                    draggable
-                    onDragStart={() => handleDragStart(idx)}
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(idx)}
                     onClick={() => setSelected(c.code)}
                     className={`border-b border-[#F3F4F6] last:border-0 cursor-pointer transition-colors ${selected === c.code ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'} ${!c.active ? 'opacity-50' : ''}`}
                   >
-                    <td className="px-3 py-3 cursor-grab active:cursor-grabbing">
-                      <DragHandle />
-                    </td>
                     <td
                       className="px-3 py-3 font-mono text-[11px] font-bold"
                       style={{ color: ACCENT }}
@@ -225,11 +232,31 @@ export default function CompetencyManage() {
                     <td className="px-3 py-3 text-[#9AA0A6] text-[11px]">{c.nameEn}</td>
                     <td className="px-3 py-3 text-center text-[#656D76]">{c.subCount}</td>
                     <td className="px-3 py-3 text-center text-[#656D76]">{c.qCount}</td>
-                    <td className="px-3 py-3 text-center">
-                      <span className="text-[12px] font-black text-[#1F2328]">{c.axisOrder}</span>
+                    <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={c.axisOrder}
+                        disabled={orderMutation.isPending}
+                        onChange={(e) => handleAxisOrderChange(c, Number(e.target.value))}
+                        aria-label={`${c.name} 축순서`}
+                        className={`h-7 pl-2 pr-6 text-[12px] font-bold text-[#1F2328] rounded-[4px] border border-[#E5E7EB] bg-white cursor-pointer focus:outline-none focus:border-[#374151] disabled:opacity-40 disabled:cursor-not-allowed appearance-none bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23656D76' d='M6 8L1 3h10z'/%3E%3C/svg%3E")] bg-no-repeat bg-[right_6px_center]`}
+                      >
+                        {AXIS_ORDERS.map((o) => {
+                          const takenBy = cores.find((x) => x.id !== c.id && x.axisOrder === o);
+                          return (
+                            <option key={o} value={o}>
+                              {takenBy ? `${o} (${takenBy.code} 교체)` : o}
+                            </option>
+                          );
+                        })}
+                      </select>
                     </td>
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <Toggle checked={c.active} onChange={() => handleToggle(c)} />
+                      <Toggle
+                        checked={c.active}
+                        onChange={() => handleToggle(c)}
+                        // 요청 진행 중 중복 클릭 방지
+                        disabled={activeMutation.isPending}
+                      />
                     </td>
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <button
@@ -474,7 +501,11 @@ export default function CompetencyManage() {
         confirmLabel="비활성 처리"
         danger
         onConfirm={confirmDeactivate}
-        onCancel={() => setDeactTarget(null)}
+        onCancel={() => {
+          // 요청이 아직 진행 중일 때 닫으면, 응답이 뒤늦게 도착해 취소한 줄 알던 사용자
+          // 모르게 사용여부가 바뀐다 — 응답이 온 뒤(성공/실패 핸들러)에만 닫는다.
+          if (!activeMutation.isPending) setDeactTarget(null);
+        }}
       />
     </div>
   );

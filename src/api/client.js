@@ -17,14 +17,39 @@ export class ApiError extends Error {
 }
 
 /* ── 토큰 저장소 ────────────────────────────────────────────────
-   메모리 보관이라 새로고침하면 로그인이 풀립니다.
-   백엔드와 refresh token 방식(httpOnly 쿠키 권장)을 합의한 뒤
-   재발급 로직을 아래 응답 인터셉터에 추가하세요.                  */
+   accessToken 은 메모리에만 보관합니다(새로고침하면 사라짐).
+   refresh token 은 httpOnly 쿠키(경로: /api/auth)로 내려오며 JS에서는
+   절대 읽거나 저장하지 않습니다 — apiClient 가 withCredentials:true 라
+   /api/auth/* 요청 시 브라우저가 알아서 실어 보냅니다.                */
 let accessToken = null;
 
 export const getAccessToken = () => accessToken;
 export const setAccessToken = (token) => {
   accessToken = token;
+};
+
+/**
+ * 세션이 완전히 끊겼을 때(재발급도 실패) 호출할 콜백.
+ * client.js 가 stores/authStore.js 를 직접 import 하면 순환 참조가 생기므로,
+ * authStore 쪽에서 이 함수로 핸들러를 주입합니다.
+ */
+let sessionExpiredHandler = null;
+export const setSessionExpiredHandler = (fn) => {
+  sessionExpiredHandler = fn;
+};
+
+const AUTH_ENDPOINT_PATTERNS = ['/auth/login', '/auth/reissue', '/auth/logout'];
+const isAuthEndpoint = (url) => !!url && AUTH_ENDPOINT_PATTERNS.some((p) => url.includes(p));
+
+/** 동시에 여러 요청이 401을 받아도 /auth/reissue 는 한 번만 나가도록 공유합니다. */
+let reissuePromise = null;
+const reissueOnce = () => {
+  if (!reissuePromise) {
+    reissuePromise = apiClient.post('/auth/reissue').finally(() => {
+      reissuePromise = null;
+    });
+  }
+  return reissuePromise;
 };
 
 /** 요청 인터셉터: 토큰 자동 첨부 */
@@ -47,13 +72,29 @@ apiClient.interceptors.response.use(
     }
     return response;
   },
-  (error) => {
+  async (error) => {
     const body = error.response?.data;
     const status = error.response?.status;
+    const config = error.config;
+
+    // accessToken 만료로 인한 401 → reissue 로 조용히 재발급 후 원 요청 1회 재시도.
+    // /auth/login, /auth/reissue, /auth/logout 자체의 401은 재발급 대상이 아닙니다.
+    if (status === 401 && config && !isAuthEndpoint(config.url) && !config._retriedAfterReissue) {
+      try {
+        const { data } = await reissueOnce();
+        setAccessToken(data.accessToken);
+        config._retriedAfterReissue = true;
+        // 요청 인터셉터가 최신 accessToken 으로 Authorization 헤더를 다시 붙여줍니다.
+        return apiClient(config);
+      } catch (reissueError) {
+        setAccessToken(null);
+        sessionExpiredHandler?.('session_expired');
+        return Promise.reject(reissueError);
+      }
+    }
 
     if (status === 401) {
       setAccessToken(null);
-      // TODO: refresh token 재발급 시도, 실패하면 로그인 페이지로 이동
     }
 
     return Promise.reject(
