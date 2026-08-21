@@ -19,6 +19,9 @@ const LOGOUT_REASON_MESSAGE = {
   session_expired: '세션이 만료되었습니다. 다시 로그인해주세요.',
 };
 
+// scms-be AuthService.MAX_FAILED_LOGIN_ATTEMPTS 와 반드시 같은 값이어야 합니다.
+// 서버는 remainingAttempts(잔여 횟수)만 내려주므로, "지금까지 몇 번째 실패인지"를
+// 화면에 표시하려면 이 값을 기준으로 역산합니다 (MAX_ATTEMPTS - remainingAttempts).
 const MAX_ATTEMPTS = 5;
 
 const SAVE_ID_KEY = 'sicms_saved_id';
@@ -44,7 +47,6 @@ export default function LoginPage() {
     return reason ? LOGOUT_REASON_MESSAGE[reason] : '';
   });
   const [loading, setLoading] = useState(false);
-  const [attempts, setAttempts] = useState(0);
 
   // 학생/교직원 모두 이 화면에서 로그인하고, 로그인 성공 후 응답의 user.userType으로만 분기합니다.
   const completeLogin = (user) => {
@@ -85,31 +87,31 @@ export default function LoginPage() {
       const data = await loginApi({ loginId: id.trim(), password: pw });
       if (saveId) localStorage.setItem(SAVE_ID_KEY, id.trim());
       else localStorage.removeItem(SAVE_ID_KEY);
-      setAttempts(0);
       authLogin(data.user, data.accessToken);
       completeLogin(data.user);
     } catch (err) {
       if (err.code === 'U003') {
         // 아이디/비밀번호 불일치.
-        // 1~2회는 단순 오타일 가능성이 높아 카운트 없이 안내만 하고,
-        // 3회차부터 남은 횟수를 보여줘 잠금이 다가온다는 걸 알립니다.
-        // 백엔드는 MAX_ATTEMPTS번째 실패(=지금 이 응답)에서 이미 계정을 LOCKED로
-        // 전환한 뒤에도 그 시도 자체는 U003으로 응답합니다 — 상태 판정보다 실패 카운트
-        // 반영이 먼저 실행되기 때문입니다. 즉 이 메시지가 뜨는 시점엔 이미 잠긴 상태이므로
-        // "계속 실패하면"처럼 미래형으로 경고하지 않고 잠겼다고 바로 안내합니다.
-        // (다음 시도부터는 백엔드가 U005로 응답 — 아래 U004/U005/U006 분기 참고)
-
-        // ApiResponse에는 잔여 횟수/잠금여부가 없음
-        //TODO: 백엔드 U003 응답바디에 실제 잔여 횟수/잠금 여부를 내려주고 여기서 그 값을 쓰도록 수정할 예정
-        const next = attempts + 1;
-        setAttempts(next);
-        setError(
-          next >= MAX_ATTEMPTS
-            ? '계정이 잠겼습니다. 비밀번호 찾기를 이용하거나 관리자에게 문의하세요.'
-            : next >= 3
-              ? `${err.message} (${next}/${MAX_ATTEMPTS}회)`
-              : err.message,
-        );
+        // 실패 카운트는 컴포넌트 로컬 state가 아니라 서버가 내려준 값(err.data —
+        // scms-be LoginFailureResponse)을 그대로 씁니다. 로컬 state는 새로고침/다른 탭/
+        // 이전 세션의 실패를 몰라 "계정을 막 잠근 그 시도"조차 1번째 실패로 보이는
+        // 문제가 있었습니다 (PR #20 코드리뷰 반영).
+        // 존재하지 않는 아이디는 계정 존재 여부를 노출하지 않기 위해 err.data 자체가
+        // 없습니다 — 이 경우 else로 빠져 단순 안내만 표시됩니다.
+        // accountLocked는 "이 응답을 유발한 시도로 계정이 방금 잠겼는지"를 뜻하며,
+        // 잠금을 유발한 그 시도의 코드도 여전히 U003입니다(다음 시도부터 U005로 바뀜 —
+        // 아래 U004/U005/U006 분기 참고).
+        const failureInfo = err.data;
+        if (failureInfo?.accountLocked) {
+          setError('계정이 잠겼습니다. 비밀번호 찾기를 이용하거나 관리자에게 문의하세요.');
+        } else if (failureInfo && failureInfo.remainingAttempts <= MAX_ATTEMPTS - 3) {
+          // 1~2회는 단순 오타일 가능성이 높아 카운트 없이 안내만 하고,
+          // 3회차부터 남은 횟수를 보여줘 잠금이 다가온다는 걸 알립니다.
+          const attemptCount = MAX_ATTEMPTS - failureInfo.remainingAttempts;
+          setError(`${err.message} (${attemptCount}/${MAX_ATTEMPTS}회)`);
+        } else {
+          setError(err.message);
+        }
       } else if (err.code === 'U004' || err.code === 'U005' || err.code === 'U006') {
         // 휴면/잠금/탈퇴 — 백엔드가 내려준 안내 문구를 그대로 보여줍니다. 실패 횟수로 세지 않습니다.
         setError(err.message);
