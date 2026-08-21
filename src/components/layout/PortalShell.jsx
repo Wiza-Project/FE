@@ -5,10 +5,10 @@ import { USER_TYPE } from '@/constants/domain';
 import { UNIVERSITY_NAME, SEMESTERS } from '@/data/dummy';
 import { toast } from '@/components/common';
 import {
+  useHasUnreadNotifications,
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
   useNotifications,
-  useUnreadNotificationCount,
 } from '@/hooks/useNotifications';
 import { formatRelativeTime } from '@/utils/date';
 
@@ -182,8 +182,8 @@ export default function PortalShell() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  // 뱃지는 상시 폴링, 목록은 드롭다운이 열렸을 때만 요청합니다.
-  const { data: unreadCount = 0 } = useUnreadNotificationCount();
+  // 뱃지(안읽음 존재 여부)는 상시 폴링, 목록은 드롭다운이 열렸을 때만 요청합니다.
+  const { data: hasUnread = false } = useHasUnreadNotifications();
   const { data: notificationPage, isLoading: notificationsLoading } = useNotifications(
     { size: NOTIFICATION_DROPDOWN_SIZE },
     notifOpen,
@@ -193,13 +193,13 @@ export default function PortalShell() {
   const markAllReadMutation = useMarkAllNotificationsRead();
 
   const handleNotificationClick = (n) => {
-    if (n.readStatus !== 'READ') {
+    if (!n.read) {
       markReadMutation.mutate(n.notificationId);
     }
   };
 
   const handleMarkAllRead = () => {
-    if (markAllReadMutation.isPending || unreadCount === 0) return;
+    if (markAllReadMutation.isPending || !hasUnread) return;
     markAllReadMutation.mutate();
   };
 
@@ -332,7 +332,7 @@ export default function PortalShell() {
               className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#656D76] transition-colors relative"
             >
               <Icon.Bell />
-              {unreadCount > 0 && (
+              {hasUnread && (
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#CF222E] rounded-full border-2 border-white" />
               )}
             </button>
@@ -342,7 +342,7 @@ export default function PortalShell() {
                   <span className="text-[13px] font-bold text-[#1F2328]">알림</span>
                   <button
                     onClick={handleMarkAllRead}
-                    disabled={markAllReadMutation.isPending || unreadCount === 0}
+                    disabled={markAllReadMutation.isPending || !hasUnread}
                     className="text-[11px] text-[#2563EB] font-semibold hover:underline disabled:text-[#9AA0A6] disabled:no-underline disabled:cursor-not-allowed"
                   >
                     모두 읽음
@@ -359,7 +359,7 @@ export default function PortalShell() {
                     </div>
                   ) : (
                     notifications.map((n) => {
-                      const unread = n.readStatus !== 'READ';
+                      const unread = !n.read;
                       return (
                         <div
                           key={n.notificationId}
