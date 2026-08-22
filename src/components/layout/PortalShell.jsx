@@ -156,6 +156,26 @@ const PORTAL_LABELS = { student: '학생 포털', staff: '교직원 포털' };
 // 학생 포털은 브랜드 블루 유지, 교직원 포털은 행정시스템 톤(거의 무채색)의 단일 포인트컬러 사용
 const PORTAL_COLORS = { student: '#2563EB', staff: '#1F2937' };
 
+// 알림의 moduleCode(백엔드 ModuleCode enum: PROGRAM/COUNSEL/MILEAGE/CAREER/COMPETENCY)를
+// 포털별 라우트 경로로 매핑합니다. 알림 응답에 레코드 ID가 없어 특정 항목이 아닌
+// 해당 도메인의 메인 페이지로 이동합니다. 새 ModuleCode가 추가되면 여기도 함께 갱신하세요.
+const MODULE_ROUTES = {
+  student: {
+    PROGRAM: '/programs',
+    COUNSEL: '/counsel',
+    MILEAGE: '/mileage',
+    CAREER: '/career',
+    COMPETENCY: '/competency',
+  },
+  staff: {
+    PROGRAM: '/staff/programs',
+    COUNSEL: '/staff/counsel',
+    MILEAGE: '/staff/mileage',
+    CAREER: '/staff/career',
+    COMPETENCY: '/staff/competency',
+  },
+};
+
 // 알림 드롭다운에 보여줄 개수. 상세 목록/유형별 필터는 이번 스코프 밖입니다.
 const NOTIFICATION_DROPDOWN_SIZE = 5;
 
@@ -195,6 +215,11 @@ export default function PortalShell() {
   const handleNotificationClick = (n) => {
     if (!n.read) {
       markReadMutation.mutate(n.notificationId);
+    }
+    setNotifOpen(false);
+    const path = MODULE_ROUTES[portal]?.[n.moduleCode];
+    if (path) {
+      navigate(path);
     }
   };
 
