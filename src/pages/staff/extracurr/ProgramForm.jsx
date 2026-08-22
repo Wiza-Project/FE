@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button, FileUpload, toast } from '@/components/common';
 import { createProgram, fetchCompetencyOptions } from '@/api/programs';
+import { useCommonCode } from '@/hooks/useCommonCode';
 import { MILEAGE_POLICY_OPTIONS } from '@/data/programOptions';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
@@ -122,39 +123,39 @@ function toInstant(dateStr) {
 // ─── Main form ────────────────────────────────────────────────────────────────
 
 /**
- * 비교과 프로그램 등록/수정 폼. ProgramRegisterRequestDTO(백엔드)에 맞춘 4개 섹션으로 구성:
- * 기본정보 / 모집·운영·정원 / 역량·정책 / 첨부. 백엔드에 목록·수정 API가 아직 없어
- * 신규 등록만 실제 POST /api/admin/programs로 연동되고, 수정 모드는 기존처럼 더미 처리된다.
+ * 비교과 프로그램 등록 폼. ProgramRegisterRequestDTO(백엔드)에 맞춘 4개 섹션으로 구성:
+ * 기본정보 / 모집·운영·정원 / 역량·정책 / 첨부. 백엔드에 단건조회(GET /admin/programs/{id})
+ * API가 없어 수정 폼을 제대로 프리필할 수 없으므로, 수정 모드는 안내 화면만 보여주고
+ * 신규 등록만 POST /api/admin/programs로 실제 연동된다.
  *
  * @param {Object} props
- * @param {string} [props.programId] 편집 대상 ID. 있으면 수정 모드.
+ * @param {number} [props.programId] 편집 대상 ID. 있으면 수정 모드(현재 비활성).
  * @param {() => void} props.onBack
- * @param {() => void} props.onSubmit 등록/저장 완료 후 콜백
+ * @param {() => void} props.onSubmit 등록 완료 후 콜백
  */
 export default function ProgramForm({ programId, onBack, onSubmit }) {
   const isEdit = !!programId;
 
   // Section 1 — 기본정보
-  const [name, setName] = useState(isEdit ? '해외문화체험 워크숍' : '');
-  const [description, setDescription] = useState(
-    isEdit ? '해외 현지 문화 체험을 통해 글로벌 역량을 키우는 5박 6일 프로그램입니다.' : '',
-  );
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [operatingUnitCodeId, setOperatingUnitCodeId] = useState('');
+  const [programTypeCodeId, setProgramTypeCodeId] = useState('');
 
   // Section 2 — 모집·운영·정원
-  const [recruitStart, setRcS] = useState(isEdit ? '2026-08-01' : '');
-  const [recruitEnd, setRcE] = useState(isEdit ? '2026-08-16' : '');
-  const [operStart, setOpS] = useState(isEdit ? '2026-09-01' : '');
-  const [operEnd, setOpE] = useState(isEdit ? '2026-09-07' : '');
-  const [capacity, setCapacity] = useState(isEdit ? 30 : '');
+  const [recruitStart, setRcS] = useState('');
+  const [recruitEnd, setRcE] = useState('');
+  const [operStart, setOpS] = useState('');
+  const [operEnd, setOpE] = useState('');
+  const [capacity, setCapacity] = useState('');
 
   // Section 3 — 역량·정책
-  const [competencyId, setCompetencyId] = useState(isEdit ? '4' : '');
-  const [mileagePolicyId, setMileagePolicyId] = useState(isEdit ? '1' : '');
+  const [competencyId, setCompetencyId] = useState('');
+  const [mileagePolicyId, setMileagePolicyId] = useState('');
   const [completionRate, setCompletionRate] = useState(80);
 
   // Validation / submit state
   const [errors, setErrors] = useState({});
-  const [savingEdit, setSavingEdit] = useState(false);
 
   const sec1Ref = useRef(null);
   const sec2Ref = useRef(null);
@@ -167,6 +168,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   } = useQuery({
     queryKey: ['competencyOptions'],
     queryFn: fetchCompetencyOptions,
+    enabled: !isEdit,
   });
   const competencyOptions = (competencyData ?? []).map((c) => ({
     id: c.competencyId,
@@ -177,6 +179,14 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     : competencyErrored
       ? '목록을 불러오지 못했습니다'
       : '선택하세요';
+
+  const { data: operatingUnitCodes = [] } = useCommonCode(isEdit ? undefined : 'DEPARTMENT');
+  const operatingUnitOptions = operatingUnitCodes.map((c) => ({
+    id: c.codeId,
+    label: c.codeName,
+  }));
+  const { data: programTypeCodes = [] } = useCommonCode(isEdit ? undefined : 'PROGRAM_TYPE');
+  const programTypeOptions = programTypeCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
 
   const registerMutation = useMutation({
     mutationFn: createProgram,
@@ -248,8 +258,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const buildPayload = () => ({
     // 실제 첨부 업로드 API가 아직 없어 이번엔 항상 생략 (백엔드에서 optional)
     fileGroupId: null,
-    // 운영단위·프로그램분류는 아직 공통코드 조회 API가 없어 화면에서 선택받지 않는다.
-    // operatingUnitCodeId/programTypeCodeId는 백엔드 default 값에 위임하고 FE는 값을 보내지 않는다.
+    operatingUnitCodeId: operatingUnitCodeId ? Number(operatingUnitCodeId) : null,
+    programTypeCodeId: programTypeCodeId ? Number(programTypeCodeId) : null,
     competencyId: Number(competencyId),
     mileagePolicyId: mileagePolicyId ? Number(mileagePolicyId) : null,
     programName: name.trim(),
@@ -267,18 +277,37 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     registerMutation.mutate(buildPayload());
   };
 
-  // 백엔드에 수정(PUT) API가 아직 없어 수정 모드는 더미로 남겨둔다. 수정 API 준비되면 연동.
-  const handleEditSave = () => {
-    if (!validate()) return;
-    setSavingEdit(true);
-    setTimeout(() => {
-      setSavingEdit(false);
-      toast('수정 내용이 저장되었습니다. (백엔드 수정 API 준비 전 임시 동작)', 'success');
-      onSubmit();
-    }, 800);
-  };
+  if (isEdit) {
+    return (
+      <div>
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-[12px] text-[#9AA0A6] hover:text-[#1F2328] transition-colors"
+          >
+            ← 목록
+          </button>
+          <div className="h-4 w-px bg-[#E5E7EB]" />
+          <h1 className="text-[20px] font-black text-[#1F2328]">프로그램 수정</h1>
+        </div>
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center">
+          <p className="text-[14px] font-bold text-[#1F2328] mb-2">
+            아직 프로그램 수정을 지원하지 않습니다
+          </p>
+          <p className="text-[12px] text-[#9AA0A6] leading-relaxed mb-6">
+            수정 화면을 채우려면 프로그램 단건조회 API(GET /admin/programs/&#123;id&#125;)가 필요한데
+            <br />
+            백엔드에 아직 준비되어 있지 않습니다. API가 추가되면 연동하겠습니다.
+          </p>
+          <Button variant="outline" onClick={onBack}>
+            목록으로
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
-  const saving = isEdit ? savingEdit : registerMutation.isPending;
+  const saving = registerMutation.isPending;
 
   return (
     <div>
@@ -291,14 +320,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           ← 목록
         </button>
         <div className="h-4 w-px bg-[#E5E7EB]" />
-        <h1 className="text-[20px] font-black text-[#1F2328]">
-          {isEdit ? '프로그램 수정' : '프로그램 등록'}
-        </h1>
-        {isEdit && (
-          <span className="text-[11px] font-mono text-[#9AA0A6] bg-[#F3F4F6] px-2 py-0.5 rounded-[4px]">
-            P001
-          </span>
-        )}
+        <h1 className="text-[20px] font-black text-[#1F2328]">프로그램 등록</h1>
       </div>
 
       <div className="flex flex-col gap-5 pb-24">
@@ -327,6 +349,24 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                   />
                 </Field>
               </div>
+
+              <Field label="운영단위">
+                <IdSelect
+                  value={operatingUnitCodeId}
+                  onChange={setOperatingUnitCodeId}
+                  options={operatingUnitOptions}
+                  placeholder="선택 안함 (서버 기본값 사용)"
+                />
+              </Field>
+
+              <Field label="프로그램분류">
+                <IdSelect
+                  value={programTypeCodeId}
+                  onChange={setProgramTypeCodeId}
+                  options={programTypeOptions}
+                  placeholder="선택 안함 (서버 기본값 사용)"
+                />
+              </Field>
             </div>
           </Section>
         </div>
@@ -433,12 +473,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           <Button variant="outline" onClick={onBack}>
             취소
           </Button>
-          <Button
-            loading={saving}
-            onClick={isEdit ? handleEditSave : handleRegister}
-            style={{ background: ACCENT }}
-          >
-            {isEdit ? '수정 저장' : '등록'}
+          <Button loading={saving} onClick={handleRegister} style={{ background: ACCENT }}>
+            등록
           </Button>
         </div>
       </div>
