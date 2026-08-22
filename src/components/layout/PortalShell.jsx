@@ -19,6 +19,24 @@ const Icon = {
       <path d="M8 1l1.854 3.756L14 5.522l-3 2.923.708 4.127L8 10.5l-3.708 2.072L5 8.445 2 5.522l4.146-.766z" />
     </svg>
   ),
+  Card: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="3" width="14" height="10" rx="1.5" fill="currentColor" opacity=".15" />
+      <rect
+        x="1"
+        y="3"
+        width="14"
+        height="10"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <circle cx="5" cy="7.5" r="1.4" fill="currentColor" />
+      <path d="M3.2 11c.3-1.2 1.1-1.8 1.8-1.8s1.5.6 1.8 1.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="9" y1="6.5" x2="13" y2="6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="9" y1="9" x2="13" y2="9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  ),
   Grid: () => (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
       <rect x="1" y="1" width="4" height="4" rx="1" />
@@ -106,6 +124,7 @@ const Icon = {
 
 const NAV_STUDENT = [
   { key: 'mypage', label: '마이페이지', icon: Icon.User, accent: '#6B7280', path: '/my' },
+  { key: 'records', label: '학적 정보', icon: Icon.Card, accent: '#6B7280', path: '/my/records' },
   {
     key: 'competency',
     label: '핵심역량진단',
