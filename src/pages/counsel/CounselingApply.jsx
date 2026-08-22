@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   PageHeader,
@@ -7,173 +7,51 @@ import {
   ConfirmDialog,
   EmptyState,
   SkeletonLoader,
-  toast,
 } from '@/components/common';
-import { fetchCounselingTypes } from '@/api/counsel';
+import { fetchCounselingTypes, fetchAvailableSchedules } from '@/api/counsel';
 
 const ACCENT = '#0891B2';
 
-// ─── Data ────────────────────────────────────────────────────────────────────
+// UTC ISO 문자열을 사용자 로컬 기준 날짜/요일/시간으로 변환한다.
+const formatDateTime = (iso) => {
+  const d = new Date(iso);
+  return {
+    dateLabel: d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' }),
+    dayLabel: d.toLocaleDateString('ko-KR', { weekday: 'short' }),
+    timeLabel: d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+  };
+};
 
-const COUNSELORS = [
-  {
-    id: 'C01',
-    name: '김상담',
-    role: '지도교수',
-    dept: '컴퓨터공학과',
-    specialties: ['진로설계', '역량개발', '취업'],
-    availableSlots: 4,
-  },
-  {
-    id: 'C02',
-    name: '이전문',
-    role: '전문상담사',
-    dept: '학생상담센터',
-    specialties: ['대인관계', '심리지원', '진로'],
-    availableSlots: 2,
-  },
-  {
-    id: 'C03',
-    name: '박심리',
-    role: '전문상담사',
-    dept: '학생상담센터',
-    specialties: ['심리검사', '스트레스', 'MBTI·MMPI'],
-    availableSlots: 3,
-  },
-  {
-    id: 'C04',
-    name: '최진로',
-    role: '지도교수',
-    dept: '경영학과',
-    specialties: ['취업', '창업', '진로설계'],
-    availableSlots: 0,
-  },
-];
-
-const BASE_SLOTS = [
-  {
-    id: 'S01',
-    date: '2026-08-17',
-    dayLabel: '월',
-    time: '10:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-  {
-    id: 'S02',
-    date: '2026-08-17',
-    dayLabel: '월',
-    time: '11:00',
-    location: '산학협력관 305호',
-    status: 'full',
-  },
-  {
-    id: 'S03',
-    date: '2026-08-18',
-    dayLabel: '화',
-    time: '14:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-  {
-    id: 'S04',
-    date: '2026-08-18',
-    dayLabel: '화',
-    time: '15:00',
-    location: '산학협력관 305호',
-    status: 'closed',
-  },
-  {
-    id: 'S05',
-    date: '2026-08-19',
-    dayLabel: '수',
-    time: '09:00',
-    location: '산학협력관 305호',
-    status: 'holiday',
-  },
-  {
-    id: 'S06',
-    date: '2026-08-19',
-    dayLabel: '수',
-    time: '10:00',
-    location: '산학협력관 305호',
-    status: 'holiday',
-  },
-  {
-    id: 'S07',
-    date: '2026-08-20',
-    dayLabel: '목',
-    time: '13:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-  {
-    id: 'S08',
-    date: '2026-08-20',
-    dayLabel: '목',
-    time: '14:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-  {
-    id: 'S09',
-    date: '2026-08-21',
-    dayLabel: '금',
-    time: '10:00',
-    location: '산학협력관 305호',
-    status: 'full',
-  },
-  {
-    id: 'S10',
-    date: '2026-08-21',
-    dayLabel: '금',
-    time: '11:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-];
-
-// ─── Slot Card ────────────────────────────────────────────────────────────────
+// ─── Schedule Card ────────────────────────────────────────────────────────────
 
 /**
  * @param {Object} props
- * @param {typeof BASE_SLOTS[0]} props.slot
+ * @param {import('@/api/counsel').AvailableSchedule} props.schedule
  * @param {boolean} props.isSelected
  * @param {() => void} props.onClick
  */
-function SlotCard({ slot, isSelected, onClick }) {
-  const disabled = slot.status === 'full' || slot.status === 'closed' || slot.status === 'holiday';
-  const label =
-    slot.status === 'full'
-      ? '1/1 마감'
-      : slot.status === 'closed'
-        ? '마감'
-        : slot.status === 'holiday'
-          ? '휴무'
-          : '0/1 가능';
-  const labelColor = slot.status === 'available' ? '#0891B2' : '#9AA0A6';
+function ScheduleCard({ schedule, isSelected, onClick }) {
+  const start = formatDateTime(schedule.startsAt);
+  const end = formatDateTime(schedule.endsAt);
 
   return (
     <button
-      disabled={disabled}
       onClick={onClick}
       className={`w-full rounded-[8px] border-2 p-3 text-left transition-all ${
-        disabled
-          ? 'bg-[#F9FAFB] border-[#E5E7EB] cursor-not-allowed opacity-60'
-          : isSelected
-            ? 'bg-[#ECFEFF] border-[#0891B2] shadow-[0_0_0_3px_rgba(8,145,178,0.12)]'
-            : 'bg-white border-[#E5E7EB] hover:border-[#67E8F9] hover:shadow-[0_1px_4px_rgba(8,145,178,0.08)]'
+        isSelected
+          ? 'bg-[#ECFEFF] border-[#0891B2] shadow-[0_0_0_3px_rgba(8,145,178,0.12)]'
+          : 'bg-white border-[#E5E7EB] hover:border-[#67E8F9] hover:shadow-[0_1px_4px_rgba(8,145,178,0.08)]'
       }`}
     >
       <div className="flex items-center justify-between mb-1">
         <span
-          className={`text-[11px] font-black ${isSelected ? 'text-[#0891B2]' : disabled ? 'text-[#9AA0A6]' : 'text-[#1F2328]'}`}
+          className={`text-[12px] font-black ${isSelected ? 'text-[#0891B2]' : 'text-[#1F2328]'}`}
         >
-          {slot.dayLabel} {slot.time}
+          {start.dateLabel} ({start.dayLabel}) {start.timeLabel}–{end.timeLabel}
         </span>
         {isSelected && (
           <div
-            className="w-4 h-4 rounded-full flex items-center justify-center"
+            className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ background: ACCENT }}
           >
             <svg
@@ -190,8 +68,17 @@ function SlotCard({ slot, isSelected, onClick }) {
           </div>
         )}
       </div>
-      <div className="text-[10px] font-bold" style={{ color: labelColor }}>
-        {label}
+      <div className="text-[11px] font-semibold text-[#1F2328]">
+        {schedule.counselorName}
+        {schedule.counselorDepartmentName && (
+          <span className="text-[#9AA0A6] font-normal"> · {schedule.counselorDepartmentName}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 mt-1 text-[10px] text-[#656D76]">
+        {schedule.location && <span>{schedule.location}</span>}
+        <span className="font-bold" style={{ color: ACCENT }}>
+          잔여 {schedule.remainingCapacity}
+        </span>
       </div>
     </button>
   );
@@ -200,7 +87,7 @@ function SlotCard({ slot, isSelected, onClick }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 /**
- * 상담 신청 4단계 흐름 (동의 → 유형·상담자 선택 → 일정 선택 → 완료).
+ * 상담 신청 4단계 흐름 (동의 → 유형 선택 → 일정 선택 → 완료).
  *
  * @param {Object} props
  * @param {() => void} props.onComplete
@@ -222,38 +109,53 @@ export default function CounselingApply({ onComplete, onBack }) {
   // Step 0 — consent
   const [agreed, setAgreed] = useState(false);
 
-  // Step 1 — type & counselor
+  // Step 1 — type
   const [selectedType, setSelectedType] = useState(null);
-  const [selectedCounselor, setSelectedCounselor] = useState(null);
   const HAS_CONFLICT = false; // set true to demo duplicate error
 
-  // Step 2 — schedule
-  const [slots, setSlots] = useState(BASE_SLOTS);
+  const chosenType = counselingTypes.find((type) => type.typeCode === selectedType);
+
+  // Step 2 — schedule. 유형별 실제 예약 가능 일정만 조회한다(서버가 이미 필터링해서 내려줌).
+  const {
+    data: schedules = [],
+    isLoading: isSchedulesLoading,
+    isError: hasSchedulesError,
+    isFetching: isSchedulesFetching,
+    refetch: refetchSchedules,
+  } = useQuery({
+    queryKey: ['availableSchedules', chosenType?.counselingTypeId],
+    queryFn: () => fetchAvailableSchedules(chosenType.counselingTypeId),
+    enabled: !!chosenType?.counselingTypeId,
+  });
+
+  const [counselorFilter, setCounselorFilter] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [memo, setMemo] = useState('');
   const [submitConfirm, setSubmitConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Helpers
-  const STEPS = ['동의', '유형·상담자 선택', '일정 선택', '신청 완료'];
+  const STEPS = ['동의', '유형 선택', '일정 선택', '신청 완료'];
 
-  const chosenSlot = slots.find((s) => s.id === selectedSlot);
-  const chosenCounselor = COUNSELORS.find((c) => c.id === selectedCounselor);
-  const chosenType = counselingTypes.find((type) => type.typeCode === selectedType);
+  // 실제 일정 목록에서 상담사를 중복 없이 뽑아 필터 옵션으로 쓴다.
+  const counselorOptions = useMemo(() => {
+    const map = new Map();
+    schedules.forEach((s) => {
+      const key = `${s.counselorName}||${s.counselorDepartmentName ?? ''}`;
+      if (!map.has(key)) {
+        map.set(key, { key, name: s.counselorName, dept: s.counselorDepartmentName });
+      }
+    });
+    return Array.from(map.values());
+  }, [schedules]);
 
-  const handleSlotClick = (slot) => {
-    if (selectedSlot === slot.id) {
-      setSelectedSlot(null);
-      return;
-    }
-    // Simulate race: slot S10 gets snatched
-    if (slot.id === 'S10' && selectedSlot !== 'S10') {
-      setSlots((prev) => prev.map((s) => (s.id === 'S10' ? { ...s, status: 'full' } : s)));
-      toast('선택한 시간의 정원이 마감되었습니다. 다른 시간을 선택해 주세요.', 'warning');
-      return;
-    }
-    setSelectedSlot(slot.id);
-  };
+  const filteredSchedules = counselorFilter
+    ? schedules.filter(
+        (s) => `${s.counselorName}||${s.counselorDepartmentName ?? ''}` === counselorFilter,
+      )
+    : schedules;
+
+  const chosenSlot = schedules.find((s) => s.scheduleId === selectedSlot);
 
   const handleFinalSubmit = async () => {
     setSubmitConfirm(false);
@@ -262,13 +164,6 @@ export default function CounselingApply({ onComplete, onBack }) {
     setSubmitting(false);
     setStep(3);
   };
-
-  // Group slots by date column for the grid
-  const dateGroups = Array.from(new Set(slots.map((s) => s.date))).map((date) => ({
-    date,
-    dayLabel: slots.find((s) => s.date === date).dayLabel,
-    slots: slots.filter((s) => s.date === date),
-  }));
 
   return (
     <div>
@@ -419,8 +314,8 @@ export default function CounselingApply({ onComplete, onBack }) {
             </div>
           )}
 
-          <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1.3fr' }}>
-            {/* Left: Type selection */}
+          <div className="max-w-[640px]">
+            {/* Type selection */}
             <div className="flex flex-col gap-3" aria-live="polite">
               <h3 className="text-[13px] font-bold text-[#1F2328] flex items-center gap-2">
                 <div
@@ -469,7 +364,8 @@ export default function CounselingApply({ onComplete, onBack }) {
                     aria-pressed={isSelected}
                     onClick={() => {
                       setSelectedType(type.typeCode);
-                      setSelectedCounselor(null);
+                      setCounselorFilter(null);
+                      setSelectedSlot(null);
                     }}
                     className={`w-full text-left rounded-[10px] border-2 p-4 transition-all ${isSelected ? 'bg-[#ECFEFF] shadow-[0_0_0_1px_rgba(8,145,178,0.2)]' : 'bg-white border-[#E5E7EB] hover:border-[#A5F3FC]'}`}
                     style={isSelected ? { borderColor: ACCENT } : {}}
@@ -528,96 +424,6 @@ export default function CounselingApply({ onComplete, onBack }) {
                 );
               })}
             </div>
-
-            {/* Right: Counselor table */}
-            <div className="bg-white rounded-[10px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden self-start">
-              <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
-                <div
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white"
-                  style={{ background: ACCENT }}
-                >
-                  2
-                </div>
-                <h3 className="text-[13px] font-bold text-[#1F2328]">상담자 선택</h3>
-                {!selectedType && (
-                  <span className="text-[11px] text-[#9AA0A6] ml-1">
-                    상담 유형을 먼저 선택하세요
-                  </span>
-                )}
-              </div>
-              <table className="w-full text-[12px] border-collapse">
-                <thead>
-                  <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                    {['선택', '상담사', '구분', '전문분야', '가능 슬롯'].map((h) => (
-                      <th
-                        key={h}
-                        className={`px-3 py-2.5 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${h === '전문분야' ? 'text-left' : 'text-center'}`}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {COUNSELORS.map((c, i) => {
-                    const isSelected = selectedCounselor === c.id;
-                    const disabled = !selectedType || c.availableSlots === 0;
-                    return (
-                      <tr
-                        key={c.id}
-                        onClick={() => !disabled && setSelectedCounselor(c.id)}
-                        className={`border-b border-[#F3F4F6] last:border-0 transition-colors ${
-                          disabled
-                            ? 'opacity-40 cursor-not-allowed'
-                            : isSelected
-                              ? 'bg-[#ECFEFF] cursor-pointer'
-                              : 'hover:bg-[#F0FDFE] cursor-pointer'
-                        } ${i % 2 === 1 && !isSelected ? 'bg-[#FAFAFA]' : ''}`}
-                      >
-                        <td className="px-3 py-3 text-center">
-                          <div
-                            className={`w-4 h-4 rounded-full border-2 mx-auto flex items-center justify-center ${isSelected ? '' : 'border-[#D1D5DB]'}`}
-                            style={isSelected ? { background: ACCENT, borderColor: ACCENT } : {}}
-                          >
-                            {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <div className="font-bold text-[#1F2328] text-[12px]">{c.name}</div>
-                          <div className="text-[10px] text-[#9AA0A6]">{c.dept}</div>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.role === '지도교수' ? 'bg-[#DBEAFE] text-[#0969DA]' : 'bg-[#DCFCE7] text-[#1A7F37]'}`}
-                          >
-                            {c.role}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {c.specialties.map((s) => (
-                              <span
-                                key={s}
-                                className="text-[10px] px-1.5 py-0.5 rounded-[4px] bg-[#F3F4F6] text-[#656D76]"
-                              >
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          {c.availableSlots > 0 ? (
-                            <span className="font-bold text-[#0891B2]">{c.availableSlots}개</span>
-                          ) : (
-                            <span className="text-[#9AA0A6] text-[11px]">마감</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
           </div>
 
           <div className="flex gap-2 justify-between">
@@ -626,10 +432,8 @@ export default function CounselingApply({ onComplete, onBack }) {
             </Button>
             <Button
               size="md"
-              disabled={!selectedType || !selectedCounselor || HAS_CONFLICT}
-              style={
-                selectedType && selectedCounselor && !HAS_CONFLICT ? { background: ACCENT } : {}
-              }
+              disabled={!selectedType || HAS_CONFLICT}
+              style={selectedType && !HAS_CONFLICT ? { background: ACCENT } : {}}
               onClick={() => setStep(2)}
             >
               다음 — 일정 선택 →
@@ -643,79 +447,96 @@ export default function CounselingApply({ onComplete, onBack }) {
       {/* ══════════════════════════════════════════════════════════════ */}
       {step === 2 && (
         <div className="flex flex-col gap-4">
-          {/* Counselor summary */}
+          {/* Type summary */}
           <div className="bg-[#F0FDFE] border border-[#A5F3FC] rounded-[8px] px-5 py-3 flex items-center gap-4 text-[12px]">
-            <div className="w-8 h-8 rounded-full bg-[#CFFAFE] flex items-center justify-center font-black text-[#0891B2]">
-              {chosenCounselor?.name[0]}
-            </div>
-            <div>
-              <span className="font-bold text-[#0E7490]">
-                {chosenCounselor?.name} {chosenCounselor?.role}
-              </span>
-              <span className="mx-2 text-[#A5F3FC]">·</span>
-              <span className="text-[#0E7490]">{chosenType?.typeName}</span>
-            </div>
+            <span className="font-bold text-[#0E7490]">{chosenType?.typeName}</span>
+            <span className="text-[#0E7490]">예약 가능한 일정 중 하나를 선택하세요.</span>
           </div>
 
-          {/* Calendar grid */}
-          <div className="bg-white rounded-[10px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
-              <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-              <h2 className="text-[14px] font-bold text-[#1F2328]">가능 슬롯 — 2026년 8월 3주차</h2>
-              <div className="ml-auto flex items-center gap-3 text-[11px] text-[#9AA0A6]">
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-[2px] border border-[#0891B2] inline-block" />
-                  가능
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-[2px] bg-[#ECFEFF] border border-[#0891B2] inline-block" />
-                  선택됨
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-[2px] bg-[#F3F4F6] inline-block" />
-                  불가
-                </span>
-              </div>
-            </div>
-            <div className="p-5">
-              {/* Date headers */}
-              <div
-                className="grid gap-3"
-                style={{ gridTemplateColumns: `repeat(${dateGroups.length}, 1fr)` }}
-              >
-                {dateGroups.map((dg) => (
-                  <div key={dg.date} className="text-center mb-2">
-                    <div className="text-[11px] font-bold text-[#656D76]">{dg.dayLabel}요일</div>
-                    <div className="text-[12px] font-black text-[#1F2328]">{dg.date.slice(5)}</div>
-                  </div>
-                ))}
-              </div>
-              {/* Slot rows — up to max slots per day */}
-              {(() => {
-                const maxSlots = Math.max(...dateGroups.map((dg) => dg.slots.length));
-                return Array.from({ length: maxSlots }).map((_, rowIdx) => (
-                  <div
-                    key={rowIdx}
-                    className="grid gap-3 mb-2"
-                    style={{ gridTemplateColumns: `repeat(${dateGroups.length}, 1fr)` }}
+          {/* BE가 counselingTypeId를 아직 내려주지 않는 경우(BLOCKED 상태) */}
+          {!chosenType?.counselingTypeId && (
+            <EmptyState
+              message="이 상담 유형은 아직 일정 조회를 사용할 수 없습니다."
+              sub="상담센터에 문의하거나 다른 유형을 선택해 주세요."
+            />
+          )}
+
+          {chosenType?.counselingTypeId && (
+            <div className="bg-white rounded-[10px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+              <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-3 flex-wrap">
+                <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
+                <h2 className="text-[14px] font-bold text-[#1F2328]">예약 가능한 일정</h2>
+
+                {/* 상담자 필터: 실제 조회된 일정에서 뽑은 상담자 목록만 사용한다 */}
+                {counselorOptions.length > 0 && (
+                  <select
+                    aria-label="상담자 필터"
+                    value={counselorFilter ?? ''}
+                    onChange={(e) => setCounselorFilter(e.target.value || null)}
+                    className="ml-auto text-[12px] border border-[#E5E7EB] rounded-[6px] px-2 py-1.5 focus:outline-none focus:border-[#0891B2]"
                   >
-                    {dateGroups.map((dg) => {
-                      const slot = dg.slots[rowIdx];
-                      if (!slot) return <div key={dg.date + rowIdx} />;
-                      return (
-                        <SlotCard
-                          key={slot.id}
-                          slot={slot}
-                          isSelected={selectedSlot === slot.id}
-                          onClick={() => handleSlotClick(slot)}
-                        />
-                      );
-                    })}
+                    <option value="">전체 상담자</option>
+                    {counselorOptions.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.name}
+                        {c.dept ? ` · ${c.dept}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="p-5">
+                {isSchedulesLoading && <SkeletonLoader rows={3} cols={2} />}
+
+                {hasSchedulesError && (
+                  <div
+                    role="alert"
+                    className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-4 py-4"
+                  >
+                    <p className="text-[13px] font-bold text-[#7F1D1D]">
+                      일정을 불러오지 못했습니다.
+                    </p>
+                    <p className="text-[12px] text-[#CF222E] mt-1 mb-3">
+                      잠시 후 다시 시도해 주세요.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={isSchedulesFetching}
+                      onClick={() => refetchSchedules()}
+                    >
+                      다시 시도
+                    </Button>
                   </div>
-                ));
-              })()}
+                )}
+
+                {!isSchedulesLoading && !hasSchedulesError && filteredSchedules.length === 0 && (
+                  <EmptyState
+                    message="예약 가능한 일정이 없습니다."
+                    sub="다른 상담 유형이나 상담자를 확인해 주세요."
+                  />
+                )}
+
+                {!isSchedulesLoading && !hasSchedulesError && filteredSchedules.length > 0 && (
+                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                    {filteredSchedules.map((schedule) => (
+                      <ScheduleCard
+                        key={schedule.scheduleId}
+                        schedule={schedule}
+                        isSelected={selectedSlot === schedule.scheduleId}
+                        onClick={() =>
+                          setSelectedSlot((prev) =>
+                            prev === schedule.scheduleId ? null : schedule.scheduleId,
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Selected slot banner */}
           {chosenSlot && (
@@ -733,18 +554,21 @@ export default function CounselingApply({ onComplete, onBack }) {
                 <path d="M5 8l2 2 4-4" />
               </svg>
               <span className="text-[13px] font-bold text-[#14532D]">
-                선택: {chosenSlot.date} ({chosenSlot.dayLabel}) {chosenSlot.time} ·{' '}
-                {chosenSlot.location}
+                선택: {formatDateTime(chosenSlot.startsAt).dateLabel} (
+                {formatDateTime(chosenSlot.startsAt).dayLabel}){' '}
+                {formatDateTime(chosenSlot.startsAt).timeLabel} · {chosenSlot.counselorName}
+                {chosenSlot.location ? ` · ${chosenSlot.location}` : ''}
               </span>
             </div>
           )}
 
           {/* Memo */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
-            <label className="text-[13px] font-semibold text-[#1F2328] mb-1.5 block">
+            <label htmlFor="counseling-memo" className="text-[13px] font-semibold text-[#1F2328] mb-1.5 block">
               상담 희망 내용 <span className="text-[#9AA0A6] font-normal text-[12px]">(선택)</span>
             </label>
             <textarea
+              id="counseling-memo"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               placeholder="상담에서 다루고 싶은 내용이나 어려운 점을 간략히 작성해 주세요."
@@ -828,11 +652,11 @@ export default function CounselingApply({ onComplete, onBack }) {
                     ),
                   },
                   { label: '상담유형', value: chosenType?.typeName },
-                  { label: '상담사', value: `${chosenCounselor?.name} ${chosenCounselor?.role}` },
+                  { label: '상담사', value: chosenSlot?.counselorName },
                   {
                     label: '일시',
                     value: chosenSlot
-                      ? `${chosenSlot.date} (${chosenSlot.dayLabel}) ${chosenSlot.time}`
+                      ? `${formatDateTime(chosenSlot.startsAt).dateLabel} (${formatDateTime(chosenSlot.startsAt).dayLabel}) ${formatDateTime(chosenSlot.startsAt).timeLabel}`
                       : '-',
                   },
                   { label: '장소', value: chosenSlot?.location },
@@ -870,7 +694,7 @@ export default function CounselingApply({ onComplete, onBack }) {
       <ConfirmDialog
         open={submitConfirm}
         title="상담 신청 확인"
-        message={`${chosenSlot ? `${chosenSlot.date} (${chosenSlot.dayLabel}) ${chosenSlot.time}` : ''} · ${chosenCounselor?.name} ${chosenCounselor?.role}\n\n위 일정으로 상담을 신청하시겠습니까?`}
+        message={`${chosenSlot ? `${formatDateTime(chosenSlot.startsAt).dateLabel} (${formatDateTime(chosenSlot.startsAt).dayLabel}) ${formatDateTime(chosenSlot.startsAt).timeLabel}` : ''} · ${chosenSlot?.counselorName ?? ''}\n\n위 일정으로 상담을 신청하시겠습니까?`}
         confirmLabel="신청하기"
         onConfirm={handleFinalSubmit}
         onCancel={() => setSubmitConfirm(false)}
