@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Button, ConfirmDialog, Modal, Tabs, toast, DonutChart } from '@/components/common';
 
 // ─── Shared program summary bar ───────────────────────────────────────────────
@@ -696,31 +696,6 @@ function AttendanceManage() {
   const [students, setStudents] = useState(STUDENTS_RAW.map((s) => ({ ...s, att: [...s.att] })));
   const [editTarget, setEditTarget] = useState(null);
   const [editReason, setEditReason] = useState('');
-  const [qrOpen, setQrOpen] = useState(false);
-  const [countdown, setCountdown] = useState(300);
-  const timerRef = useRef(null);
-
-  const openQr = () => {
-    setQrOpen(true);
-    setCountdown(300);
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    },
-    [],
-  );
 
   const handleAttChange = (sid, round) => {
     setEditTarget({ sid, round });
@@ -748,18 +723,8 @@ function AttendanceManage() {
     setEditReason('');
   };
 
-  const fmt = (s) =>
-    `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-
   return (
     <div>
-      {/* QR button */}
-      <div className="flex justify-end mb-4">
-        <Button onClick={openQr} style={{ background: '#374151' }}>
-          QR 출석 코드 생성
-        </Button>
-      </div>
-
       {/* Table */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
         <div className="overflow-x-auto">
@@ -865,99 +830,6 @@ function AttendanceManage() {
           <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[12px] text-[#92400E]">
             수정 이력이 시스템에 기록됩니다.
           </div>
-        </div>
-      </Modal>
-
-      {/* QR Modal */}
-      <Modal
-        open={qrOpen}
-        onClose={() => {
-          setQrOpen(false);
-          if (timerRef.current) clearInterval(timerRef.current);
-        }}
-        title="QR 출석 코드"
-        footer={
-          <div className="flex justify-between items-center">
-            <span className="text-[12px] text-[#9AA0A6]">
-              코드는 1회차에 한정, 사용 후 자동 만료됩니다.
-            </span>
-            <Button variant="outline" onClick={() => setQrOpen(false)}>
-              닫기
-            </Button>
-          </div>
-        }
-      >
-        <div className="flex flex-col items-center gap-5 py-2">
-          {/* SVG QR placeholder */}
-          <div className="relative">
-            <svg
-              width="180"
-              height="180"
-              viewBox="0 0 180 180"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {/* QR-style pattern */}
-              <rect width="180" height="180" fill="white" />
-              {/* Top-left finder */}
-              <rect x="10" y="10" width="50" height="50" rx="4" fill="#1F2328" />
-              <rect x="18" y="18" width="34" height="34" rx="2" fill="white" />
-              <rect x="26" y="26" width="18" height="18" rx="1" fill="#1F2328" />
-              {/* Top-right finder */}
-              <rect x="120" y="10" width="50" height="50" rx="4" fill="#1F2328" />
-              <rect x="128" y="18" width="34" height="34" rx="2" fill="white" />
-              <rect x="136" y="26" width="18" height="18" rx="1" fill="#1F2328" />
-              {/* Bottom-left finder */}
-              <rect x="10" y="120" width="50" height="50" rx="4" fill="#1F2328" />
-              <rect x="18" y="128" width="34" height="34" rx="2" fill="white" />
-              <rect x="26" y="136" width="18" height="18" rx="1" fill="#1F2328" />
-              {/* Data pattern */}
-              {[70, 80, 90, 100, 110].flatMap((x) =>
-                [70, 80, 90, 100, 110].map((y) =>
-                  Math.random() > 0.5 ? (
-                    <rect
-                      key={`${x}-${y}`}
-                      x={x}
-                      y={y}
-                      width="8"
-                      height="8"
-                      fill="#1F2328"
-                      rx="1"
-                    />
-                  ) : null,
-                ),
-              )}
-              {/* Timing */}
-              {Array.from({ length: 8 }, (_, i) =>
-                i % 2 === 0 ? (
-                  <rect key={`t${i}`} x={70 + i * 8} y={62} width="6" height="6" fill="#1F2328" />
-                ) : null,
-              )}
-              {/* Logo center */}
-              <rect x="76" y="76" width="28" height="28" rx="4" fill="white" />
-              <rect x="80" y="80" width="20" height="20" rx="3" fill="#374151" />
-              <text x="90" y="94" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">
-                QR
-              </text>
-            </svg>
-            {countdown === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-[4px] bg-white/90">
-                <p className="text-[13px] font-bold text-[#CF222E]">만료됨</p>
-              </div>
-            )}
-          </div>
-
-          <div
-            className={`text-[32px] font-black tabular-nums ${countdown <= 30 ? 'text-[#CF222E]' : countdown <= 60 ? 'text-[#D97706]' : 'text-[#374151]'}`}
-          >
-            {fmt(countdown)}
-          </div>
-          <p className="text-[12px] text-[#9AA0A6]">학생이 이 QR을 스캔하면 출석이 기록됩니다.</p>
-          {countdown === 0 && (
-            <Button onClick={openQr} style={{ background: '#374151' }}>
-              새 코드 생성
-            </Button>
-          )}
         </div>
       </Modal>
     </div>
