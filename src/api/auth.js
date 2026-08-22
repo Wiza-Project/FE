@@ -11,7 +11,12 @@ import { apiClient } from './client';
 
 /**
  * POST /api/auth/login
- * 실패 시 ApiError(code, message) — U003/U004/U005/U006/C001 참고.
+ * 실패 시 ApiError(code, message, data) — U003/U004/U005/U006/C001 참고.
+ *
+ * U003(비밀번호 불일치)이면서 존재하는 아이디인 경우, ApiError.data 에
+ * { remainingAttempts: number, accountLocked: boolean } 가 함께 실려옵니다
+ * 존재하지 않는 아이디는 계정 존재 여부를 노출하지
+ * 않기 위해 data 자체가 없습니다(undefined). LoginPage.jsx의 U003 분기 참고.
  *
  * 요청 바디 키는 universityNo 입니다 — 응답의 user.loginId 와 같은 값(학번/교번)을
  * 가리키지만 백엔드 LoginRequest 는 요청 필드명을 universityNo 로 고정해뒀습니다.
