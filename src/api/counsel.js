@@ -2,6 +2,7 @@ import { apiClient } from '@/api/client';
 
 /**
  * @typedef {Object} CounselingType
+ * @property {number} counselingTypeId 일정 조회 경로의 PathVariable로 사용
  * @property {string} typeCode
  * @property {string} typeName
  * @property {string} applicationRoute
@@ -16,6 +17,33 @@ import { apiClient } from '@/api/client';
  */
 export const fetchCounselingTypes = async () => {
   const { data } = await apiClient.get('/students/counseling-types');
+  return data;
+};
+
+/**
+ * @typedef {Object} AvailableSchedule
+ * @property {number} scheduleId
+ * @property {string} counselorName
+ * @property {string|null} counselorDepartmentName
+ * @property {string} startsAt UTC ISO-8601 Instant
+ * @property {string} endsAt UTC ISO-8601 Instant
+ * @property {string|null} bookingDeadline UTC ISO-8601 Instant
+ * @property {string|null} location
+ * @property {number} remainingCapacity 항상 1 이상. 서버가 이미 예약 가능한 일정만 필터링해서 내려준다.
+ */
+
+/**
+ * 특정 상담 유형에서 학생이 실제로 예약 가능한 일정만 조회한다.
+ * 서버가 OPEN·미래시작·마감전·활성상담사·잔여인원 조건을 이미 필터링해서 내려주므로
+ * 프론트에서 이 조건들을 다시 걸러내지 않는다.
+ *
+ * @param {number} counselingTypeId
+ * @returns {Promise<AvailableSchedule[]>}
+ */
+export const fetchAvailableSchedules = async (counselingTypeId) => {
+  const { data } = await apiClient.get(
+    `/students/counseling-types/${counselingTypeId}/schedules`,
+  );
   return data;
 };
 
