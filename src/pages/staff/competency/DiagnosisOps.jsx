@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import {
   BarChart,
   Button,
-  ConfirmDialog,
+  CommonCodeSelect,
   DonutChart,
   Drawer,
   Modal,
@@ -11,91 +12,13 @@ import {
   Tabs,
   toast,
 } from '@/components/common';
+import { registerAssessmentRound, updateAssessmentRound } from '@/api/competency';
+import { ApiError } from '@/api/client';
+import { useCommonCode } from '@/hooks/useCommonCode';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── Static data ──────────────────────────────────────────────────────────────
-
-const INITIAL_ROUNDS = [
-  {
-    id: 'D2026-1-PRE',
-    name: '2026-1 핵심역량 사전진단',
-    year: '2026',
-    semester: '1학기',
-    type: '사전',
-    startDate: '2026-03-10',
-    endDate: '2026-03-24',
-    target: '재학생 전체',
-    respondents: 1842,
-    capacity: 2100,
-    status: '결과공개',
-  },
-  {
-    id: 'D2026-1-POST',
-    name: '2026-1 핵심역량 사후진단',
-    year: '2026',
-    semester: '1학기',
-    type: '사후',
-    startDate: '2026-06-09',
-    endDate: '2026-06-23',
-    target: '재학생 전체',
-    respondents: 1106,
-    capacity: 1537,
-    status: '진행중',
-  },
-  {
-    id: 'D2025-2-PRE',
-    name: '2025-2 핵심역량 사전진단',
-    year: '2025',
-    semester: '2학기',
-    type: '사전',
-    startDate: '2025-09-01',
-    endDate: '2025-09-15',
-    target: '재학생 전체',
-    respondents: 1923,
-    capacity: 2080,
-    status: '결과공개',
-  },
-  {
-    id: 'D2025-2-POST',
-    name: '2025-2 핵심역량 사후진단',
-    year: '2025',
-    semester: '2학기',
-    type: '사후',
-    startDate: '2025-12-01',
-    endDate: '2025-12-15',
-    target: '재학생 전체',
-    respondents: 1890,
-    capacity: 2080,
-    status: '결과공개',
-  },
-  {
-    id: 'D2026-1-N',
-    name: '2026 신입생 입학역량진단',
-    year: '2026',
-    semester: '1학기',
-    type: '사전',
-    startDate: '2026-03-10',
-    endDate: '2026-03-14',
-    target: '2026학번 신입생',
-    respondents: 612,
-    capacity: 620,
-    status: '결과공개',
-  },
-  {
-    id: 'D2026-2-PRE',
-    name: '2026-2 핵심역량 사전진단',
-    year: '2026',
-    semester: '2학기',
-    type: '사전',
-    startDate: '2026-09-07',
-    endDate: '2026-09-21',
-    target: '재학생 전체',
-    respondents: 0,
-    capacity: 2150,
-    status: '계획',
-  },
-];
 
 const NON_RESPONDENTS = [
   {
@@ -235,56 +158,110 @@ const COLLEGE_DATA = [
 
 // ─── Tab 1: 회차 관리 ─────────────────────────────────────────────────────────
 
+// 학년은 공통코드가 없어 고정값을 쓴다(GRADE 코드그룹 미도입).
+const GRADES = [1, 2, 3, 4];
+// 단과대·학과는 아직 공통코드/학사 도메인 연동이 없어 목업 옵션을 그대로 쓴다.
+// target_condition은 #12 대상자 해석기가 나오기 전까진 서버가 내용을 검증하지 않는 자유 JSON이라,
+// 여기서 정한 { grades[] | colleges[] | departments[] } 형태가 사실상의 잠정 스키마다.
+const COLLEGES = ['공과대학', '경영대학', '사회과학대학', '인문대학', '자연과학대학', '글로벌대학'];
+const DEPTS = ['컴퓨터공학과', '경영학과', '심리학과', '산업공학과', '사회복지학과', '글로벌통상학과'];
+
+const ASSESSMENT_TYPES = [
+  { value: 'PRE', label: '사전진단' },
+  { value: 'POST', label: '사후진단' },
+];
+
+// 응시기간 date input(달력)만 받고 서버는 Instant(시각)를 요구하므로 하루의 시작/끝으로 변환한다.
+// 서버가 UTC Instant로 내려주므로, UTC 기준(KST 등 UTC+ 지역에서는 slice(0,10)이 전날로 밀린다)이 아니라
+// 브라우저 로컬 타임존 기준 날짜로 되돌려야 입력한 날짜와 표시되는 날짜가 일치한다.
+const toStartInstant = (dateStr) => new Date(`${dateStr}T00:00:00`).toISOString();
+const toEndInstant = (dateStr) => new Date(`${dateStr}T23:59:59`).toISOString();
+const toDateInputValue = (isoStr) => {
+  const d = new Date(isoStr);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const describeTarget = (targetCondition) => {
+  if (!targetCondition) return '전체 재학생';
+  if (targetCondition.grades?.length) return targetCondition.grades.map((g) => `${g}학년`).join(', ');
+  if (targetCondition.colleges?.length) return targetCondition.colleges.join(', ');
+  if (targetCondition.departments?.length) return targetCondition.departments.join(', ');
+  return '전체 재학생';
+};
+
 function RoundManage() {
-  const [rounds, setRounds] = useState(INITIAL_ROUNDS);
+  // TODO: GET /api/admin/assessment-rounds 목록 조회 API 나오면 useQuery로 교체.
+  // 그 전까지는 이 세션에서 등록·수정한 회차만 보이고 새로고침하면 사라진다.
+  const [rounds, setRounds] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [closeTarget, setCloseTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
 
   // Drawer form
   const [fName, setFName] = useState('');
-  const [fYear, setFYear] = useState('2026');
-  const [fSem, setFSem] = useState('1학기');
-  const [fType, setFType] = useState('사전');
+  const [fYear, setFYear] = useState('');
+  const [fSem, setFSem] = useState('');
+  const [fType, setFType] = useState('PRE');
   const [fStart, setFStart] = useState('');
   const [fEnd, setFEnd] = useState('');
   const [fTargetMode, setFTM] = useState('전체');
   const [fGrades, setFGrades] = useState([]);
   const [fColleges, setFColl] = useState([]);
   const [fDepts, setFDepts] = useState([]);
-  const [fActive, setFActive] = useState(true);
-  const [dupError, setDupError] = useState('');
+  const [formError, setFormError] = useState('');
 
-  const GRADES = ['1학년', '2학년', '3학년', '4학년'];
-  const COLLEGES = [
-    '공과대학',
-    '경영대학',
-    '사회과학대학',
-    '인문대학',
-    '자연과학대학',
-    '글로벌대학',
-  ];
-  const DEPTS = [
-    '컴퓨터공학과',
-    '경영학과',
-    '심리학과',
-    '산업공학과',
-    '사회복지학과',
-    '글로벌통상학과',
-  ];
+  const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
+  const semesterLabel = (code) => semesterCodes.find((s) => s.code === code)?.codeName ?? code;
 
   const openDrawer = () => {
+    setEditTarget(null);
     setFName('');
-    setFYear('2026');
-    setFSem('1학기');
-    setFType('사전');
+    setFYear('');
+    setFSem('');
+    setFType('PRE');
     setFStart('');
     setFEnd('');
     setFTM('전체');
     setFGrades([]);
     setFColl([]);
     setFDepts([]);
-    setFActive(true);
-    setDupError('');
+    setFormError('');
+    setDrawerOpen(true);
+  };
+
+  const openEdit = (r) => {
+    setEditTarget(r);
+    setFName(r.assessmentName);
+    setFYear(String(r.academicYear));
+    setFSem(r.semesterCode);
+    setFType(r.assessmentType);
+    setFStart(toDateInputValue(r.startsAt));
+    setFEnd(toDateInputValue(r.endsAt));
+    const tc = r.targetCondition;
+    if (tc?.grades?.length) {
+      setFTM('학년');
+      setFGrades(tc.grades);
+      setFColl([]);
+      setFDepts([]);
+    } else if (tc?.colleges?.length) {
+      setFTM('단과대');
+      setFColl(tc.colleges);
+      setFGrades([]);
+      setFDepts([]);
+    } else if (tc?.departments?.length) {
+      setFTM('학과');
+      setFDepts(tc.departments);
+      setFGrades([]);
+      setFColl([]);
+    } else {
+      setFTM('전체');
+      setFGrades([]);
+      setFColl([]);
+      setFDepts([]);
+    }
+    setFormError('');
     setDrawerOpen(true);
   };
 
@@ -292,48 +269,71 @@ function RoundManage() {
     set(list.includes(val) ? list.filter((x) => x !== val) : [...list, val]);
   };
 
-  const handleSave = () => {
-    const dup = rounds.find((r) => r.year === fYear && r.semester === fSem && r.type === fType);
-    if (dup) {
-      setDupError(
-        `${fYear}-${fSem === '1학기' ? '1' : '2'} ${fType}진단이 이미 등록되어 있습니다. (${dup.id})`,
-      );
-      return;
-    }
-    if (!fName || !fStart || !fEnd) {
-      toast('필수 항목을 모두 입력해 주세요.', 'error');
-      return;
-    }
-    const targetLabel =
-      fTargetMode === '전체'
-        ? '재학생 전체'
-        : fTargetMode === '학년'
-          ? fGrades.join(', ')
-          : fTargetMode === '단과대'
-            ? fColleges.join(', ')
-            : fDepts.join(', ');
-    const newRound = {
-      id: `D${fYear}-${fSem === '1학기' ? '1' : '2'}-${fType === '사전' ? 'PRE' : 'POST'}-NEW`,
-      name: fName,
-      year: fYear,
-      semester: fSem,
-      type: fType,
-      startDate: fStart,
-      endDate: fEnd,
-      target: targetLabel,
-      respondents: 0,
-      capacity: 0,
-      status: '계획',
-    };
-    setRounds((prev) => [newRound, ...prev]);
-    setDrawerOpen(false);
-    toast('회차가 등록되었습니다.', 'success');
+  const buildTargetCondition = () => {
+    if (fTargetMode === '학년' && fGrades.length) return { grades: fGrades };
+    if (fTargetMode === '단과대' && fColleges.length) return { colleges: fColleges };
+    if (fTargetMode === '학과' && fDepts.length) return { departments: fDepts };
+    return null;
   };
 
-  const handleStatus = (r, next) => {
-    setRounds((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: next } : x)));
-    const labels = { 계획: '계획으로 변경', 진행중: '개시', 마감: '마감', 결과공개: '결과 공개' };
-    toast(`'${r.name}'을 ${labels[next]}했습니다.`, 'success');
+  const handleMutationError = (e) => {
+    const message = e instanceof ApiError ? e.message : '회차 저장에 실패했습니다.';
+    setFormError(message);
+    toast(message, 'error');
+  };
+
+  const registerMutation = useMutation({
+    mutationFn: registerAssessmentRound,
+    onSuccess: (created) => {
+      setRounds((prev) => [created, ...prev]);
+      setDrawerOpen(false);
+      toast(`'${created.assessmentName}' 회차가 등록되었습니다.`, 'success');
+    },
+    onError: handleMutationError,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updateAssessmentRound,
+    onSuccess: (updated) => {
+      setRounds((prev) =>
+        prev.map((r) => (r.assessmentRoundId === updated.assessmentRoundId ? updated : r)),
+      );
+      setDrawerOpen(false);
+      toast(`'${updated.assessmentName}' 회차가 수정되었습니다.`, 'success');
+    },
+    onError: handleMutationError,
+  });
+
+  const isPending = registerMutation.isPending || updateMutation.isPending;
+
+  const handleSave = () => {
+    if (!fName.trim() || !fYear || !fSem || !fStart || !fEnd) {
+      setFormError('필수 항목을 모두 입력해 주세요.');
+      return;
+    }
+    const startsAt = toStartInstant(fStart);
+    const endsAt = toEndInstant(fEnd);
+    if (!(new Date(startsAt) < new Date(endsAt))) {
+      setFormError('응시 시작일은 종료일보다 빨라야 합니다.');
+      return;
+    }
+    setFormError('');
+
+    const payload = {
+      assessmentName: fName.trim(),
+      academicYear: Number(fYear),
+      semesterCode: fSem,
+      assessmentType: fType,
+      startsAt,
+      endsAt,
+      targetCondition: buildTargetCondition(),
+    };
+
+    if (editTarget) {
+      updateMutation.mutate({ roundId: editTarget.assessmentRoundId, ...payload });
+    } else {
+      registerMutation.mutate(payload);
+    }
   };
 
   return (
@@ -341,7 +341,9 @@ function RoundManage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-[16px] font-black text-[#1F2328]">회차 관리</h2>
-          <p className="text-[12px] text-[#9AA0A6] mt-0.5">핵심역량 진단 회차 개설·상태 전환</p>
+          <p className="text-[12px] text-[#9AA0A6] mt-0.5">
+            핵심역량 진단 회차 등록 — 기본정보와 응시조건을 한 번에 저장합니다.
+          </p>
         </div>
         <Button onClick={openDrawer} style={{ background: ACCENT }}>
           + 회차 등록
@@ -353,152 +355,87 @@ function RoundManage() {
           <table className="w-full border-collapse text-[12px]">
             <thead>
               <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                {[
-                  '회차ID',
-                  '진단명',
-                  '학년도·학기',
-                  '구분',
-                  '응시기간',
-                  '대상',
-                  '응시/대상',
-                  '상태',
-                  '관리',
-                ].map((h, i) => (
-                  <th
-                    key={h}
-                    className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 5 ? 'text-center' : 'text-left'}`}
-                  >
-                    {h}
-                  </th>
-                ))}
+                {['회차ID', '진단명', '학년도·학기', '구분', '응시기간', '대상', '상태', '관리'].map(
+                  (h, i) => (
+                    <th
+                      key={h}
+                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 5 ? 'text-center' : 'text-left'}`}
+                    >
+                      {h}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
-              {rounds.map((r) => {
-                const rate = r.capacity > 0 ? Math.round((r.respondents / r.capacity) * 100) : 0;
-                return (
+              {rounds.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-[12px] text-[#9AA0A6]">
+                    등록된 회차가 없습니다. 위 버튼으로 새 회차를 등록해 주세요.
+                  </td>
+                </tr>
+              ) : (
+                rounds.map((r) => (
                   <tr
-                    key={r.id}
+                    key={r.assessmentRoundId}
                     className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
                   >
-                    <td className="px-4 py-3 font-mono text-[10px] text-[#9AA0A6]">{r.id}</td>
+                    <td className="px-4 py-3 font-mono text-[10px] text-[#9AA0A6]">
+                      {r.assessmentRoundId}
+                    </td>
                     <td className="px-4 py-3 font-bold text-[#1F2328] max-w-[200px]">
-                      <p className="truncate">{r.name}</p>
+                      <p className="truncate">{r.assessmentName}</p>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-[#656D76]">
-                      {r.year}학년도 {r.semester}
+                      {r.academicYear}학년도 {semesterLabel(r.semesterCode)}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.type === '사전' ? 'bg-[#F3F4F6] text-[#374151]' : 'bg-[#FEE2E2] text-[#CF222E]'}`}
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.assessmentType === 'PRE' ? 'bg-[#F3F4F6] text-[#374151]' : 'bg-[#FEE2E2] text-[#CF222E]'}`}
                       >
-                        {r.type}
+                        {r.assessmentType === 'PRE' ? '사전' : '사후'}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6] whitespace-nowrap">
-                      {r.startDate} ~ {r.endDate}
+                      {toDateInputValue(r.startsAt)} ~ {toDateInputValue(r.endsAt)}
                     </td>
                     <td className="px-4 py-3 text-center text-[11px] text-[#656D76] whitespace-nowrap">
-                      {r.target}
+                      {describeTarget(r.targetCondition)}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {r.capacity > 0 ? (
-                        <div>
-                          <span className="font-bold" style={{ color: ACCENT }}>
-                            {r.respondents.toLocaleString()}
-                          </span>
-                          <span className="text-[#9AA0A6]">/{r.capacity.toLocaleString()}</span>
-                          <div className="h-1 rounded-full bg-[#E5E7EB] mt-1 mx-auto w-16 overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{ width: `${rate}%`, background: ACCENT }}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-[#D1D5DB]">—</span>
-                      )}
+                      <StatusBadge status={r.roundStatus} variant="neutral" label="초안" size="sm" />
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {/* 이 화면에서 '마감'은 결과 발표 대기(조치 필요) 의미라 warning으로 덮어씁니다 */}
-                      <StatusBadge
-                        status={r.status}
-                        variant={r.status === '마감' ? 'warning' : undefined}
-                        size="sm"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex gap-1 justify-center flex-wrap">
-                        {r.status === '계획' && (
-                          <button
-                            onClick={() => handleStatus(r, '진행중')}
-                            className="h-6 px-2 text-[10px] font-bold rounded-[4px] text-white"
-                            style={{ background: ACCENT }}
-                          >
-                            개시
-                          </button>
-                        )}
-                        {r.status === '진행중' && (
-                          <button
-                            onClick={() => setCloseTarget(r)}
-                            className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#FEF3C7] text-[#D97706] hover:bg-[#FDE68A]"
-                          >
-                            마감
-                          </button>
-                        )}
-                        {r.status === '마감' && (
-                          <button
-                            onClick={() => handleStatus(r, '결과공개')}
-                            className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0]"
-                          >
-                            결과공개
-                          </button>
-                        )}
-                        <button
-                          onClick={() => toast('수정 기능은 다음 버전에서 제공됩니다.', 'info')}
-                          className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
-                          style={{ color: ACCENT }}
-                        >
-                          수정
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => openEdit(r)}
+                        className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
+                        style={{ color: ACCENT }}
+                      >
+                        수정
+                      </button>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Close confirm */}
-      <ConfirmDialog
-        open={!!closeTarget}
-        title="진단 마감 확인"
-        message={`'${closeTarget?.name}'을 마감합니다. 마감 후 추가 응시가 불가하며 결과 처리를 시작합니다.`}
-        confirmLabel="마감 처리"
-        danger
-        onConfirm={() => {
-          if (closeTarget) {
-            handleStatus(closeTarget, '마감');
-            setCloseTarget(null);
-          }
-        }}
-        onCancel={() => setCloseTarget(null)}
-      />
-
-      {/* Register drawer */}
+      {/* Register / Edit drawer */}
       <Drawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        title="회차 등록"
+        onClose={() => {
+          if (!isPending) setDrawerOpen(false);
+        }}
+        title={editTarget ? '회차 수정' : '회차 등록'}
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDrawerOpen(false)}>
+            <Button variant="outline" onClick={() => setDrawerOpen(false)} disabled={isPending}>
               취소
             </Button>
-            <Button style={{ background: ACCENT }} onClick={handleSave}>
-              등록
+            <Button style={{ background: ACCENT }} onClick={handleSave} loading={isPending}>
+              {editTarget ? '수정 저장' : '등록'}
             </Button>
           </div>
         }
@@ -511,10 +448,7 @@ function RoundManage() {
             </label>
             <input
               value={fName}
-              onChange={(e) => {
-                setFName(e.target.value);
-                setDupError('');
-              }}
+              onChange={(e) => setFName(e.target.value)}
               placeholder="예) 2026-2 핵심역량 사전진단"
               className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
             />
@@ -522,38 +456,18 @@ function RoundManage() {
 
           {/* Year / Semester */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-                학년도
-              </label>
-              <select
-                value={fYear}
-                onChange={(e) => {
-                  setFYear(e.target.value);
-                  setDupError('');
-                }}
-                className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-              >
-                {['2026', '2025', '2024'].map((y) => (
-                  <option key={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">학기</label>
-              <select
-                value={fSem}
-                onChange={(e) => {
-                  setFSem(e.target.value);
-                  setDupError('');
-                }}
-                className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-              >
-                {['1학기', '2학기'].map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-            </div>
+            <CommonCodeSelect
+              groupCode="ACADEMIC_YEAR"
+              label="학년도"
+              value={fYear}
+              onChange={(e) => setFYear(e.target.value)}
+            />
+            <CommonCodeSelect
+              groupCode="SEMESTER"
+              label="학기"
+              value={fSem}
+              onChange={(e) => setFSem(e.target.value)}
+            />
           </div>
 
           {/* Type radio */}
@@ -562,34 +476,34 @@ function RoundManage() {
               구분 (사전·사후) <span className="text-[#CF222E]">*</span>
             </label>
             <div className="flex gap-3">
-              {['사전', '사후'].map((t) => (
+              {ASSESSMENT_TYPES.map((t) => (
                 <label
-                  key={t}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-[8px] border-2 cursor-pointer transition-all ${fType === t ? 'border-[#374151] bg-[#F3F4F6]' : 'border-[#E5E7EB] bg-white hover:border-[#9CA3AF]'}`}
-                  onClick={() => {
-                    setFType(t);
-                    setDupError('');
-                  }}
+                  key={t.value}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-[8px] border-2 cursor-pointer transition-all ${fType === t.value ? 'border-[#374151] bg-[#F3F4F6]' : 'border-[#E5E7EB] bg-white hover:border-[#9CA3AF]'}`}
+                  onClick={() => setFType(t.value)}
                 >
                   <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${fType === t ? 'border-[#374151]' : 'border-[#D1D5DB]'}`}
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${fType === t.value ? 'border-[#374151]' : 'border-[#D1D5DB]'}`}
                   >
-                    {fType === t && (
+                    {fType === t.value && (
                       <div className="w-2 h-2 rounded-full" style={{ background: ACCENT }} />
                     )}
                   </div>
                   <span
-                    className={`text-[13px] font-bold ${fType === t ? '' : 'text-[#656D76]'}`}
-                    style={fType === t ? { color: ACCENT } : {}}
+                    className={`text-[13px] font-bold ${fType === t.value ? '' : 'text-[#656D76]'}`}
+                    style={fType === t.value ? { color: ACCENT } : {}}
                   >
-                    {t}진단
+                    {t.label}
                   </span>
                 </label>
               ))}
             </div>
-            {dupError && (
+            <p className="mt-2 text-[10px] text-[#9AA0A6] leading-relaxed">
+              이 값은 사후에 사전·사후 비교 화면(SCR-S03)의 짝을 맞추는 기준이 됩니다.
+            </p>
+            {formError && (
               <div className="mt-2 p-2.5 rounded-[6px] bg-[#FEE2E2] border border-[#FECACA] text-[11px] text-[#CF222E] font-semibold">
-                ⚠ {dupError}
+                ⚠ {formError}
               </div>
             )}
           </div>
@@ -644,7 +558,7 @@ function RoundManage() {
                     className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fGrades.includes(g) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
                     style={fGrades.includes(g) ? { background: ACCENT } : {}}
                   >
-                    {g}
+                    {g}학년
                   </button>
                 ))}
               </div>
@@ -677,21 +591,6 @@ function RoundManage() {
                 ))}
               </div>
             )}
-          </div>
-
-          {/* Active toggle */}
-          <div className="flex items-center gap-3">
-            <label className="text-[11px] font-semibold text-[#656D76]">사용여부</label>
-            <button
-              onClick={() => setFActive(!fActive)}
-              className={`relative w-9 h-5 rounded-full transition-colors ${fActive ? '' : 'bg-[#D1D5DB]'}`}
-              style={fActive ? { background: ACCENT } : {}}
-            >
-              <div
-                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${fActive ? 'translate-x-4' : ''}`}
-              />
-            </button>
-            <span className="text-[11px] text-[#9AA0A6]">{fActive ? '사용' : '미사용'}</span>
           </div>
         </div>
       </Drawer>
