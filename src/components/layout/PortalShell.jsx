@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { USER_TYPE } from '@/constants/domain';
@@ -201,6 +201,25 @@ export default function PortalShell() {
   const [semester, setSemester] = useState(SEMESTERS[1] ?? SEMESTERS[0]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const notifRef = useRef(null);
+  const profileRef = useRef(null);
+
+  
+  useEffect(() => {
+    if (!notifOpen && !profileOpen) return;
+
+    const handlePointerDown = (event) => {
+      if (notifOpen && notifRef.current && !notifRef.current.contains(event.target)) {
+        setNotifOpen(false);
+      }
+      if (profileOpen && profileRef.current && !profileRef.current.contains(event.target)) {
+        setProfileOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [notifOpen, profileOpen]);
 
   // 뱃지(안읽음 존재 여부)는 상시 폴링, 목록은 드롭다운이 열렸을 때만 요청합니다.
   const { data: hasUnread = false } = useHasUnreadNotifications();
@@ -348,7 +367,7 @@ export default function PortalShell() {
           </select>
 
           {/* Notification bell */}
-          <div className="relative">
+          <div className="relative" ref={notifRef}>
             <button
               onClick={() => {
                 setNotifOpen((o) => !o);
@@ -414,7 +433,7 @@ export default function PortalShell() {
           </div>
 
           {/* Profile */}
-          <div className="relative">
+          <div className="relative" ref={profileRef}>
             <button
               onClick={() => {
                 setProfileOpen((o) => !o);
@@ -476,16 +495,6 @@ export default function PortalShell() {
         </main>
       </div>
 
-      {/* Backdrop for dropdowns */}
-      {(notifOpen || profileOpen) && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => {
-            setNotifOpen(false);
-            setProfileOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }
