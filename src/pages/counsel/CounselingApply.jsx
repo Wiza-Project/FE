@@ -22,6 +22,17 @@ const formatDateTime = (iso) => {
   };
 };
 
+// "날짜 (요일) 시간" 한 줄 라벨. 선택 배너·확인 다이얼로그·완료 화면에서 같은 형식을 쓴다.
+const formatScheduleLabel = (iso) => {
+  const { dateLabel, dayLabel, timeLabel } = formatDateTime(iso);
+  return `${dateLabel} (${dayLabel}) ${timeLabel}`;
+};
+
+// 상담사 필터 옵션과 필터링에서 같은 키 형식을 공유하도록 한 곳에서 조합한다.
+// 두 곳의 키 형식이 어긋나면 필터가 아무 일정도 못 찾는 버그로 이어진다.
+const counselorKeyOf = (schedule) =>
+  `${schedule.counselorName}||${schedule.counselorDepartmentName ?? ''}`;
+
 // ─── Schedule Card ────────────────────────────────────────────────────────────
 
 /**
@@ -36,6 +47,8 @@ function ScheduleCard({ schedule, isSelected, onClick }) {
 
   return (
     <button
+      type="button"
+      aria-pressed={isSelected}
       onClick={onClick}
       className={`w-full rounded-[8px] border-2 p-3 text-left transition-all ${
         isSelected
@@ -141,7 +154,7 @@ export default function CounselingApply({ onComplete, onBack }) {
   const counselorOptions = useMemo(() => {
     const map = new Map();
     schedules.forEach((s) => {
-      const key = `${s.counselorName}||${s.counselorDepartmentName ?? ''}`;
+      const key = counselorKeyOf(s);
       if (!map.has(key)) {
         map.set(key, { key, name: s.counselorName, dept: s.counselorDepartmentName });
       }
@@ -149,11 +162,13 @@ export default function CounselingApply({ onComplete, onBack }) {
     return Array.from(map.values());
   }, [schedules]);
 
-  const filteredSchedules = counselorFilter
-    ? schedules.filter(
-        (s) => `${s.counselorName}||${s.counselorDepartmentName ?? ''}` === counselorFilter,
-      )
-    : schedules;
+  const filteredSchedules = useMemo(
+    () =>
+      counselorFilter
+        ? schedules.filter((s) => counselorKeyOf(s) === counselorFilter)
+        : schedules,
+    [schedules, counselorFilter],
+  );
 
   const chosenSlot = schedules.find((s) => s.scheduleId === selectedSlot);
 
@@ -519,7 +534,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                 )}
 
                 {!isSchedulesLoading && !hasSchedulesError && filteredSchedules.length > 0 && (
-                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                     {filteredSchedules.map((schedule) => (
                       <ScheduleCard
                         key={schedule.scheduleId}
@@ -554,9 +569,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                 <path d="M5 8l2 2 4-4" />
               </svg>
               <span className="text-[13px] font-bold text-[#14532D]">
-                선택: {formatDateTime(chosenSlot.startsAt).dateLabel} (
-                {formatDateTime(chosenSlot.startsAt).dayLabel}){' '}
-                {formatDateTime(chosenSlot.startsAt).timeLabel} · {chosenSlot.counselorName}
+                선택: {formatScheduleLabel(chosenSlot.startsAt)} · {chosenSlot.counselorName}
                 {chosenSlot.location ? ` · ${chosenSlot.location}` : ''}
               </span>
             </div>
@@ -586,9 +599,9 @@ export default function CounselingApply({ onComplete, onBack }) {
             </Button>
             <Button
               size="md"
-              disabled={!selectedSlot}
+              disabled={!chosenSlot}
               loading={submitting}
-              style={selectedSlot ? { background: ACCENT } : {}}
+              style={chosenSlot ? { background: ACCENT } : {}}
               onClick={() => setSubmitConfirm(true)}
             >
               신청 완료 →
@@ -655,9 +668,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                   { label: '상담사', value: chosenSlot?.counselorName },
                   {
                     label: '일시',
-                    value: chosenSlot
-                      ? `${formatDateTime(chosenSlot.startsAt).dateLabel} (${formatDateTime(chosenSlot.startsAt).dayLabel}) ${formatDateTime(chosenSlot.startsAt).timeLabel}`
-                      : '-',
+                    value: chosenSlot ? formatScheduleLabel(chosenSlot.startsAt) : '-',
                   },
                   { label: '장소', value: chosenSlot?.location },
                 ].map((row) => (
@@ -694,7 +705,7 @@ export default function CounselingApply({ onComplete, onBack }) {
       <ConfirmDialog
         open={submitConfirm}
         title="상담 신청 확인"
-        message={`${chosenSlot ? `${formatDateTime(chosenSlot.startsAt).dateLabel} (${formatDateTime(chosenSlot.startsAt).dayLabel}) ${formatDateTime(chosenSlot.startsAt).timeLabel}` : ''} · ${chosenSlot?.counselorName ?? ''}\n\n위 일정으로 상담을 신청하시겠습니까?`}
+        message={`${chosenSlot ? formatScheduleLabel(chosenSlot.startsAt) : ''} · ${chosenSlot?.counselorName ?? ''}\n\n위 일정으로 상담을 신청하시겠습니까?`}
         confirmLabel="신청하기"
         onConfirm={handleFinalSubmit}
         onCancel={() => setSubmitConfirm(false)}
