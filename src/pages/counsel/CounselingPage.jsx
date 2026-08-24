@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import CounselingApply from './CounselingApply';
 import MyCounseling from './MyCounseling';
 import { PageHeader, Button } from '@/components/common';
@@ -93,13 +94,34 @@ function CounselingHome({ onApply, onMy }) {
  * 세 단계를 로컬 상태로 전환하는 하나의 화면입니다.
  */
 export default function CounselingPage() {
+  const queryClient = useQueryClient();
   const [view, setView] = useState('home');
+  const [applySource, setApplySource] = useState('home');
+
+  useEffect(
+    () => () => {
+      // 상담 허브를 벗어나면 다른 계정이 이전 학생의 예약·가용 일정 캐시를 재사용하지 않게 한다.
+      queryClient.removeQueries({ queryKey: ['counselingReservations'] });
+      queryClient.removeQueries({ queryKey: ['availableSchedules'] });
+    },
+    [queryClient],
+  );
+
+  const openApply = (source) => {
+    setApplySource(source);
+    setView('apply');
+  };
 
   if (view === 'apply') {
-    return <CounselingApply onComplete={() => setView('my')} onBack={() => setView('home')} />;
+    return (
+      <CounselingApply
+        onComplete={() => setView('my')}
+        onBack={() => setView(applySource === 'my' ? 'my' : 'home')}
+      />
+    );
   }
   if (view === 'my') {
-    return <MyCounseling onApply={() => setView('apply')} />;
+    return <MyCounseling onApply={() => openApply('my')} />;
   }
-  return <CounselingHome onApply={() => setView('apply')} onMy={() => setView('my')} />;
+  return <CounselingHome onApply={() => openApply('home')} onMy={() => setView('my')} />;
 }
