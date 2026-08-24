@@ -5,6 +5,7 @@ import { useCommonCode } from '@/hooks/useCommonCode';
 import { fetchProgramsAdmin, deleteProgram } from '@/api/programs';
 import { ApiError } from '@/api/client';
 import { formatDate } from '@/utils/date';
+import { fetchAllPages } from '@/utils/pagination';
 
 const PAGE_SIZE = 10;
 
@@ -88,16 +89,17 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
   const categories = ['전체', ...programTypeCodes.map((c) => c.codeName)];
 
   const queryClient = useQueryClient();
-  const adminProgramsQueryKey = ['adminPrograms', { status, keyword: submittedKeyword, page }];
+  const adminProgramsQueryKey = ['adminPrograms', { status, keyword: submittedKeyword }];
   const { data, isLoading, isError, error } = useQuery({
     queryKey: adminProgramsQueryKey,
     queryFn: () =>
-      fetchProgramsAdmin({
-        status: status || undefined,
-        keyword: submittedKeyword || undefined,
-        page: page - 1,
-        size: PAGE_SIZE,
-      }),
+      fetchAllPages((p) =>
+        fetchProgramsAdmin({
+          status: status || undefined,
+          keyword: submittedKeyword || undefined,
+          ...p,
+        }),
+      ),
   });
 
   const deleteMutation = useMutation({
@@ -120,14 +122,16 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
     deleteMutation.mutate(deleteTarget.id);
   };
 
-  const rows = (data?.content ?? []).map(toRow);
+  const rows = (data ?? []).map(toRow);
 
-  // 분류/주관부서는 백엔드 목록 API가 쿼리 파라미터로 지원하지 않아, 이미 내려온
-  // 현재 페이지 데이터 안에서만 걸러진다(서버 페이지네이션과는 별개).
+  // 분류/주관부서는 백엔드 목록 API가 쿼리 파라미터로 지원하지 않아, 상태/검색어로
+  // 걸러진 전체 목록을 받아온 뒤 분류·주관부서 필터링과 페이지네이션을 프론트에서 처리한다.
   const filtered = rows.filter(
     (r) => (category === '전체' || r.category === category) && (dept === '전체' || r.dept === dept),
   );
-  const clientFilterActive = category !== '전체' || dept !== '전체';
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const runSearch = () => {
     setPage(1);
@@ -178,7 +182,10 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
             <label className="block text-[10px] font-semibold text-[#656D76] mb-1">{f.label}</label>
             <select
               value={f.value}
-              onChange={(e) => f.set(e.target.value)}
+              onChange={(e) => {
+                f.set(e.target.value);
+                setPage(1);
+              }}
               className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
             >
               {f.opts.map((o) => (
@@ -212,7 +219,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
         <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
           <span className="text-[13px] font-bold text-[#1F2328]">프로그램 목록</span>
           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#374151]">
-            {(clientFilterActive ? filtered.length : data?.totalElements) ?? 0}개
+            {totalItems}개
           </span>
         </div>
 
@@ -251,14 +258,14 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {paged.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
                       검색 결과가 없습니다.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((p) => (
+                  paged.map((p) => (
                     <tr
                       key={p.id}
                       className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
@@ -327,9 +334,9 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
           <div className="px-4 pb-3">
             <Pagination
               page={page}
-              totalPages={data?.totalPages || 1}
+              totalPages={totalPages}
               onChange={setPage}
-              totalItems={data?.totalElements}
+              totalItems={totalItems}
               pageSize={PAGE_SIZE}
             />
           </div>

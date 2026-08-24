@@ -9,20 +9,16 @@ import {
   bulkRejectApplications,
 } from '@/api/programs';
 import { formatDate } from '@/utils/date';
-
-// 신청자 목록 조회 API는 size를 안 넘기면 백엔드 기본값(20)만 내려주므로,
-// 페이지 구분 없이 전체를 집계해야 하는 통계 조회에서는 넉넉한 size를 명시한다.
-const ALL_APPLICATIONS_SIZE = 2000;
+import { fetchAllPages } from '@/utils/pagination';
 
 // ─── Shared program summary bar ───────────────────────────────────────────────
 
 function ProgramBar({ onBack, programId, programName }) {
-  const { data } = useQuery({
+  const { data: applications = [] } = useQuery({
     queryKey: ['programApplications', programId, '전체'],
-    queryFn: () => fetchProgramApplications(programId, { size: ALL_APPLICATIONS_SIZE }),
+    queryFn: () => fetchAllPages((p) => fetchProgramApplications(programId, p)),
     enabled: !!programId,
   });
-  const applications = data?.content ?? [];
   const approved = applications.filter((a) => a.applicationStatus === 'APPROVED').length;
   const waitlisted = applications.filter((a) => a.applicationStatus === 'WAITLISTED').length;
 
@@ -40,7 +36,7 @@ function ProgramBar({ onBack, programId, programName }) {
       </div>
       <div className="ml-auto flex gap-4 flex-wrap shrink-0">
         {[
-          { label: '신청', value: data?.totalElements ?? applications.length, color: '#374151' },
+          { label: '신청', value: applications.length, color: '#374151' },
           { label: '승인', value: approved, color: '#059669' },
           { label: '대기', value: waitlisted, color: '#D97706' },
         ].map((s) => (
@@ -275,6 +271,14 @@ function ApplicationReview({ programId }) {
       !keyword || a.studentName?.includes(keyword) || a.studentNo?.includes(keyword),
   );
 
+  // 일괄 승인/반려는 개별 행 버튼(canApprove/canReject)과 동일한 상태 조건만 대상으로 한다.
+  // 체크박스 자체는 상태와 무관하게 선택 가능하므로, 실제 요청 직전에 조건에 안 맞는 건을 걸러낸다.
+  const eligibleIds = (ids, isEligible) =>
+    ids.filter((id) => {
+      const status = filtered.find((a) => a.applicationId === id)?.applicationStatus;
+      return isEligible(status);
+    });
+
   const allChecked = filtered.length > 0 && filtered.every((a) => selected.has(a.applicationId));
   const toggleAll = () => {
     if (allChecked) setSelected(new Set());
@@ -472,7 +476,17 @@ function ApplicationReview({ programId }) {
               <Button
                 size="sm"
                 style={{ background: '#059669' }}
-                onClick={() => bulkApproveMutation.mutate([...selected])}
+                onClick={() => {
+                  const ids = eligibleIds(
+                    [...selected],
+                    (s) => s === 'APPLIED' || s === 'WAITLISTED',
+                  );
+                  if (ids.length === 0) {
+                    toast('일괄 승인 가능한 항목이 없습니다.', 'error');
+                    return;
+                  }
+                  bulkApproveMutation.mutate(ids);
+                }}
               >
                 선택 일괄 승인
               </Button>
@@ -480,7 +494,17 @@ function ApplicationReview({ programId }) {
                 size="sm"
                 variant="outline"
                 style={{ borderColor: '#CF222E', color: '#CF222E' }}
-                onClick={() => openReject([...selected])}
+                onClick={() => {
+                  const ids = eligibleIds(
+                    [...selected],
+                    (s) => s !== 'REJECTED' && s !== 'CANCELLED',
+                  );
+                  if (ids.length === 0) {
+                    toast('반려 가능한 항목이 없습니다.', 'error');
+                    return;
+                  }
+                  openReject(ids);
+                }}
               >
                 선택 반려
               </Button>
@@ -696,12 +720,12 @@ const PENDING_STYLE = { bg: '#F3F4F6', text: '#6B7280', label: '판정전' };
 function ResultJudge({ programId }) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['programApplications', programId, '전체'],
-    queryFn: () => fetchProgramApplications(programId, { size: ALL_APPLICATIONS_SIZE }),
+    queryFn: () => fetchAllPages((p) => fetchProgramApplications(programId, p)),
     enabled: !!programId,
   });
 
   // 이수판정은 승인된(참여 확정) 신청자만 대상이다.
-  const rows = (data?.content ?? []).filter((a) => a.applicationStatus === 'APPROVED');
+  const rows = (data ?? []).filter((a) => a.applicationStatus === 'APPROVED');
   const completed = rows.filter((r) => r.completionStatus === 'COMPLETED').length;
   const failed = rows.filter((r) => r.completionStatus === 'FAILED').length;
   const pending = rows.length - completed - failed;

@@ -3,6 +3,7 @@ import { fetchPrograms } from '@/api/programs';
 import { PageHeader, StatusBadge, Pagination, Button } from '@/components/common';
 import { formatDate } from '@/utils/date';
 import { useCommonCode } from '@/hooks/useCommonCode';
+import { fetchAllPages } from '@/utils/pagination';
 
 const ACCENT = '#2563EB';
 
@@ -102,7 +103,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
   const { data: departmentCodes = [] } = useCommonCode('DEPARTMENT');
   const deptOptions = [
     { value: '', label: '주관부서 전체' },
-    ...departmentCodes.map((c) => ({ value: c.code, label: c.codeName })),
+    ...departmentCodes.map((c) => ({ value: c.codeName, label: c.codeName })),
   ];
 
   // 핵심역량/주관부서/모집중 칩 필터가 백엔드 쿼리 파라미터로 지원되지 않아,
@@ -111,15 +112,16 @@ export default function ProgramList({ onDetail, onMyApplications }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchPrograms({
-      keyword: submittedKeyword || undefined,
-      page: 0,
-      size: 1000,
-      sort: 'createdAt,desc',
-    })
-      .then((res) => {
+    fetchAllPages((p) =>
+      fetchPrograms({
+        keyword: submittedKeyword || undefined,
+        sort: 'createdAt,desc',
+        ...p,
+      }),
+    )
+      .then((content) => {
         if (cancelled) return;
-        setAllPrograms(res.content.map(toRow));
+        setAllPrograms(content.map(toRow));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -144,13 +146,19 @@ export default function ProgramList({ onDetail, onMyApplications }) {
       (!dept || p.dept === dept) &&
       (chip !== '모집중' || isRecruiting(p)),
   );
+  if (sort === 'deadline') {
+    filtered.sort((a, b) => new Date(a.recruitEnd) - new Date(b.recruitEnd));
+  } else if (sort === 'recommend') {
+    const fillRate = (p) => (p.capacity > 0 ? p.applied / p.capacity : -1);
+    filtered.sort((a, b) => fillRate(b) - fillRate(a));
+  }
   const totalItems = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   useEffect(() => {
     setPage(1);
-  }, [comp, dept, chip]);
+  }, [comp, dept, chip, sort]);
 
   const runSearch = () => {
     setPage(1);

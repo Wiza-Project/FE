@@ -38,10 +38,10 @@ function Section({ num, title, id, children }) {
 
 // ─── Field helpers ────────────────────────────────────────────────────────────
 
-function Field({ label, required, error, children }) {
+function Field({ label, required, error, htmlFor, children }) {
   return (
     <div>
-      <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+      <label htmlFor={htmlFor} className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
         {label} {required && <span className="text-[#CF222E]">*</span>}
       </label>
       {children}
@@ -89,9 +89,10 @@ function NumberInput({ value, onChange, min = 0, max, placeholder = '', error })
 }
 
 /** 백엔드 FK(operatingUnitCodeId 등)를 받는 select. options는 {id, label}[] 형태. */
-function IdSelect({ value, onChange, options, placeholder = '선택하세요', error, disabled }) {
+function IdSelect({ id, value, onChange, options, placeholder = '선택하세요', error, disabled }) {
   return (
     <select
+      id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
@@ -165,7 +166,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   // Section 1 — 기본정보
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [operatingUnitCodeId, setOperatingUnitCodeId] = useState('');
   const [programTypeCodeId, setProgramTypeCodeId] = useState('');
 
   // Section 2 — 모집·운영·정원
@@ -217,11 +217,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       ? '목록을 불러오지 못했습니다'
       : '선택하세요';
 
-  const { data: operatingUnitCodes = [] } = useCommonCode(isEdit ? undefined : 'DEPARTMENT');
-  const operatingUnitOptions = operatingUnitCodes.map((c) => ({
-    id: c.codeId,
-    label: c.codeName,
-  }));
   const {
     data: programTypeCodes = [],
     isLoading: programTypeLoading,
@@ -355,13 +350,12 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   };
 
   const buildPayload = () => ({
-    // 실제 첨부 업로드 API가 아직 없어 이번엔 항상 생략 (백엔드에서 optional)
-    fileGroupId: null,
-    // 운영단위는 수정 폼에 입력란이 없어 상태가 항상 빈 값이므로, 수정 모드에서는
+    // 실제 첨부 업로드 API가 아직 없어 등록 시엔 항상 생략(백엔드에서 optional).
+    // 수정 시에는 키 자체를 생략해 백엔드가 기존 첨부(file_group_id)를 그대로 유지하도록 한다.
+    ...(isEdit ? {} : { fileGroupId: null }),
+    // 운영단위는 화면에 입력란이 없다 — 등록 시엔 항상 생략(백엔드 기본값 사용), 수정 시에도
     // 키 자체를 생략해 백엔드가 기존 값을 그대로 유지하도록 한다.
-    ...(isEdit
-      ? {}
-      : { operatingUnitCodeId: operatingUnitCodeId ? Number(operatingUnitCodeId) : null }),
+    ...(isEdit ? {} : { operatingUnitCodeId: null }),
     programTypeCodeId: programTypeCodeId ? Number(programTypeCodeId) : null,
     competencyId: Number(competencyId),
     mileagePolicyId: mileagePolicyId ? Number(mileagePolicyId) : null,
@@ -488,26 +482,24 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                 </Field>
               </div>
 
-              {!isEdit && (
-                <Field label="운영단위">
+              {/* 운영단위는 화면에 노출하지 않고 백엔드 기본값에 위임한다 (programOptions.js 주석 참고). */}
+              {isEdit && (
+                <Field
+                  label="프로그램분류"
+                  required
+                  error={errors.programTypeCodeId}
+                  htmlFor="programTypeCodeId"
+                >
                   <IdSelect
-                    value={operatingUnitCodeId}
-                    onChange={setOperatingUnitCodeId}
-                    options={operatingUnitOptions}
-                    placeholder="선택 안함 (서버 기본값 사용)"
+                    id="programTypeCodeId"
+                    value={programTypeCodeId}
+                    onChange={setProgramTypeCodeId}
+                    options={programTypeOptions}
+                    placeholder="선택하세요"
+                    error={errors.programTypeCodeId}
                   />
                 </Field>
               )}
-
-              <Field label="프로그램분류" required={isEdit} error={errors.programTypeCodeId}>
-                <IdSelect
-                  value={programTypeCodeId}
-                  onChange={setProgramTypeCodeId}
-                  options={programTypeOptions}
-                  placeholder={isEdit ? '선택하세요' : '선택 안함 (서버 기본값 사용)'}
-                  error={errors.programTypeCodeId}
-                />
-              </Field>
             </div>
           </Section>
         </div>
