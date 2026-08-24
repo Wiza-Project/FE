@@ -84,6 +84,8 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
 
   const { data: departmentCodes = [] } = useCommonCode('DEPARTMENT');
   const depts = ['전체', ...departmentCodes.map((c) => c.codeName)];
+  const { data: programTypeCodes = [] } = useCommonCode('PROGRAM_TYPE');
+  const categories = ['전체', ...programTypeCodes.map((c) => c.codeName)];
 
   const queryClient = useQueryClient();
   const adminProgramsQueryKey = ['adminPrograms', { status, keyword: submittedKeyword, page }];
@@ -119,13 +121,13 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
   };
 
   const rows = (data?.content ?? []).map(toRow);
-  const categories = ['전체', ...Array.from(new Set(rows.map((r) => r.category).filter(Boolean)))];
 
   // 분류/주관부서는 백엔드 목록 API가 쿼리 파라미터로 지원하지 않아, 이미 내려온
   // 현재 페이지 데이터 안에서만 걸러진다(서버 페이지네이션과는 별개).
   const filtered = rows.filter(
     (r) => (category === '전체' || r.category === category) && (dept === '전체' || r.dept === dept),
   );
+  const clientFilterActive = category !== '전체' || dept !== '전체';
 
   const runSearch = () => {
     setPage(1);
@@ -210,7 +212,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
         <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
           <span className="text-[13px] font-bold text-[#1F2328]">프로그램 목록</span>
           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#374151]">
-            {data?.totalElements ?? 0}개
+            {(clientFilterActive ? filtered.length : data?.totalElements) ?? 0}개
           </span>
         </div>
 

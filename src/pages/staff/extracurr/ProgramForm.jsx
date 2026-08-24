@@ -222,8 +222,21 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     id: c.codeId,
     label: c.codeName,
   }));
-  const { data: programTypeCodes = [] } = useCommonCode('PROGRAM_TYPE');
+  const {
+    data: programTypeCodes = [],
+    isLoading: programTypeLoading,
+    isError: programTypeErrored,
+  } = useCommonCode('PROGRAM_TYPE');
   const programTypeOptions = programTypeCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
+
+  // 수정 모드 프리필에 필요한 옵션 조회가 실패했거나(에러) 로딩이 끝났는데도 비어 있으면,
+  // prefilled가 영원히 false로 남아 로딩 화면에 갇히므로 별도 상태로 구분해 재시도 UI를 보여준다.
+  const optionsUnavailable =
+    competencyErrored ||
+    programTypeErrored ||
+    (!competencyLoading &&
+      !programTypeLoading &&
+      (competencyOptions.length === 0 || programTypeOptions.length === 0));
 
   // 수정 모드 프리필: 상세조회 + 역량/분류 옵션 목록이 모두 준비되면 한 번만 채운다
   // (역량·분류는 상세 응답이 라벨만 주므로 옵션 목록에서 이름이 일치하는 id로 역매핑한다).
@@ -344,7 +357,11 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const buildPayload = () => ({
     // 실제 첨부 업로드 API가 아직 없어 이번엔 항상 생략 (백엔드에서 optional)
     fileGroupId: null,
-    operatingUnitCodeId: operatingUnitCodeId ? Number(operatingUnitCodeId) : null,
+    // 운영단위는 수정 폼에 입력란이 없어 상태가 항상 빈 값이므로, 수정 모드에서는
+    // 키 자체를 생략해 백엔드가 기존 값을 그대로 유지하도록 한다.
+    ...(isEdit
+      ? {}
+      : { operatingUnitCodeId: operatingUnitCodeId ? Number(operatingUnitCodeId) : null }),
     programTypeCodeId: programTypeCodeId ? Number(programTypeCodeId) : null,
     competencyId: Number(competencyId),
     mileagePolicyId: mileagePolicyId ? Number(mileagePolicyId) : null,
@@ -369,7 +386,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   };
 
   // 수정 모드: 상세조회가 끝나고 옵션 목록까지 프리필됐을 때만 폼을 보여준다.
-  if (isEdit && (detailLoading || !prefilled) && !detailErrored) {
+  if (isEdit && (detailLoading || (!prefilled && !optionsUnavailable)) && !detailErrored) {
     return (
       <div>
         <div className="flex items-center gap-4 mb-6">
@@ -389,7 +406,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     );
   }
 
-  if (isEdit && detailErrored) {
+  if (isEdit && (detailErrored || (!prefilled && optionsUnavailable))) {
     return (
       <div>
         <div className="flex items-center gap-4 mb-6">
@@ -404,7 +421,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         </div>
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center">
           <p className="text-[14px] font-bold text-[#1F2328] mb-2">
-            {getDetailErrorMessage(detailError)}
+            {detailErrored
+              ? getDetailErrorMessage(detailError)
+              : '옵션 목록을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.'}
           </p>
           <Button variant="outline" onClick={onBack}>
             목록으로

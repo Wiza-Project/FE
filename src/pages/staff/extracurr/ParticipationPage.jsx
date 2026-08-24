@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Modal, Tabs, toast, DonutChart } from '@/components/common';
+import { Button, Modal, Tabs, toast, DonutChart, Pagination } from '@/components/common';
 import {
   fetchProgramApplications,
   approveApplication,
@@ -10,12 +10,16 @@ import {
 } from '@/api/programs';
 import { formatDate } from '@/utils/date';
 
+// 신청자 목록 조회 API는 size를 안 넘기면 백엔드 기본값(20)만 내려주므로,
+// 페이지 구분 없이 전체를 집계해야 하는 통계 조회에서는 넉넉한 size를 명시한다.
+const ALL_APPLICATIONS_SIZE = 2000;
+
 // ─── Shared program summary bar ───────────────────────────────────────────────
 
 function ProgramBar({ onBack, programId, programName }) {
   const { data } = useQuery({
     queryKey: ['programApplications', programId, '전체'],
-    queryFn: () => fetchProgramApplications(programId, {}),
+    queryFn: () => fetchProgramApplications(programId, { size: ALL_APPLICATIONS_SIZE }),
     enabled: !!programId,
   });
   const applications = data?.content ?? [];
@@ -36,7 +40,7 @@ function ProgramBar({ onBack, programId, programName }) {
       </div>
       <div className="ml-auto flex gap-4 flex-wrap shrink-0">
         {[
-          { label: '신청', value: applications.length, color: '#374151' },
+          { label: '신청', value: data?.totalElements ?? applications.length, color: '#374151' },
           { label: '승인', value: approved, color: '#059669' },
           { label: '대기', value: waitlisted, color: '#D97706' },
         ].map((s) => (
@@ -195,6 +199,8 @@ function attRate(att) {
 
 // ─── ① 신청 심사 ─────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 20;
+
 function ApplicationReview({ programId }) {
   const queryClient = useQueryClient();
   const [filterStatus, setFs] = useState('전체');
@@ -203,6 +209,7 @@ function ApplicationReview({ programId }) {
   const [rejectOpen, setRjOpen] = useState(false);
   const [rejectDetail, setRjDetail] = useState('');
   const [rejectTargetIds, setRejectTargetIds] = useState([]);
+  const [page, setPage] = useState(1);
 
   const statuses = [
     { value: '전체', label: '전체' },
@@ -212,12 +219,14 @@ function ApplicationReview({ programId }) {
     { value: 'REJECTED', label: '반려' },
   ];
 
-  const queryKey = ['programApplications', programId, filterStatus];
+  const queryKey = ['programApplications', programId, filterStatus, page];
   const { data, isLoading, isError, error } = useQuery({
     queryKey,
     queryFn: () =>
       fetchProgramApplications(programId, {
         status: filterStatus === '전체' ? undefined : filterStatus,
+        page: page - 1,
+        size: PAGE_SIZE,
       }),
     enabled: !!programId,
   });
@@ -308,7 +317,10 @@ function ApplicationReview({ programId }) {
           <label className="text-[10px] font-semibold text-[#656D76]">상태</label>
           <select
             value={filterStatus}
-            onChange={(e) => setFs(e.target.value)}
+            onChange={(e) => {
+              setFs(e.target.value);
+              setPage(1);
+            }}
             className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
           >
             {statuses.map((o) => (
@@ -335,6 +347,12 @@ function ApplicationReview({ programId }) {
         </button>
       </div>
 
+      <div className="flex items-center justify-end mb-2">
+        <span className="text-[10px] text-[#9AA0A6]">
+          ※ 전체 선택은 현재 페이지에 표시된 항목에만 적용됩니다.
+        </span>
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
         <div className="overflow-x-auto">
@@ -346,6 +364,7 @@ function ApplicationReview({ programId }) {
                     type="checkbox"
                     checked={allChecked}
                     onChange={toggleAll}
+                    aria-label="전체 신청자 선택"
                     className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                   />
                 </th>
@@ -387,6 +406,7 @@ function ApplicationReview({ programId }) {
                           type="checkbox"
                           checked={selected.has(a.applicationId)}
                           onChange={() => toggle(a.applicationId)}
+                          aria-label={`${a.studentName} 선택`}
                           className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                         />
                       </td>
@@ -434,6 +454,14 @@ function ApplicationReview({ programId }) {
           </table>
         </div>
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={data?.totalPages || 1}
+        onChange={setPage}
+        totalItems={data?.totalElements}
+        pageSize={PAGE_SIZE}
+      />
 
       {/* Fixed bottom bar */}
       {selected.size > 0 && (
@@ -668,7 +696,7 @@ const PENDING_STYLE = { bg: '#F3F4F6', text: '#6B7280', label: '판정전' };
 function ResultJudge({ programId }) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['programApplications', programId, '전체'],
-    queryFn: () => fetchProgramApplications(programId, {}),
+    queryFn: () => fetchProgramApplications(programId, { size: ALL_APPLICATIONS_SIZE }),
     enabled: !!programId,
   });
 
