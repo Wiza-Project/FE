@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { fetchAssessmentResume, saveAssessmentResponse } from '@/api/competency';
+import { fetchAssessmentResume, saveAssessmentResponse, submitAssessment } from '@/api/competency';
 import { ApiError } from '@/api/client';
 import { ConfirmDialog, EmptyState, SkeletonLoader, toast } from '@/components/common';
 
@@ -155,11 +155,31 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
     saveMutation.mutate({ attemptId, questionId, selectedValue: val });
   };
 
+  const submitMutation = useMutation({
+    mutationFn: submitAssessment,
+    onSuccess: () => {
+      toast('진단이 제출되었습니다.', 'success');
+      onComplete();
+    },
+    onError: (e) => {
+      // Q005(미응답 문항 있음): 서버가 응답과 함께 내려준 미응답 questionId로 자동 이동한다.
+      if (e instanceof ApiError && e.code === 'Q005' && Array.isArray(e.data)) {
+        const missingIds = e.data;
+        const firstMissingIdx = items.findIndex((item) => missingIds.includes(item.questionId));
+        if (firstMissingIdx !== -1) {
+          setPage(Math.floor(firstMissingIdx / QUESTIONS_PER_PAGE));
+        }
+      }
+      toast(e instanceof ApiError ? e.message : '제출에 실패했습니다.', 'error');
+    },
+  });
+
   const handleSubmit = () => {
     setConfirmOpen(false);
-    // BE 제출 API(#9)가 아직 없어 목업 동작 유지 — #9 연동 시 실제 제출 호출로 교체
-    toast('진단이 제출되었습니다.', 'success');
-    setTimeout(onComplete, 500);
+    // 버튼의 disabled 속성만으로는 다음 렌더 전에 들어오는 중복 클릭(예: 확인 다이얼로그를 빠르게
+    // 두 번 확정)을 못 막는다 — setAnswer의 pendingRef와 같은 이유로 여기서도 동기 가드를 둔다.
+    if (submitMutation.isPending) return;
+    submitMutation.mutate(attemptId);
   };
 
   const handleSave = () =>
@@ -400,11 +420,11 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
             ) : (
               <button
                 onClick={() => canSubmit && setConfirmOpen(true)}
-                disabled={!canSubmit}
+                disabled={!canSubmit || submitMutation.isPending}
                 className="h-9 px-6 text-[13px] font-bold text-white rounded-[6px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: '#7C3AED' }}
               >
-                최종 제출
+                {submitMutation.isPending ? '제출 중...' : '최종 제출'}
               </button>
             )}
           </div>
