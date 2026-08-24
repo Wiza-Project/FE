@@ -28,6 +28,7 @@ export default function ExtracurrPage() {
     case 'my-applications':
       return (
         <MyApplications
+          onBack={goList}
           onActivity={({ programId }) => {
             setSelectedApplication({ programId });
             setView('activity');

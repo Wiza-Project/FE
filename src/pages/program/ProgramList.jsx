@@ -67,18 +67,7 @@ function CompBadge({ label }) {
   );
 }
 
-function getStatusBadges(p) {
-  const isFull = p.applied >= p.capacity && p.capacity > 0;
-  const days =
-    p.period !== '상시'
-      ? Math.ceil(
-          (new Date(p.period.split(' ~ ')[1] ?? p.period).getTime() - Date.now()) / 86400000,
-        )
-      : 99;
-  const isUrgent =
-    !isFull && (days <= 3 || (p.capacity > 0 && (p.capacity - p.applied) / p.capacity <= 0.1));
-  return { isFull, isUrgent, days };
-}
+const isFull = (p) => p.applied >= p.capacity && p.capacity > 0;
 
 /**
  * @param {Object} props
@@ -315,7 +304,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
               </thead>
               <tbody>
                 {paged.map((p, i) => {
-                  const { isFull, isUrgent } = getStatusBadges(p);
+                  const full = isFull(p);
                   return (
                     <tr
                       key={p.id}
@@ -330,12 +319,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                           >
                             {p.name}
                           </button>
-                          {isUrgent && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                              마감임박
-                            </span>
-                          )}
-                          {isFull && (
+                          {full && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
                               정원마감
                             </span>
@@ -357,7 +341,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                       </td>
                       <td className="px-3 py-3 text-center">
                         {p.capacity > 0 ? (
-                          <span className={isFull ? 'text-[#CF222E] font-bold' : ''}>
+                          <span className={full ? 'text-[#CF222E] font-bold' : ''}>
                             {p.applied}/{p.capacity}명
                           </span>
                         ) : (
@@ -368,10 +352,10 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                         {p.mileage}점
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <StatusBadge status={isFull ? '마감' : p.status} size="sm" />
+                        <StatusBadge status={full ? '마감' : p.status} size="sm" />
                       </td>
                       <td className="px-3 py-3 text-center">
-                        {isFull ? (
+                        {full ? (
                           <button
                             onClick={() => onDetail(p.id)}
                             disabled={p.status === '종료'}
@@ -414,7 +398,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
         <>
           <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-2">
             {paged.map((p) => {
-              const { isFull, isUrgent, days } = getStatusBadges(p);
+              const full = isFull(p);
               return (
                 <div
                   key={p.id}
@@ -425,35 +409,21 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                     style={{ background: COMP_COLORS[p.competency] ?? ACCENT }}
                   />
                   <div className="p-4 flex flex-col flex-1 gap-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex gap-1 mb-1.5 flex-wrap">
-                          {p.competency && <CompBadge label={p.competency} />}
-                          {isUrgent && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                              마감임박
-                            </span>
-                          )}
-                          {isFull && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
-                              정원마감
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => onDetail(p.id)}
-                          className="text-[14px] font-bold text-[#1F2328] hover:text-[#2563EB] text-left leading-snug"
-                        >
-                          {p.name}
-                        </button>
+                    <div>
+                      <div className="flex gap-1 mb-1.5 flex-wrap">
+                        {p.competency && <CompBadge label={p.competency} />}
+                        {full && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
+                            정원마감
+                          </span>
+                        )}
                       </div>
-                      {days <= 7 && days > 0 && (
-                        <span
-                          className={`text-[12px] font-black flex-shrink-0 ${days <= 3 ? 'text-[#CF222E]' : 'text-[#D97706]'}`}
-                        >
-                          D-{days}
-                        </span>
-                      )}
+                      <button
+                        onClick={() => onDetail(p.id)}
+                        className="text-[14px] font-bold text-[#1F2328] hover:text-[#2563EB] text-left leading-snug"
+                      >
+                        {p.name}
+                      </button>
                     </div>
                     <div className="text-[12px] text-[#656D76]">
                       {p.dept} · {p.period}
@@ -463,7 +433,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                         <div className="flex justify-between text-[11px] mb-1">
                           <span className="text-[#9AA0A6]">정원</span>
                           <span
-                            className={`font-semibold ${isFull ? 'text-[#CF222E]' : 'text-[#1F2328]'}`}
+                            className={`font-semibold ${full ? 'text-[#CF222E]' : 'text-[#1F2328]'}`}
                           >
                             {p.applied}/{p.capacity}명
                           </span>
@@ -473,7 +443,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                             className="h-full rounded-full"
                             style={{
                               width: `${Math.min((p.applied / p.capacity) * 100, 100)}%`,
-                              background: isFull ? '#CF222E' : ACCENT,
+                              background: full ? '#CF222E' : ACCENT,
                             }}
                           />
                         </div>
@@ -484,12 +454,10 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                       <button
                         onClick={() => onDetail(p.id)}
                         disabled={p.status === '종료'}
-                        className={`h-7 px-3 text-[12px] font-bold rounded-[5px] transition-colors disabled:opacity-40 ${isFull ? 'text-[#2563EB] border border-[#2563EB] hover:bg-[#EFF6FF]' : 'text-white'}`}
-                        style={
-                          isFull ? {} : { background: p.status === '종료' ? '#9AA0A6' : ACCENT }
-                        }
+                        className={`h-7 px-3 text-[12px] font-bold rounded-[5px] transition-colors disabled:opacity-40 ${full ? 'text-[#2563EB] border border-[#2563EB] hover:bg-[#EFF6FF]' : 'text-white'}`}
+                        style={full ? {} : { background: p.status === '종료' ? '#9AA0A6' : ACCENT }}
                       >
-                        {p.status === '종료' ? '종료' : isFull ? '대기신청' : '신청'}
+                        {p.status === '종료' ? '종료' : full ? '대기신청' : '신청'}
                       </button>
                     </div>
                   </div>

@@ -50,10 +50,11 @@ const BTN_MAP = {
 
 /**
  * @param {Object} props
+ * @param {() => void} props.onBack
  * @param {(target: {programId: number}) => void} props.onActivity
  * @param {(target: {programId: number, applicationId: number, programName: string}) => void} props.onSurvey
  */
-export default function MyApplications({ onActivity, onSurvey }) {
+export default function MyApplications({ onBack, onActivity, onSurvey }) {
   const [page, setPage] = useState(1);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [apps, setApps] = useState([]);
@@ -131,10 +132,18 @@ export default function MyApplications({ onActivity, onSurvey }) {
   return (
     <div>
       <PageHeader
-        breadcrumbs={[{ label: '비교과 프로그램' }, { label: '내 신청 내역' }]}
+        breadcrumbs={[
+          { label: '비교과 프로그램', onClick: onBack },
+          { label: '내 신청 내역' },
+        ]}
         title="내 신청 내역"
         subtitle="비교과 프로그램 신청 및 활동 이력을 관리합니다."
         accentColor={ACCENT}
+        actions={
+          <Button size="sm" variant="outline" onClick={onBack}>
+            ← 목록으로
+          </Button>
+        }
       />
 
       {/* Stat tiles: 승인/수료/적립 마일리지는 별도 집계 API가 없어 현재 페이지 데이터 기준 근사치다. */}
