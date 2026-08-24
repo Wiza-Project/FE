@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   PageHeader,
   Stepper,
@@ -8,8 +8,32 @@ import {
   EmptyState,
   SkeletonLoader,
 } from '@/components/common';
-import { fetchCounselingTypes, fetchAvailableSchedules } from '@/api/counsel';
-import { APPLICATION_ROUTE, APPLICATION_ROUTE_LABEL } from '@/constants/domain';
+import {
+  fetchCounselingTypes,
+  fetchAvailableSchedules,
+  createCounselingReservation,
+} from '@/api/counsel';
+import {
+  APPLICATION_ROUTE,
+  APPLICATION_ROUTE_LABEL,
+  COUNSELING_RESERVATION_ERROR_CODE,
+  COUNSELING_RESERVATION_STATUS_LABEL,
+} from '@/constants/domain';
+
+// 신청 실패 사유를 사용자가 이해할 수 있는 문구로 바꾼다. 문서에 명시된 코드만 분기한다.
+const getSubmitErrorMessage = (error) => {
+  const errorCode = error?.code;
+  if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
+    return '선택한 일정을 더 이상 사용할 수 없습니다. 다른 일정을 선택해 주세요.';
+  }
+  if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
+    return '신청 내용을 확인해 주세요.';
+  }
+  if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
+    return '상담을 신청할 권한이 없습니다.';
+  }
+  return '상담 신청에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+};
 
 const ACCENT = '#0891B2';
 
@@ -108,6 +132,7 @@ function ScheduleCard({ schedule, isSelected, onClick }) {
  * @param {() => void} [props.onBack]
  */
 export default function CounselingApply({ onComplete, onBack }) {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const {
     data: counselingTypes = [],
@@ -149,7 +174,29 @@ export default function CounselingApply({ onComplete, onBack }) {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [memo, setMemo] = useState('');
   const [submitConfirm, setSubmitConfirm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  // 서버 생성 응답에는 상담사명·일시·장소·유형명이 없어서, 완료 화면에 표시할 값을
+  // 제출 시점의 chosenType/chosenSlot에서 미리 스냅샷해 둔다. 제출 후 availableSchedules를
+  // 무효화하면 방금 예약한 슬롯이 목록에서 빠져 chosenSlot이 사라지기 때문이다.
+  const [completionInfo, setCompletionInfo] = useState(null);
+  const [createdReservation, setCreatedReservation] = useState(null);
+
+  const createReservationMutation = useMutation({
+    mutationFn: createCounselingReservation,
+    onSuccess: (reservation) => {
+      setCreatedReservation(reservation);
+      queryClient.invalidateQueries({ queryKey: ['counselingReservations'] });
+      queryClient.invalidateQueries({ queryKey: ['availableSchedules'] });
+      setStep(3);
+    },
+    onError: (error) => {
+      setSubmitError(getSubmitErrorMessage(error));
+      if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
+        setSelectedSlot(null);
+        queryClient.invalidateQueries({ queryKey: ['availableSchedules'] });
+      }
+    },
+  });
 
   // Helpers
   const STEPS = ['동의', '유형 선택', '일정 선택', '신청 완료'];
@@ -176,24 +223,35 @@ export default function CounselingApply({ onComplete, onBack }) {
 
   const chosenSlot = schedules.find((s) => s.scheduleId === selectedSlot);
 
-  const handleFinalSubmit = async () => {
-    // 이미 제출 중이면 중복 요청을 막는다.
-    if (submitting) {
+  const handleFinalSubmit = () => {
+    // 이미 요청이 진행 중이면 중복 제출을 막는다.
+    if (createReservationMutation.isPending) {
       return;
     }
     // 다이얼로그가 열린 사이 일정이 갱신돼 선택 슬롯이 사라졌을 수 있다.
     // (다른 학생이 먼저 예약해 refetch로 목록에서 빠지는 경우 등)
     // 이때는 신청을 진행하지 않고 다이얼로그를 닫은 뒤 선택을 초기화한다.
-    if (!chosenSlot) {
+    if (!chosenType || !chosenSlot || memo.trim() === '') {
       setSubmitConfirm(false);
-      setSelectedSlot(null);
+      if (!chosenSlot) {
+        setSelectedSlot(null);
+      }
       return;
     }
+
+    setCompletionInfo({
+      typeName: chosenType.typeName,
+      counselorName: chosenSlot.counselorName,
+      startsAt: chosenSlot.startsAt,
+      location: chosenSlot.location,
+    });
     setSubmitConfirm(false);
-    setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setSubmitting(false);
-    setStep(3);
+    createReservationMutation.mutate({
+      counselingTypeId: chosenType.counselingTypeId,
+      scheduleId: chosenSlot.scheduleId,
+      requestContent: memo.trim(),
+      // TODO(consent): 공통 동의 API와 정책 확정 후 consentId를 연동한다.
+    });
   };
 
   return (
@@ -556,11 +614,12 @@ export default function CounselingApply({ onComplete, onBack }) {
                         key={schedule.scheduleId}
                         schedule={schedule}
                         isSelected={selectedSlot === schedule.scheduleId}
-                        onClick={() =>
+                        onClick={() => {
                           setSelectedSlot((prev) =>
                             prev === schedule.scheduleId ? null : schedule.scheduleId,
-                          )
-                        }
+                          );
+                          setSubmitError('');
+                        }}
                       />
                     ))}
                   </div>
@@ -594,19 +653,30 @@ export default function CounselingApply({ onComplete, onBack }) {
           {/* Memo */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
             <label htmlFor="counseling-memo" className="text-[13px] font-semibold text-[#1F2328] mb-1.5 block">
-              상담 희망 내용 <span className="text-[#9AA0A6] font-normal text-[12px]">(선택)</span>
+              상담 희망 내용 <span className="text-[#CF222E] font-normal text-[12px]">(필수)</span>
             </label>
             <textarea
               id="counseling-memo"
               value={memo}
-              onChange={(e) => setMemo(e.target.value)}
+              onChange={(e) => {
+                setMemo(e.target.value);
+                setSubmitError('');
+              }}
               placeholder="상담에서 다루고 싶은 내용이나 어려운 점을 간략히 작성해 주세요."
               rows={4}
+              required
+              aria-invalid={!!submitError}
+              aria-describedby={submitError ? 'counseling-memo-error' : undefined}
               className="w-full px-3 py-2.5 text-[13px] border border-[#E5E7EB] rounded-[6px] resize-none focus:outline-none focus:border-[#0891B2] placeholder:text-[#9AA0A6]"
             />
             <p className="text-[11px] text-[#9AA0A6] mt-1.5">
               입력한 내용은 담당 상담사만 열람합니다.
             </p>
+            {submitError && (
+              <p id="counseling-memo-error" role="alert" className="text-[12px] text-[#CF222E] mt-2 font-semibold">
+                {submitError}
+              </p>
+            )}
           </div>
 
           <div className="flex gap-2 justify-between">
@@ -615,10 +685,19 @@ export default function CounselingApply({ onComplete, onBack }) {
             </Button>
             <Button
               size="md"
-              disabled={!chosenSlot}
-              loading={submitting}
+              disabled={!chosenSlot || createReservationMutation.isPending}
+              loading={createReservationMutation.isPending}
               style={chosenSlot ? { background: ACCENT } : {}}
-              onClick={() => setSubmitConfirm(true)}
+              onClick={() => {
+                if (!chosenSlot) {
+                  return;
+                }
+                if (memo.trim() === '') {
+                  setSubmitError('상담 희망 내용을 입력해 주세요.');
+                  return;
+                }
+                setSubmitConfirm(true);
+              }}
             >
               신청 완료 →
             </Button>
@@ -669,24 +748,23 @@ export default function CounselingApply({ onComplete, onBack }) {
                   {
                     label: '예약번호',
                     value: (
-                      <span className="font-mono font-black text-[#0891B2]">CS-2026-0331</span>
+                      <span className="font-mono font-black text-[#0891B2]">
+                        {createdReservation.reservationId}
+                      </span>
                     ),
                   },
                   {
                     label: '상태',
                     value: (
                       <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#DBEAFE] text-[#0969DA]">
-                        신청
+                        {COUNSELING_RESERVATION_STATUS_LABEL[createdReservation.reservationStatus]}
                       </span>
                     ),
                   },
-                  { label: '상담유형', value: chosenType?.typeName },
-                  { label: '상담사', value: chosenSlot?.counselorName },
-                  {
-                    label: '일시',
-                    value: chosenSlot ? formatScheduleLabel(chosenSlot.startsAt) : '-',
-                  },
-                  { label: '장소', value: chosenSlot?.location },
+                  { label: '상담유형', value: completionInfo.typeName },
+                  { label: '상담사', value: completionInfo.counselorName },
+                  { label: '일시', value: formatScheduleLabel(completionInfo.startsAt) },
+                  { label: '장소', value: completionInfo.location },
                 ].map((row) => (
                   <div key={row.label} className="flex items-center px-5 py-3">
                     <span className="w-24 text-[12px] text-[#656D76] flex-shrink-0">

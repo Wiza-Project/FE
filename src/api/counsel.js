@@ -96,6 +96,24 @@ export const fetchCounselingReservations = async ({ page = 0, size = 20 } = {}) 
 };
 
 /**
+ * @typedef {Object} CreateCounselingReservationRequest
+ * @property {number} counselingTypeId 0보다 큰 상담 유형 ID
+ * @property {number} scheduleId 0보다 큰 상담 일정 ID
+ * @property {string} requestContent 공백만으로 구성될 수 없다.
+ */
+
+/**
+ * 학생이 새 상담 예약을 신청한다. 신청 직후 상태는 'REQUESTED'다.
+ *
+ * @param {CreateCounselingReservationRequest} request
+ * @returns {Promise<CounselingReservation>}
+ */
+export const createCounselingReservation = async (request) => {
+  const { data } = await apiClient.post('/students/counseling-reservations', request);
+  return data;
+};
+
+/**
  * @typedef {Object} CancelCounselingReservationRequest
  * @property {string} cancellationReason 공백만으로 구성될 수 없다.
  */
