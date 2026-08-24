@@ -159,3 +159,89 @@ export const editAssessmentQuestion = async ({
   });
   return data;
 };
+
+/**
+ * @typedef {Object} AssessmentRound
+ * @property {number} assessmentRoundId
+ * @property {string} assessmentName
+ * @property {number} academicYear
+ * @property {string} semesterCode 공통코드 SEMESTER의 code (예: 'SPRING')
+ * @property {string} assessmentType 'PRE'|'POST'
+ * @property {string} startsAt ISO-8601
+ * @property {string} endsAt ISO-8601
+ * @property {Object|null} targetCondition null이면 전체 학생 대상
+ * @property {string} roundStatus
+ */
+
+/**
+ * 진단 회차 등록 (SCR-A04). 학년도·학기·진단구분(사전/사후)+응시기간+응시대상을 한 번에
+ * 등록한다 — `assessment_round`의 응시기간 컬럼이 NOT NULL이라 기본정보만 먼저 저장하는
+ * 단계가 없다(부분 저장 불가). 같은 학년도·학기·진단구분 조합은 서버가 중복 개설을 막는다.
+ *
+ * @param {Object} params
+ * @param {string} params.assessmentName
+ * @param {number} params.academicYear
+ * @param {string} params.semesterCode
+ * @param {'PRE'|'POST'} params.assessmentType
+ * @param {string} params.startsAt ISO-8601
+ * @param {string} params.endsAt ISO-8601
+ * @param {Object|null} [params.targetCondition] 생략/null이면 전체 학생 대상
+ * @returns {Promise<AssessmentRound>}
+ */
+export const registerAssessmentRound = async ({
+  assessmentName,
+  academicYear,
+  semesterCode,
+  assessmentType,
+  startsAt,
+  endsAt,
+  targetCondition,
+}) => {
+  const { data } = await apiClient.post('/admin/assessment-rounds', {
+    assessmentName,
+    academicYear,
+    semesterCode,
+    assessmentType,
+    startsAt,
+    endsAt,
+    targetCondition: targetCondition ?? null,
+  });
+  return data;
+};
+
+/**
+ * 진단 회차 수정 (SCR-A04). 등록과 같은 필드를 모두 다시 보내야 하는 전체 수정이다
+ * (부분 수정 아님). 이미 응시(문항 응답)가 시작된 회차는 서버가 수정 자체를 막는다.
+ *
+ * @param {Object} params
+ * @param {number} params.roundId
+ * @param {string} params.assessmentName
+ * @param {number} params.academicYear
+ * @param {string} params.semesterCode
+ * @param {'PRE'|'POST'} params.assessmentType
+ * @param {string} params.startsAt ISO-8601
+ * @param {string} params.endsAt ISO-8601
+ * @param {Object|null} [params.targetCondition]
+ * @returns {Promise<AssessmentRound>}
+ */
+export const updateAssessmentRound = async ({
+  roundId,
+  assessmentName,
+  academicYear,
+  semesterCode,
+  assessmentType,
+  startsAt,
+  endsAt,
+  targetCondition,
+}) => {
+  const { data } = await apiClient.patch(`/admin/assessment-rounds/${roundId}`, {
+    assessmentName,
+    academicYear,
+    semesterCode,
+    assessmentType,
+    startsAt,
+    endsAt,
+    targetCondition: targetCondition ?? null,
+  });
+  return data;
+};

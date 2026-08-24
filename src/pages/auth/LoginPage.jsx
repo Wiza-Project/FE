@@ -5,10 +5,12 @@ import { useAuthStore } from '@/stores/authStore';
 import { login as loginApi } from '@/api/auth';
 import { USER_TYPE } from '@/constants/domain';
 
-const PORTAL_CONFIG = {
-  student: { label: '학생', color: '#2563EB', idLabel: '학번', idPlaceholder: '학번 8자리 입력' },
-  staff: { label: '교직원', color: '#7C3AED', idLabel: '교번', idPlaceholder: '교번 입력' },
-};
+// 포털(학생/교직원)을 화면에서 따로 선택받지 않고 학생 브랜드 컬러를 기본값으로 씁니다.
+// 로그인 후 completeLogin()이 응답에 담긴 user.userType으로 화면을 분기합니다.
+const BRAND_COLOR = '#2563EB';
+
+// 학번/교번 모두 숫자 8자리(university_no) 형식.
+const ID_MAX_LENGTH = 8;
 
 // 로그인 화면 진입 사유(자동 로그아웃)별 안내 문구.
 // ProtectedRoute(유휴 타임아웃 / 세션 만료)가 location.state.reason 으로 넘겨줍니다.
@@ -17,6 +19,9 @@ const LOGOUT_REASON_MESSAGE = {
   session_expired: '세션이 만료되었습니다. 다시 로그인해주세요.',
 };
 
+// scms-be AuthService.MAX_FAILED_LOGIN_ATTEMPTS 와 반드시 같은 값이어야 합니다.
+// 서버는 remainingAttempts(잔여 횟수)만 내려주므로, "지금까지 몇 번째 실패인지"를
+// 화면에 표시하려면 이 값을 기준으로 역산합니다 (MAX_ATTEMPTS - remainingAttempts).
 const MAX_ATTEMPTS = 5;
 
 const SAVE_ID_KEY = 'sicms_saved_id';
@@ -25,7 +30,8 @@ const FIRST_LOGIN_KEY = 'sicms_first_login_done';
 /**
  * 로그인 화면.
  *
- * 포털 탭은 학생/교직원 2개만 노출
+ * 학생/교직원 포털을 화면에서 따로 선택받지 않고 하나의 폼으로 로그인합니다.
+ * 로그인 성공 응답의 user.userType으로 completeLogin()이 이후 화면만 분기합니다.
  *   TODO: 관리자 로그인이 실제로 필요해지면 별도 경로(/admin/login 등)로 분리예정
  */
 export default function LoginPage() {
@@ -33,7 +39,6 @@ export default function LoginPage() {
   const location = useLocation();
   const authLogin = useAuthStore((s) => s.login);
 
-  const [portal, setPortal] = useState('student');
   const [id, setId] = useState(() => localStorage.getItem(SAVE_ID_KEY) ?? '');
   const [pw, setPw] = useState('');
   const [saveId, setSaveId] = useState(() => !!localStorage.getItem(SAVE_ID_KEY));
@@ -42,16 +47,8 @@ export default function LoginPage() {
     return reason ? LOGOUT_REASON_MESSAGE[reason] : '';
   });
   const [loading, setLoading] = useState(false);
-  const [attempts, setAttempts] = useState(0);
 
-  const cfg = PORTAL_CONFIG[portal];
-
-  const selectPortal = (p) => {
-    setPortal(p);
-    setError('');
-    setAttempts(0);
-  };
-
+  // 학생/교직원 모두 이 화면에서 로그인하고, 로그인 성공 후 응답의 user.userType으로만 분기합니다.
   const completeLogin = (user) => {
     if (user.userType === USER_TYPE.STUDENT) {
       const isFirst = !localStorage.getItem(FIRST_LOGIN_KEY);
@@ -73,6 +70,13 @@ export default function LoginPage() {
       setError('아이디를 입력해주세요.');
       return;
     }
+    // onChange 필터링은 "입력 중" 8자리 초과만 잘라내므로 1~7자리 값이나,
+    // onChange를 거치지 않고 복원된 localStorage 저장값은 여기서 막아야 합니다.
+    // 백엔드 LoginRequest의 @Pattern("\d{8}") 검증 메시지와 문구를 맞췄습니다.
+    if (!/^\d{8}$/.test(id)) {
+      setError('아이디는 숫자 8자리로 입력해주세요.');
+      return;
+    }
     if (!pw) {
       setError('비밀번호를 입력해주세요.');
       return;
@@ -83,20 +87,31 @@ export default function LoginPage() {
       const data = await loginApi({ loginId: id.trim(), password: pw });
       if (saveId) localStorage.setItem(SAVE_ID_KEY, id.trim());
       else localStorage.removeItem(SAVE_ID_KEY);
-      setAttempts(0);
       authLogin(data.user, data.accessToken);
       completeLogin(data.user);
     } catch (err) {
       if (err.code === 'U003') {
-        // 아이디/비밀번호 불일치. 클라이언트에서 계정을 잠그는 건 아니므로
-        // "잠겼다"고 단정하지 않고, 반복 실패 시 비밀번호 찾기를 안내합니다.
-        const next = attempts + 1;
-        setAttempts(next);
-        setError(
-          next >= MAX_ATTEMPTS
-            ? `${err.message}\n계속 실패하신다면 아이디를 다시 확인하시거나 '비밀번호 찾기'를 이용해주세요.`
-            : `${err.message} (${next}/${MAX_ATTEMPTS}회)`,
-        );
+        // 아이디/비밀번호 불일치.
+        // 실패 카운트는 컴포넌트 로컬 state가 아니라 서버가 내려준 값(err.data —
+        // scms-be LoginFailureResponse)을 그대로 씁니다. 로컬 state는 새로고침/다른 탭/
+        // 이전 세션의 실패를 몰라 "계정을 막 잠근 그 시도"조차 1번째 실패로 보이는
+        // 문제가 있었습니다 (PR #20 코드리뷰 반영).
+        // 존재하지 않는 아이디는 계정 존재 여부를 노출하지 않기 위해 err.data 자체가
+        // 없습니다 — 이 경우 else로 빠져 단순 안내만 표시됩니다.
+        // accountLocked는 "이 응답을 유발한 시도로 계정이 방금 잠겼는지"를 뜻하며,
+        // 잠금을 유발한 그 시도의 코드도 여전히 U003입니다(다음 시도부터 U005로 바뀜 —
+        // 아래 U004/U005/U006 분기 참고).
+        const failureInfo = err.data;
+        if (failureInfo?.accountLocked) {
+          setError('계정이 잠겼습니다. 비밀번호 찾기를 이용하거나 관리자에게 문의하세요.');
+        } else if (failureInfo && failureInfo.remainingAttempts <= MAX_ATTEMPTS - 3) {
+          // 1~2회는 단순 오타일 가능성이 높아 카운트 없이 안내만 하고,
+          // 3회차부터 남은 횟수를 보여줘 잠금이 다가온다는 걸 알립니다.
+          const attemptCount = MAX_ATTEMPTS - failureInfo.remainingAttempts;
+          setError(`${err.message} (${attemptCount}/${MAX_ATTEMPTS}회)`);
+        } else {
+          setError(err.message);
+        }
       } else if (err.code === 'U004' || err.code === 'U005' || err.code === 'U006') {
         // 휴면/잠금/탈퇴 — 백엔드가 내려준 안내 문구를 그대로 보여줍니다. 실패 횟수로 세지 않습니다.
         setError(err.message);
@@ -138,7 +153,7 @@ export default function LoginPage() {
             {/* Login card */}
             <div className="bg-white rounded-[12px] border border-[#E5E7EB] shadow-[0_4px_28px_rgba(0,0,0,0.08)] overflow-hidden">
               {/* Color bar */}
-              <div className="h-1" style={{ background: cfg.color }} />
+              <div className="h-1" style={{ background: BRAND_COLOR }} />
 
               {/* Title */}
               <div className="px-8 pt-7 pb-1">
@@ -151,15 +166,21 @@ export default function LoginPage() {
               <form onSubmit={handleLogin} className="px-8 py-5 flex flex-col gap-4">
                 {/* ID */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-[13px] font-semibold text-[#1F2328]">{cfg.idLabel}</label>
+                  <label htmlFor="login-id" className="text-[13px] font-semibold text-[#1F2328]">
+                    아이디
+                  </label>
                   <input
+                    id="login-id"
                     type="text"
+                    inputMode="numeric"
                     value={id}
                     onChange={(e) => {
-                      setId(e.target.value);
+                      // 학번/교번은 숫자 8자리 — 숫자 이외 입력은 제거하고 8자리를 넘는 입력은 자릅니다.
+                      // (붙여넣기로 "2024-1234" 같은 형식이 들어와도 숫자만 추출해 앞 8자리까지 반영)
+                      setId(e.target.value.replace(/\D/g, '').slice(0, ID_MAX_LENGTH));
                       setError('');
                     }}
-                    placeholder={cfg.idPlaceholder}
+                    placeholder="아이디 8자리 입력"
                     autoFocus
                     className="h-10 rounded-[6px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] text-[#1F2328] placeholder:text-[#9AA0A6] focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-colors disabled:bg-[#F9FAFB] disabled:text-[#9AA0A6]"
                   />
@@ -193,7 +214,7 @@ export default function LoginPage() {
                     onChange={(e) => setSaveId(e.target.checked)}
                     className="w-4 h-4 rounded-[3px] border-[#D1D5DB] accent-[#2563EB]"
                   />
-                  <span className="text-[13px] text-[#656D76]">학번 저장</span>
+                  <span className="text-[13px] text-[#656D76]">아이디 저장</span>
                 </label>
 
                 {/* Error */}
@@ -225,49 +246,14 @@ export default function LoginPage() {
                   type="submit"
                   disabled={loading}
                   className="h-11 w-full rounded-[6px] text-white font-bold text-[14px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-1"
-                  style={{ background: cfg.color }}
+                  style={{ background: BRAND_COLOR }}
                 >
                   {loading && (
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   )}
                   로그인
                 </button>
-
-                {/* Fail count bar */}
-                {attempts > 0 && (
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-[#CF222E] rounded-full transition-all"
-                        style={{ width: `${Math.min((attempts / MAX_ATTEMPTS) * 100, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-[11px] text-[#CF222E] font-semibold">
-                      {attempts}/{MAX_ATTEMPTS}
-                    </span>
-                  </div>
-                )}
               </form>
-
-              {/* Portal tabs */}
-              <div className="border-t border-[#F3F4F6] px-8 py-4 bg-[#FAFAFA]">
-                <p className="text-[11px] font-semibold text-[#9AA0A6] uppercase tracking-wide mb-2.5">
-                  포털 선택
-                </p>
-                <div className="flex gap-2">
-                  {['student', 'staff'].map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => selectPortal(p)}
-                      className={`px-3 py-1.5 rounded-[999px] text-[12px] font-bold transition-all border ${portal === p ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'}`}
-                      style={portal === p ? { background: PORTAL_CONFIG[p].color } : {}}
-                    >
-                      {PORTAL_CONFIG[p].label}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* Bottom links */}

@@ -25,6 +25,27 @@ export const fetchPrograms = async (params) => {
 };
 
 /**
+ * 학생용 비교과 프로그램 상세 조회. GET /api/students/programs/{programId}
+ * @param {number} programId
+ * @returns {Promise<Object>} ProgramDetailResponseDTO
+ */
+export const fetchProgramDetail = async (programId) => {
+  const { data } = await apiClient.get(`/students/programs/${programId}`);
+  return data;
+};
+
+/**
+ * 로그인한 학생 본인의 회차별 출결 현황 조회. GET /api/students/programs/{programId}/attendances
+ * 아직 기록되지 않은 회차는 attendanceStatus 등 출결 관련 필드가 null로 내려온다.
+ * @param {number} programId
+ * @returns {Promise<Array<{programSessionId: number, sessionNo: number, sessionName: string|null, startsAt: string, endsAt: string, location: string|null, attendanceStatus: string|null, attendedMinutes: number|null, note: string|null}>>}
+ */
+export const fetchMyAttendance = async (programId) => {
+  const { data } = await apiClient.get(`/students/programs/${programId}/attendances`);
+  return data;
+};
+
+/**
  * 프로그램 등록 폼의 "연계 핵심역량" select용 목록 조회. GET /api/admin/programs/competencies
  * 최상위(상위역량 없음) + 사용 중인 역량만 displayOrder 순으로 내려온다.
  * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number}[]>}
@@ -36,8 +57,6 @@ export const fetchCompetencyOptions = async () => {
 
 /**
  * 교직원(본인 소유) 비교과 프로그램 목록 조회. GET /api/admin/programs
- * 단건조회 API가 없어 이 목록 응답이 목록 화면·수정 진입 시 참조할 수 있는 유일한 데이터다.
- *
  * @param {Object} [params]
  * @param {string} [params.status] DRAFT/OPERATING/CLOSED. 생략 시 전체.
  * @param {string} [params.keyword] 프로그램명 부분 일치 검색어.
@@ -52,14 +71,34 @@ export const fetchProgramsAdmin = async (params) => {
 };
 
 /**
- * 비교과 프로그램 수정. PUT /api/admin/programs/{programId}
- * 모집중(작성중/반려) 상태·소유자 본인만 가능. ProgramRegisterRequestDTO와 동일한 형태를 기대한다.
+ * 교직원(본인 소유) 비교과 프로그램 단건 상세 조회. GET /api/admin/programs/{programId}
+ * 수정 폼 프리필용. 본인이 등록한 프로그램이 아니면 403(A004)이 내려온다.
  * @param {number} programId
- * @param {Object} payload
+ * @returns {Promise<Object>} ProgramAdminDetailResponseDTO
+ */
+export const fetchProgramDetailAdmin = async (programId) => {
+  const { data } = await apiClient.get(`/admin/programs/${programId}`);
+  return data;
+};
+
+/**
+ * 비교과 프로그램 수정. PUT /api/admin/programs/{programId}
+ * 모집중이며 본인 소유인 프로그램만 가능. 실패 시 403(A004) 또는 400(PROGRAM_NOT_EDITABLE/P009).
+ * @param {number} programId
+ * @param {Object} payload ProgramUpdateRequestDTO와 동일한 형태
  */
 export const updateProgram = async (programId, payload) => {
   const { data } = await apiClient.put(`/admin/programs/${programId}`, payload);
   return data;
+};
+
+/**
+ * 비교과 프로그램 삭제. DELETE /api/admin/programs/{programId}
+ * 모집중이며 본인 소유인 프로그램만 가능. 실패 시 403(A004) 또는 400(PROGRAM_NOT_DELETABLE/P010).
+ * @param {number} programId
+ */
+export const deleteProgram = async (programId) => {
+  await apiClient.delete(`/admin/programs/${programId}`);
 };
 
 /**
