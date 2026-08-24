@@ -21,6 +21,18 @@ export const fetchCounselingTypes = async () => {
 };
 
 /**
+ * 상담사가 일정을 등록할 때 선택할 수 있는 상담 유형만 조회한다.
+ * 서버가 활성·DIRECT 유형만 type_code ASC 순으로 내려주므로 FE에서 다시 거르지 않는다.
+ * 권한은 ROLE_ST200이며 전용 업무 에러 코드는 없다(미인증 401, 권한 없음 403).
+ *
+ * @returns {Promise<CounselingType[]>}
+ */
+export const fetchCounselorCounselingTypes = async () => {
+  const { data } = await apiClient.get('/counselors/counseling-types');
+  return data;
+};
+
+/**
  * @typedef {Object} AvailableSchedule
  * @property {number} scheduleId
  * @property {string} counselorName
