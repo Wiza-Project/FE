@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { StatusBadge, Pagination, toast, Button } from '@/components/common';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { StatusBadge, Pagination, ConfirmDialog, toast, Button } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
-import { fetchProgramsAdmin } from '@/api/programs';
+import { fetchProgramsAdmin, deleteProgram } from '@/api/programs';
+import { ApiError } from '@/api/client';
 import { formatDate } from '@/utils/date';
 
 const PAGE_SIZE = 10;
@@ -31,6 +32,15 @@ const toRow = (dto) => ({
   status: dto.programStatusLabel,
   raw: dto,
 });
+
+function getDeleteErrorMessage(error) {
+  if (!(error instanceof ApiError)) {
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  if (error.code === 'A004') return '이 프로그램을 삭제할 권한이 없습니다.';
+  if (error.code === 'P010') return error.message || '모집이 종료된 프로그램은 삭제할 수 없습니다.';
+  return error.message || '삭제 중 오류가 발생했습니다.';
+}
 
 function ApplyBar({ applied, capacity }) {
   const pct = capacity > 0 ? Math.min(100, (applied / capacity) * 100) : 0;
@@ -70,12 +80,15 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const { data: departmentCodes = [] } = useCommonCode('DEPARTMENT');
   const depts = ['전체', ...departmentCodes.map((c) => c.codeName)];
 
+  const queryClient = useQueryClient();
+  const adminProgramsQueryKey = ['adminPrograms', { status, keyword: submittedKeyword, page }];
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['adminPrograms', { status, keyword: submittedKeyword, page }],
+    queryKey: adminProgramsQueryKey,
     queryFn: () =>
       fetchProgramsAdmin({
         status: status || undefined,
@@ -84,6 +97,26 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
         size: PAGE_SIZE,
       }),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteProgram,
+    onSuccess: () => {
+      toast('삭제되었습니다.', 'success');
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
+    },
+    onError: (err) => {
+      toast(getDeleteErrorMessage(err), 'error');
+      setDeleteTarget(null);
+      // 상태 경합(예: 다른 탭에서 방금 모집이 종료됨) 가능성이 있으니 최신 isDeletable을 다시 받아온다.
+      queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
+    },
+  });
+
+  const handleDeleteConfirm = () => {
+    if (deleteMutation.isPending || !deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id);
+  };
 
   const rows = (data?.content ?? []).map(toRow);
   const categories = ['전체', ...Array.from(new Set(rows.map((r) => r.category).filter(Boolean)))];
@@ -251,10 +284,18 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 justify-center flex-wrap">
                           <button
+                            disabled={!p.raw.isEditable}
                             onClick={() => onEdit(p.id, p.raw)}
-                            className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB]"
+                            className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB]"
                           >
                             수정
+                          </button>
+                          <button
+                            disabled={!p.raw.isDeletable}
+                            onClick={() => setDeleteTarget(p)}
+                            className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-[#FEE2E2] text-[#CF222E] hover:bg-[#FECACA]"
+                          >
+                            삭제
                           </button>
                           <button
                             onClick={() => onParticipation(p.id, p.name)}
@@ -292,6 +333,16 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="프로그램 삭제 확인"
+        message="정말 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        danger
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => !deleteMutation.isPending && setDeleteTarget(null)}
+      />
     </div>
   );
 }

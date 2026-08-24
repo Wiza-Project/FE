@@ -1,9 +1,16 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Button, FileUpload, toast } from '@/components/common';
-import { createProgram, fetchCompetencyOptions } from '@/api/programs';
+import { Button, FileUpload, StatusBadge, toast } from '@/components/common';
+import {
+  createProgram,
+  fetchCompetencyOptions,
+  fetchProgramDetailAdmin,
+  updateProgram,
+} from '@/api/programs';
+import { ApiError } from '@/api/client';
 import { useCommonCode } from '@/hooks/useCommonCode';
 import { MILEAGE_POLICY_OPTIONS } from '@/data/programOptions';
+import { formatDate } from '@/utils/date';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
@@ -120,18 +127,37 @@ function toInstant(dateStr) {
   return new Date(`${dateStr}T00:00:00Z`).toISOString();
 }
 
+function getDetailErrorMessage(error) {
+  if (!(error instanceof ApiError)) {
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  if (error.code === 'A004') return '이 프로그램에 접근할 권한이 없습니다.';
+  if (error.code === 'P001') return '요청한 프로그램을 찾을 수 없습니다.';
+  return error.message || '프로그램 정보를 불러오지 못했습니다.';
+}
+
+function getEditErrorMessage(error) {
+  if (!(error instanceof ApiError)) {
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  if (error.code === 'A004') return '이 프로그램을 수정할 권한이 없습니다.';
+  if (error.code === 'P009') return error.message || '모집이 종료된 프로그램은 수정할 수 없습니다.';
+  return error.message || '수정 중 오류가 발생했습니다.';
+}
+
 // ─── Main form ────────────────────────────────────────────────────────────────
 
 /**
- * 비교과 프로그램 등록 폼. ProgramRegisterRequestDTO(백엔드)에 맞춘 4개 섹션으로 구성:
- * 기본정보 / 모집·운영·정원 / 역량·정책 / 첨부. 백엔드에 단건조회(GET /admin/programs/{id})
- * API가 없어 수정 폼을 제대로 프리필할 수 없으므로, 수정 모드는 안내 화면만 보여주고
- * 신규 등록만 POST /api/admin/programs로 실제 연동된다.
+ * 비교과 프로그램 등록/수정 폼. ProgramRegisterRequestDTO/ProgramUpdateRequestDTO(백엔드)에
+ * 맞춘 4개 섹션으로 구성: 기본정보 / 모집·운영·정원 / 역량·정책 / 첨부.
+ * 수정 모드는 GET /admin/programs/{id}로 상세를 받아와 프리필한 뒤 PUT으로 저장한다.
+ * 운영단위(operatingUnitCodeId)는 로그인한 담당자의 소속 부서로 고정되는 값이라
+ * 수정 폼에는 입력란을 두지 않는다 — 요청에 생략하면 백엔드가 기존 값을 그대로 유지한다.
  *
  * @param {Object} props
- * @param {number} [props.programId] 편집 대상 ID. 있으면 수정 모드(현재 비활성).
+ * @param {number} [props.programId] 편집 대상 ID. 있으면 수정 모드.
  * @param {() => void} props.onBack
- * @param {() => void} props.onSubmit 등록 완료 후 콜백
+ * @param {() => void} props.onSubmit 등록/수정 완료 후 콜백
  */
 export default function ProgramForm({ programId, onBack, onSubmit }) {
   const isEdit = !!programId;
@@ -156,10 +182,22 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
 
   // Validation / submit state
   const [errors, setErrors] = useState({});
+  const [prefilled, setPrefilled] = useState(false);
 
   const sec1Ref = useRef(null);
   const sec2Ref = useRef(null);
   const sec3Ref = useRef(null);
+
+  const {
+    data: detailData,
+    isLoading: detailLoading,
+    isError: detailErrored,
+    error: detailError,
+  } = useQuery({
+    queryKey: ['adminProgramDetail', programId],
+    queryFn: () => fetchProgramDetailAdmin(programId),
+    enabled: isEdit,
+  });
 
   const {
     data: competencyData,
@@ -168,7 +206,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   } = useQuery({
     queryKey: ['competencyOptions'],
     queryFn: fetchCompetencyOptions,
-    enabled: !isEdit,
   });
   const competencyOptions = (competencyData ?? []).map((c) => ({
     id: c.competencyId,
@@ -185,8 +222,39 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     id: c.codeId,
     label: c.codeName,
   }));
-  const { data: programTypeCodes = [] } = useCommonCode(isEdit ? undefined : 'PROGRAM_TYPE');
+  const { data: programTypeCodes = [] } = useCommonCode('PROGRAM_TYPE');
   const programTypeOptions = programTypeCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
+
+  // 수정 모드 프리필: 상세조회 + 역량/분류 옵션 목록이 모두 준비되면 한 번만 채운다
+  // (역량·분류는 상세 응답이 라벨만 주므로 옵션 목록에서 이름이 일치하는 id로 역매핑한다).
+  useEffect(() => {
+    if (!isEdit || prefilled || !detailData) return;
+    if (competencyOptions.length === 0 || programTypeOptions.length === 0) return;
+
+    setName(detailData.programName ?? '');
+    setDescription(detailData.description ?? '');
+    setRcS(formatDate(detailData.recruitmentStartsAt));
+    setRcE(formatDate(detailData.recruitmentEndsAt));
+    setOpS(formatDate(detailData.operationStartsAt));
+    setOpE(formatDate(detailData.operationEndsAt));
+    setCapacity(detailData.capacity ?? '');
+    setCompletionRate(
+      detailData.completionRate != null ? Number(detailData.completionRate) : 80,
+    );
+    setMileagePolicyId(
+      detailData.mileagePolicyId != null ? String(detailData.mileagePolicyId) : '',
+    );
+
+    const competencyMatch = competencyOptions.find((o) => o.label === detailData.competencyName);
+    if (competencyMatch) setCompetencyId(String(competencyMatch.id));
+
+    const programTypeMatch = programTypeOptions.find(
+      (o) => o.label === detailData.programTypeCodeName,
+    );
+    if (programTypeMatch) setProgramTypeCodeId(String(programTypeMatch.id));
+
+    setPrefilled(true);
+  }, [isEdit, prefilled, detailData, competencyOptions, programTypeOptions]);
 
   const registerMutation = useMutation({
     mutationFn: createProgram,
@@ -196,6 +264,17 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     },
     onError: (err) => {
       toast(err.message ?? '등록에 실패했습니다.', 'error');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (payload) => updateProgram(programId, payload),
+    onSuccess: () => {
+      toast('수정 내용이 저장되었습니다.', 'success');
+      onSubmit();
+    },
+    onError: (err) => {
+      toast(getEditErrorMessage(err), 'error');
     },
   });
 
@@ -221,6 +300,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     if (!operEnd) newErrors.operEnd = true;
     if (!capacity || Number(capacity) <= 0) newErrors.capacity = true;
     if (!competencyId) newErrors.competencyId = true;
+    // programTypeCodeId는 등록 시엔 생략하면 백엔드가 기본값을 채워주지만, 수정 API는 필수값이다.
+    if (isEdit && !programTypeCodeId) newErrors.programTypeCodeId = true;
     setErrors(newErrors);
 
     if (newErrors.name) {
@@ -237,6 +318,11 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     ) {
       sec2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       toast('모집·운영 기간과 정원을 확인해 주세요.', 'error');
+      return false;
+    }
+    if (newErrors.programTypeCodeId) {
+      sec1Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      toast('프로그램 분류를 선택해 주세요.', 'error');
       return false;
     }
     if (newErrors.competencyId) {
@@ -277,7 +363,33 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     registerMutation.mutate(buildPayload());
   };
 
-  if (isEdit) {
+  const handleEditSave = () => {
+    if (!validate()) return;
+    updateMutation.mutate(buildPayload());
+  };
+
+  // 수정 모드: 상세조회가 끝나고 옵션 목록까지 프리필됐을 때만 폼을 보여준다.
+  if (isEdit && (detailLoading || !prefilled) && !detailErrored) {
+    return (
+      <div>
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-[12px] text-[#9AA0A6] hover:text-[#1F2328] transition-colors"
+          >
+            ← 목록
+          </button>
+          <div className="h-4 w-px bg-[#E5E7EB]" />
+          <h1 className="text-[20px] font-black text-[#1F2328]">프로그램 수정</h1>
+        </div>
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center text-[13px] text-[#9AA0A6]">
+          불러오는 중...
+        </div>
+      </div>
+    );
+  }
+
+  if (isEdit && detailErrored) {
     return (
       <div>
         <div className="flex items-center gap-4 mb-6">
@@ -292,12 +404,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         </div>
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center">
           <p className="text-[14px] font-bold text-[#1F2328] mb-2">
-            아직 프로그램 수정을 지원하지 않습니다
-          </p>
-          <p className="text-[12px] text-[#9AA0A6] leading-relaxed mb-6">
-            수정 화면을 채우려면 프로그램 단건조회 API(GET /admin/programs/&#123;id&#125;)가 필요한데
-            <br />
-            백엔드에 아직 준비되어 있지 않습니다. API가 추가되면 연동하겠습니다.
+            {getDetailErrorMessage(detailError)}
           </p>
           <Button variant="outline" onClick={onBack}>
             목록으로
@@ -307,7 +414,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     );
   }
 
-  const saving = registerMutation.isPending;
+  const saving = isEdit ? updateMutation.isPending : registerMutation.isPending;
 
   return (
     <div>
@@ -320,7 +427,19 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           ← 목록
         </button>
         <div className="h-4 w-px bg-[#E5E7EB]" />
-        <h1 className="text-[20px] font-black text-[#1F2328]">프로그램 등록</h1>
+        <h1 className="text-[20px] font-black text-[#1F2328]">
+          {isEdit ? '프로그램 수정' : '프로그램 등록'}
+        </h1>
+        {isEdit && (
+          <>
+            <span className="text-[11px] font-mono text-[#9AA0A6] bg-[#F3F4F6] px-2 py-0.5 rounded-[4px]">
+              #{programId}
+            </span>
+            {detailData?.programStatusLabel && (
+              <StatusBadge status={detailData.programStatusLabel} size="sm" />
+            )}
+          </>
+        )}
       </div>
 
       <div className="flex flex-col gap-5 pb-24">
@@ -350,21 +469,24 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                 </Field>
               </div>
 
-              <Field label="운영단위">
-                <IdSelect
-                  value={operatingUnitCodeId}
-                  onChange={setOperatingUnitCodeId}
-                  options={operatingUnitOptions}
-                  placeholder="선택 안함 (서버 기본값 사용)"
-                />
-              </Field>
+              {!isEdit && (
+                <Field label="운영단위">
+                  <IdSelect
+                    value={operatingUnitCodeId}
+                    onChange={setOperatingUnitCodeId}
+                    options={operatingUnitOptions}
+                    placeholder="선택 안함 (서버 기본값 사용)"
+                  />
+                </Field>
+              )}
 
-              <Field label="프로그램분류">
+              <Field label="프로그램분류" required={isEdit} error={errors.programTypeCodeId}>
                 <IdSelect
                   value={programTypeCodeId}
                   onChange={setProgramTypeCodeId}
                   options={programTypeOptions}
-                  placeholder="선택 안함 (서버 기본값 사용)"
+                  placeholder={isEdit ? '선택하세요' : '선택 안함 (서버 기본값 사용)'}
+                  error={errors.programTypeCodeId}
                 />
               </Field>
             </div>
@@ -460,7 +582,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               }}
             />
             <p className="text-[10px] text-[#9AA0A6] mt-1.5">
-              실제 파일 업로드 연동 전이라 등록 시 서버에는 전송되지 않습니다.
+              {isEdit
+                ? '실제 파일 업로드 연동 전이라 여기서 새로 올려도 저장되지 않으며, 기존에 첨부된 파일이 있다면 그대로 유지됩니다.'
+                : '실제 파일 업로드 연동 전이라 등록 시 서버에는 전송되지 않습니다.'}
             </p>
           </Field>
         </Section>
@@ -473,8 +597,12 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           <Button variant="outline" onClick={onBack}>
             취소
           </Button>
-          <Button loading={saving} onClick={handleRegister} style={{ background: ACCENT }}>
-            등록
+          <Button
+            loading={saving}
+            onClick={isEdit ? handleEditSave : handleRegister}
+            style={{ background: ACCENT }}
+          >
+            {isEdit ? '수정 저장' : '등록'}
           </Button>
         </div>
       </div>
