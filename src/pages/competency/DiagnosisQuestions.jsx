@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { fetchAssessmentResume, saveAssessmentResponse } from '@/api/competency';
+import { fetchAssessmentResume, saveAssessmentResponse, submitAssessment } from '@/api/competency';
 import { ApiError } from '@/api/client';
 import { ConfirmDialog, EmptyState, SkeletonLoader, toast } from '@/components/common';
 
@@ -118,7 +118,10 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
   const currentQs = items.slice(page * QUESTIONS_PER_PAGE, (page + 1) * QUESTIONS_PER_PAGE);
   const answeredCount = Object.keys(answers).length;
   const unanswered = items.length - answeredCount;
-  const canSubmit = items.length > 0 && unanswered === 0;
+  // pendingIds가 비어있어야 함: 마지막 문항 저장이 아직 서버에 도착 전이면(특히 이미 응답된
+  // 문항을 수정하는 경우 answeredCount는 계속 총 문항 수와 같아 이 조건 없이는 걸러지지 않는다)
+  // submitAssessment가 먼저 처리돼 서버가 그 문항을 미응답으로 판단할 수 있다.
+  const canSubmit = items.length > 0 && unanswered === 0 && pendingIds.size === 0;
   const progress = items.length ? Math.round((answeredCount / items.length) * 100) : 0;
 
   // Competency completion status
@@ -155,11 +158,38 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
     saveMutation.mutate({ attemptId, questionId, selectedValue: val });
   };
 
+  const submitMutation = useMutation({
+    mutationFn: submitAssessment,
+    onSuccess: () => {
+      toast('진단이 제출되었습니다.', 'success');
+      onComplete();
+    },
+    onError: (e) => {
+      // Q005(미응답 문항 있음): 서버 기준 미응답 문항을 로컬 answers에서도 제거해 화면이
+      // "이미 응답됨"으로 잘못 표시되지 않게 한 뒤, 그 문항으로 자동 이동한다.
+      if (e instanceof ApiError && e.code === 'Q005' && Array.isArray(e.data)) {
+        const missingIds = e.data;
+        applyAnswers((prev) => {
+          const next = { ...prev };
+          missingIds.forEach((questionId) => delete next[questionId]);
+          return next;
+        });
+        const firstMissingIdx = items.findIndex((item) => missingIds.includes(item.questionId));
+        if (firstMissingIdx !== -1) {
+          setPage(Math.floor(firstMissingIdx / QUESTIONS_PER_PAGE));
+        }
+      }
+      toast(e instanceof ApiError ? e.message : '제출에 실패했습니다.', 'error');
+    },
+  });
+
   const handleSubmit = () => {
     setConfirmOpen(false);
-    // BE 제출 API(#9)가 아직 없어 목업 동작 유지 — #9 연동 시 실제 제출 호출로 교체
-    toast('진단이 제출되었습니다.', 'success');
-    setTimeout(onComplete, 500);
+    // 버튼의 disabled 속성만으로는 다음 렌더 전에 들어오는 중복 클릭(예: 확인 다이얼로그를 빠르게
+    // 두 번 확정)을 못 막는다 — setAnswer의 pendingRef와 같은 이유로 여기서도 동기 가드를 둔다.
+    // canSubmit도 함께 확인: 다이얼로그가 열려 있는 사이 마지막 문항 저장이 아직 안 끝났을 수 있다.
+    if (!canSubmit || submitMutation.isPending) return;
+    submitMutation.mutate(attemptId);
   };
 
   const handleSave = () =>
@@ -363,7 +393,9 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
               <path d="M8 6v4M8 12h.01" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
             <span className="text-[12px] text-[#D97706] font-semibold">
-              미응답 문항 {unanswered}개가 남아 있어 최종 제출할 수 없습니다.
+              {unanswered > 0
+                ? `미응답 문항 ${unanswered}개가 남아 있어 최종 제출할 수 없습니다.`
+                : '응답 저장 중입니다. 잠시 후 다시 시도해 주세요.'}
             </span>
           </div>
         )}
@@ -400,11 +432,11 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
             ) : (
               <button
                 onClick={() => canSubmit && setConfirmOpen(true)}
-                disabled={!canSubmit}
+                disabled={!canSubmit || submitMutation.isPending}
                 className="h-9 px-6 text-[13px] font-bold text-white rounded-[6px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: '#7C3AED' }}
               >
-                최종 제출
+                {submitMutation.isPending ? '제출 중...' : '최종 제출'}
               </button>
             )}
           </div>
