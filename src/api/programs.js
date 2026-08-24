@@ -106,6 +106,7 @@ export const deleteProgram = async (programId) => {
  * @param {number} programId
  * @param {Object} [params]
  * @param {string} [params.status] APPLIED/WAITLISTED/APPROVED/REJECTED/CANCELLED
+ * @param {string} [params.keyword] 학생 이름/학번 부분 일치 검색어.
  * @returns {Promise<{content: object[], page: number, size: number, totalElements: number, totalPages: number}>}
  */
 export const fetchProgramApplications = async (programId, params) => {

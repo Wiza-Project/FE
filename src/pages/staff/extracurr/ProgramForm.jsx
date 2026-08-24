@@ -254,12 +254,26 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     );
 
     const competencyMatch = competencyOptions.find((o) => o.label === detailData.competencyName);
-    if (competencyMatch) setCompetencyId(String(competencyMatch.id));
+    if (competencyMatch) {
+      setCompetencyId(String(competencyMatch.id));
+    } else if (detailData.competencyName) {
+      toast(
+        `기존 핵심역량('${detailData.competencyName}')을 목록에서 찾지 못했습니다. 다시 선택해 주세요.`,
+        'error',
+      );
+    }
 
     const programTypeMatch = programTypeOptions.find(
       (o) => o.label === detailData.programTypeCodeName,
     );
-    if (programTypeMatch) setProgramTypeCodeId(String(programTypeMatch.id));
+    if (programTypeMatch) {
+      setProgramTypeCodeId(String(programTypeMatch.id));
+    } else if (detailData.programTypeCodeName) {
+      toast(
+        `기존 프로그램분류('${detailData.programTypeCodeName}')를 목록에서 찾지 못했습니다. 다시 선택해 주세요.`,
+        'error',
+      );
+    }
 
     setPrefilled(true);
   }, [isEdit, prefilled, detailData, competencyOptions, programTypeOptions]);

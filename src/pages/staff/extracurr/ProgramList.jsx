@@ -118,7 +118,8 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
 
   const totalItems = rows.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
-  const paged = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const currentPage = Math.min(page, totalPages);
+  const paged = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const runSearch = () => {
     setPage(1);
@@ -145,8 +146,11 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
       {/* FilterBar */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-4 grid grid-cols-3 gap-3">
         <div>
-          <label className="block text-[10px] font-semibold text-[#656D76] mb-1">상태</label>
+          <label htmlFor="admin-program-status" className="block text-[10px] font-semibold text-[#656D76] mb-1">
+            상태
+          </label>
           <select
+            id="admin-program-status"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value);
@@ -300,7 +304,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
         {!isLoading && !isError && (
           <div className="px-4 pb-3">
             <Pagination
-              page={page}
+              page={currentPage}
               totalPages={totalPages}
               onChange={setPage}
               totalItems={totalItems}
@@ -316,6 +320,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
         message="정말 삭제하시겠습니까?"
         confirmLabel="삭제"
         danger
+        loading={deleteMutation.isPending}
         onConfirm={handleDeleteConfirm}
         onCancel={() => !deleteMutation.isPending && setDeleteTarget(null)}
       />

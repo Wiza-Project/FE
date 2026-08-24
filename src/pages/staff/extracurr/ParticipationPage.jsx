@@ -201,6 +201,7 @@ function ApplicationReview({ programId }) {
   const queryClient = useQueryClient();
   const [filterStatus, setFs] = useState('전체');
   const [keyword, setKw] = useState('');
+  const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [rejectOpen, setRjOpen] = useState(false);
   const [rejectDetail, setRjDetail] = useState('');
@@ -215,17 +216,24 @@ function ApplicationReview({ programId }) {
     { value: 'REJECTED', label: '반려' },
   ];
 
-  const queryKey = ['programApplications', programId, filterStatus, page];
+  const queryKey = ['programApplications', programId, filterStatus, submittedKeyword, page];
   const { data, isLoading, isError, error } = useQuery({
     queryKey,
     queryFn: () =>
       fetchProgramApplications(programId, {
         status: filterStatus === '전체' ? undefined : filterStatus,
+        keyword: submittedKeyword || undefined,
         page: page - 1,
         size: PAGE_SIZE,
       }),
     enabled: !!programId,
   });
+
+  const runSearch = () => {
+    setPage(1);
+    setSelected(new Set());
+    setSubmittedKeyword(keyword);
+  };
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['programApplications', programId] });
 
@@ -266,17 +274,14 @@ function ApplicationReview({ programId }) {
   });
 
   const rows = data?.content ?? [];
-  const filtered = rows.filter(
-    (a) =>
-      !keyword || a.studentName?.includes(keyword) || a.studentNo?.includes(keyword),
-  );
+  const filtered = rows;
 
   // 일괄 승인/반려는 개별 행 버튼(canApprove/canReject)과 동일한 상태 조건만 대상으로 한다.
   // 체크박스 자체는 상태와 무관하게 선택 가능하므로, 실제 요청 직전에 조건에 안 맞는 건을 걸러낸다.
   const eligibleIds = (ids, isEligible) =>
     ids.filter((id) => {
-      const status = filtered.find((a) => a.applicationId === id)?.applicationStatus;
-      return isEligible(status);
+      const app = filtered.find((a) => a.applicationId === id);
+      return !!app && isEligible(app.applicationStatus);
     });
 
   const allChecked = filtered.length > 0 && filtered.every((a) => selected.has(a.applicationId));
@@ -324,6 +329,7 @@ function ApplicationReview({ programId }) {
             onChange={(e) => {
               setFs(e.target.value);
               setPage(1);
+              setSelected(new Set());
             }}
             className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
           >
@@ -336,12 +342,21 @@ function ApplicationReview({ programId }) {
         </div>
         <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
           <label className="text-[10px] font-semibold text-[#656D76]">학번·성명</label>
-          <input
-            value={keyword}
-            onChange={(e) => setKw(e.target.value)}
-            placeholder="검색..."
-            className="h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-          />
+          <div className="flex gap-1.5">
+            <input
+              value={keyword}
+              onChange={(e) => setKw(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+              placeholder="검색..."
+              className="flex-1 h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
+            />
+            <button
+              onClick={runSearch}
+              className="h-8 px-3 text-[12px] font-bold rounded-[6px] bg-[#374151] text-white hover:bg-[#1F2937] transition-colors"
+            >
+              조회
+            </button>
+          </div>
         </div>
         <button
           onClick={() => toast('엑셀 다운로드 API가 아직 준비되지 않았습니다.', 'info')}
@@ -462,7 +477,10 @@ function ApplicationReview({ programId }) {
       <Pagination
         page={page}
         totalPages={data?.totalPages || 1}
-        onChange={setPage}
+        onChange={(p) => {
+          setPage(p);
+          setSelected(new Set());
+        }}
         totalItems={data?.totalElements}
         pageSize={PAGE_SIZE}
       />
@@ -773,7 +791,16 @@ function ResultJudge({ programId }) {
         </div>
         <div className="shrink-0">
           <p className="text-[11px] font-bold text-[#656D76] mb-2 text-center">수료율</p>
-          <DonutChart segments={donutData} size={140} centerValue={`${completionPct}%`} />
+          {rows.length > 0 ? (
+            <DonutChart segments={donutData} size={140} centerValue={`${completionPct}%`} />
+          ) : (
+            <div
+              role="status"
+              className="w-[140px] h-[140px] flex items-center justify-center text-center text-[11px] text-[#9AA0A6] rounded-full border border-dashed border-[#E5E7EB] px-3"
+            >
+              승인된 참여자가 없어 표시할 데이터가 없습니다.
+            </div>
+          )}
         </div>
       </div>
 
