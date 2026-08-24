@@ -459,6 +459,10 @@ export default function CounselingApply({ onComplete, onBack }) {
                       setSelectedType(type.typeCode);
                       setCounselorFilter(null);
                       setSelectedSlot(null);
+                      // 유형을 바꾸면 이전 유형에서 난 제출 실패·검증 오류는 더 이상 유효하지 않으므로 지운다.
+                      // 그렇지 않으면 새 일정 화면에 이전 오류 메시지가 그대로 남는다.
+                      setSubmitError('');
+                      setMemoError('');
                     }}
                     className={`w-full text-left rounded-[10px] border-2 p-4 transition-all ${isSelected ? 'bg-[#ECFEFF] shadow-[0_0_0_1px_rgba(8,145,178,0.2)]' : 'bg-white border-[#E5E7EB] hover:border-[#A5F3FC]'}`}
                     style={isSelected ? { borderColor: ACCENT } : {}}
