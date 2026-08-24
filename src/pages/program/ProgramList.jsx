@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { fetchPrograms } from '@/api/programs';
 import { PageHeader, StatusBadge, Pagination, Button } from '@/components/common';
 import { formatDate } from '@/utils/date';
-import { useCommonCode } from '@/hooks/useCommonCode';
 import { fetchAllPages } from '@/utils/pagination';
 
 const ACCENT = '#2563EB';
@@ -91,7 +90,6 @@ export default function ProgramList({ onDetail, onMyApplications }) {
   const [chip, setChip] = useState('전체');
   const [sort, setSort] = useState('new');
   const [comp, setComp] = useState('');
-  const [dept, setDept] = useState('');
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
@@ -100,13 +98,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
   const [error, setError] = useState(null);
   const PAGE_SIZE = 10;
 
-  const { data: departmentCodes = [] } = useCommonCode('DEPARTMENT');
-  const deptOptions = [
-    { value: '', label: '주관부서 전체' },
-    ...departmentCodes.map((c) => ({ value: c.codeName, label: c.codeName })),
-  ];
-
-  // 핵심역량/주관부서/모집중 칩 필터가 백엔드 쿼리 파라미터로 지원되지 않아,
+  // 핵심역량/모집중 칩 필터가 백엔드 쿼리 파라미터로 지원되지 않아,
   // 검색어(keyword)에 해당하는 전체 목록을 한 번에 받아와 필터링·페이지네이션을 프론트에서 처리한다.
   useEffect(() => {
     let cancelled = false;
@@ -141,10 +133,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
   ];
 
   const filtered = allPrograms.filter(
-    (p) =>
-      (!comp || p.competency === comp) &&
-      (!dept || p.dept === dept) &&
-      (chip !== '모집중' || isRecruiting(p)),
+    (p) => (!comp || p.competency === comp) && (chip !== '모집중' || isRecruiting(p)),
   );
   if (sort === 'deadline') {
     filtered.sort((a, b) => new Date(a.recruitEnd) - new Date(b.recruitEnd));
@@ -158,7 +147,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
 
   useEffect(() => {
     setPage(1);
-  }, [comp, dept, chip, sort]);
+  }, [comp, chip, sort]);
 
   const runSearch = () => {
     setPage(1);
@@ -199,20 +188,6 @@ export default function ProgramList({ onDetail, onMyApplications }) {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold text-[#656D76] uppercase">주관부서</label>
-            <select
-              value={dept}
-              onChange={(e) => setDept(e.target.value)}
-              className="h-9 px-3 pr-7 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white appearance-none focus:outline-none focus:border-[#2563EB]"
-            >
-              {deptOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold text-[#656D76] uppercase">검색어</label>
             <input
               value={keyword}
@@ -225,7 +200,6 @@ export default function ProgramList({ onDetail, onMyApplications }) {
             <button
               onClick={() => {
                 setComp('');
-                setDept('');
                 setKeyword('');
                 setChip('전체');
                 setPage(1);

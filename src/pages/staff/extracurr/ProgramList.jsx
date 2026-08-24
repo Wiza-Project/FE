@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { StatusBadge, Pagination, ConfirmDialog, toast, Button } from '@/components/common';
-import { useCommonCode } from '@/hooks/useCommonCode';
 import { fetchProgramsAdmin, deleteProgram } from '@/api/programs';
 import { ApiError } from '@/api/client';
 import { formatDate } from '@/utils/date';
@@ -76,17 +75,10 @@ function ApplyBar({ applied, capacity }) {
  */
 export default function ProgramList({ onNew, onEdit, onParticipation }) {
   const [status, setStatus] = useState('');
-  const [category, setCategory] = useState('전체');
-  const [dept, setDept] = useState('전체');
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState(null);
-
-  const { data: departmentCodes = [] } = useCommonCode('DEPARTMENT');
-  const depts = ['전체', ...departmentCodes.map((c) => c.codeName)];
-  const { data: programTypeCodes = [] } = useCommonCode('PROGRAM_TYPE');
-  const categories = ['전체', ...programTypeCodes.map((c) => c.codeName)];
 
   const queryClient = useQueryClient();
   const adminProgramsQueryKey = ['adminPrograms', { status, keyword: submittedKeyword }];
@@ -124,14 +116,9 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
 
   const rows = (data ?? []).map(toRow);
 
-  // 분류/주관부서는 백엔드 목록 API가 쿼리 파라미터로 지원하지 않아, 상태/검색어로
-  // 걸러진 전체 목록을 받아온 뒤 분류·주관부서 필터링과 페이지네이션을 프론트에서 처리한다.
-  const filtered = rows.filter(
-    (r) => (category === '전체' || r.category === category) && (dept === '전체' || r.dept === dept),
-  );
-  const totalItems = filtered.length;
+  const totalItems = rows.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paged = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const runSearch = () => {
     setPage(1);
@@ -156,7 +143,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
       </div>
 
       {/* FilterBar */}
-      <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-4 grid grid-cols-5 gap-3">
+      <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-4 grid grid-cols-3 gap-3">
         <div>
           <label className="block text-[10px] font-semibold text-[#656D76] mb-1">상태</label>
           <select
@@ -174,26 +161,6 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
             ))}
           </select>
         </div>
-        {[
-          { label: '분류', value: category, set: setCategory, opts: categories },
-          { label: '주관부서', value: dept, set: setDept, opts: depts },
-        ].map((f) => (
-          <div key={f.label}>
-            <label className="block text-[10px] font-semibold text-[#656D76] mb-1">{f.label}</label>
-            <select
-              value={f.value}
-              onChange={(e) => {
-                f.set(e.target.value);
-                setPage(1);
-              }}
-              className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
-            >
-              {f.opts.map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </select>
-          </div>
-        ))}
         <div className="col-span-2">
           <label className="block text-[10px] font-semibold text-[#656D76] mb-1">프로그램명</label>
           <div className="flex gap-1.5">
