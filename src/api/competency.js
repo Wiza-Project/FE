@@ -297,3 +297,27 @@ export const saveAssessmentResponse = async ({ attemptId, questionId, selectedVa
   );
   return data;
 };
+
+/**
+ * 진단 제출. 미응답 문항이 없으면 제출을 확정하고, 같은 트랜잭션에서
+ * 역량별 환산점수를 산출한다. 미응답 문항이 있으면 ApiError(코드 Q005)가 throw되며,
+ * `error.data`에 미응답 questionId 배열이 함께 담겨 온다.
+ *
+ * @param {number} attemptId
+ * @returns {Promise<{
+ *   attemptId: number,
+ *   attemptStatus: string,
+ *   submittedAt: string,
+ *   scores: Array<{
+ *     competencyId: number,
+ *     competencyName: string,
+ *     displayOrder: number,
+ *     rawScore: number,
+ *     convertedScore: number,
+ *   }>,
+ * }>}
+ */
+export const submitAssessment = async (attemptId) => {
+  const { data } = await apiClient.post(`/students/assessment-attempts/${attemptId}/submit`);
+  return data;
+};
