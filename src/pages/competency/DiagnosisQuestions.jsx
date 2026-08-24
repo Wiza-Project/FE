@@ -43,6 +43,7 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
     isLoading,
     isError,
     error,
+    refetch,
   } = useQuery({
     queryKey: ['assessmentResume', attemptId],
     queryFn: () => fetchAssessmentResume(attemptId),
@@ -165,7 +166,20 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
     toast('모든 응답이 자동 저장되었습니다. 나중에 이어서 응시할 수 있습니다.', 'success');
 
   if (!attemptId) {
-    return <EmptyState message="진단 응시 정보를 찾을 수 없습니다." />;
+    return (
+      <EmptyState
+        message="진단 응시 정보를 찾을 수 없습니다."
+        action={
+          <button
+            type="button"
+            onClick={onBack}
+            className="h-9 px-5 text-[13px] font-semibold text-[#656D76] border border-[#E5E7EB] rounded-[6px] hover:bg-[#F9FAFB] transition-colors"
+          >
+            ← 진단 안내로 돌아가기
+          </button>
+        }
+      />
+    );
   }
 
   if (isLoading) {
@@ -181,6 +195,25 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
       <EmptyState
         message={error instanceof ApiError ? error.message : '문항을 불러오지 못했습니다.'}
         sub="잠시 후 다시 시도해 주세요."
+        action={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="h-9 px-5 text-[13px] font-bold text-white rounded-[6px]"
+              style={{ background: '#7C3AED' }}
+            >
+              다시 시도
+            </button>
+            <button
+              type="button"
+              onClick={onBack}
+              className="h-9 px-5 text-[13px] font-semibold text-[#656D76] border border-[#E5E7EB] rounded-[6px] hover:bg-[#F9FAFB] transition-colors"
+            >
+              ← 돌아가기
+            </button>
+          </div>
+        }
       />
     );
   }
