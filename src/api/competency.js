@@ -245,3 +245,55 @@ export const updateAssessmentRound = async ({
   });
   return data;
 };
+
+/**
+ * @typedef {Object} AssessmentResumeItem
+ * @property {number} questionId
+ * @property {number} competencyId
+ * @property {string} competencyName
+ * @property {number} displayOrder
+ * @property {string} questionText
+ * @property {Array<{value: number, label: string}>} responseOptions
+ * @property {number|null} selectedValue 미응답이면 null
+ */
+
+/**
+ * 진단 응시 이어하기 조회 (SCR-S01 #8). 회차 문항 전체와 기존 저장된 응답값(없으면 null),
+ * 진행률을 함께 조회한다. 이미 제출된 attempt를 조회하면 ApiError(코드 Q004)가 throw된다.
+ *
+ * @param {number} attemptId
+ * @returns {Promise<{
+ *   attemptId: number,
+ *   attemptStatus: string,
+ *   progress: {answeredCount: number, totalCount: number},
+ *   items: AssessmentResumeItem[],
+ * }>}
+ */
+export const fetchAssessmentResume = async (attemptId) => {
+  const { data } = await apiClient.get(`/students/assessment-attempts/${attemptId}/responses`);
+  return data;
+};
+
+/**
+ * 문항 응답 저장 (SCR-S01 #8). 이미 저장된 응답이 있으면 값을 갱신한다(upsert).
+ * BE에서 응답 저장 자체가 중도저장이라 별도의 임시저장 API는 없다 — 문항을 선택할 때마다
+ * 이 함수를 호출하는 것이 곧 중도저장이다.
+ *
+ * @param {Object} params
+ * @param {number} params.attemptId
+ * @param {number} params.questionId
+ * @param {number} params.selectedValue
+ * @returns {Promise<{
+ *   questionId: number,
+ *   selectedValue: number,
+ *   savedAt: string,
+ *   progress: {answeredCount: number, totalCount: number},
+ * }>}
+ */
+export const saveAssessmentResponse = async ({ attemptId, questionId, selectedValue }) => {
+  const { data } = await apiClient.put(
+    `/students/assessment-attempts/${attemptId}/responses/${questionId}`,
+    { selectedValue },
+  );
+  return data;
+};

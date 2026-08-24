@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   closeCounselorSchedule,
   createCounselorSchedule,
+  fetchCounselorCounselingTypes,
   fetchCounselorSchedules,
   updateCounselorSchedule,
 } from '@/api/counsel';
@@ -16,6 +17,7 @@ const HALF_COUNT = 18;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCHEDULE_QUERY_KEY = ['counselorSchedules'];
+const TYPE_QUERY_KEY = ['counselorCounselingTypes'];
 const CLOSE_MODAL_DESCRIPTION_ID = 'counselor-schedule-close-description';
 
 function pad(value) {
@@ -160,7 +162,7 @@ function validateSchedule(form) {
   const location = form.location.trim();
 
   if (!Number.isInteger(counselingTypeId) || counselingTypeId <= 0)
-    return { error: '상담 유형 ID는 1 이상의 정수여야 합니다.' };
+    return { error: '상담 유형을 선택해 주세요.' };
   if (!startsAt || new Date(startsAt).getTime() <= Date.now())
     return { error: '시작 시각은 현재 시각 이후여야 합니다.' };
   if (!endsAt || new Date(endsAt).getTime() <= new Date(startsAt).getTime())
@@ -187,10 +189,17 @@ function validateSchedule(form) {
   };
 }
 
-function ScheduleForm({ form, setForm, formError }) {
+function ScheduleForm({ form, setForm, formError, types, typesLoading, typesError }) {
   const updateField = (field, value) => setForm((previous) => ({ ...previous, [field]: value }));
   const bookingDeadlineMax = getPreviousKstDate(form.startsAt);
   const bookingDeadlineMin = getTodayKstDate();
+  // 수정 중인 일정의 유형이 현재 DIRECT 목록에 없을 수 있다(나중에 비활성화된 경우).
+  // 그때 select 값이 비어 저장이 막히지 않도록 기존 값을 별도 옵션으로 끼워 표시한다.
+  const hasSelectedInList = types.some(
+    (type) => String(type.counselingTypeId) === form.counselingTypeId,
+  );
+  const showFallbackOption = form.counselingTypeId !== '' && !hasSelectedInList;
+  const isEmptyTypes = !typesLoading && !typesError && types.length === 0;
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -198,21 +207,35 @@ function ScheduleForm({ form, setForm, formError }) {
           className="mb-1.5 block text-[11px] font-semibold text-[#656D76]"
           htmlFor="counselingTypeId"
         >
-          상담 유형 ID <span className="text-[#CF222E]">*</span>
+          상담 유형 <span className="text-[#CF222E]">*</span>
         </label>
-        <input
+        <select
           id="counselingTypeId"
-          type="number"
-          min="1"
-          step="1"
           value={form.counselingTypeId}
           onChange={(event) => updateField('counselingTypeId', event.target.value)}
-          className="h-9 w-full rounded-[6px] border border-[#E5E7EB] px-3 text-[13px] focus:border-[#374151] focus:outline-none"
+          disabled={typesLoading || !!typesError}
+          className="h-9 w-full rounded-[6px] border border-[#E5E7EB] bg-white px-3 text-[13px] focus:border-[#374151] focus:outline-none disabled:bg-[#F9FAFB] disabled:text-[#9AA0A6]"
           required
-        />
-        <p className="mt-1 text-[10px] text-[#9AA0A6]">
-          상담 유형 조회 계약이 없어 ID를 직접 입력합니다.
-        </p>
+        >
+          <option value="" disabled>
+            {typesLoading ? '상담 유형을 불러오는 중…' : '상담 유형을 선택하세요'}
+          </option>
+          {types.map((type) => (
+            <option key={type.counselingTypeId} value={type.counselingTypeId}>
+              {type.typeName}
+            </option>
+          ))}
+          {showFallbackOption && (
+            <option value={form.counselingTypeId}>유형 {form.counselingTypeId} (목록에 없음)</option>
+          )}
+        </select>
+        {typesError ? (
+          <p className="mt-1 text-[10px] text-[#CF222E]">
+            상담 유형을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+          </p>
+        ) : isEmptyTypes ? (
+          <p className="mt-1 text-[10px] text-[#CF222E]">현재 등록 가능한 상담 유형이 없습니다.</p>
+        ) : null}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -413,6 +436,22 @@ export default function MySchedule() {
     isLoading,
     error,
   } = useQuery({ queryKey: SCHEDULE_QUERY_KEY, queryFn: fetchCounselorSchedules });
+  const {
+    data: counselingTypes = [],
+    isLoading: typesLoading,
+    error: typesError,
+  } = useQuery({ queryKey: TYPE_QUERY_KEY, queryFn: fetchCounselorCounselingTypes });
+  // 그리드·리스트에서 날 숫자 id 대신 유형 이름을 보여주기 위한 조회용 맵.
+  // 목록에 없는 id(비활성화·과거 CENTER 유형)는 정보를 숨기지 않고 "유형 N"으로 폴백한다.
+  const typeNameById = useMemo(() => {
+    const map = new Map();
+    counselingTypes.forEach((type) => map.set(type.counselingTypeId, type.typeName));
+    return map;
+  }, [counselingTypes]);
+  const typeLabel = (id) => typeNameById.get(id) ?? `유형 ${id}`;
+  // 신규 등록은 선택할 유형이 있어야 가능하다. 수정은 기존 값(폴백 옵션)이 있어 목록이 비어도 허용한다.
+  const canSubmitType =
+    !typesLoading && !typesError && (editingSchedule !== null || counselingTypes.length > 0);
   const invalidateSchedules = () => queryClient.invalidateQueries({ queryKey: SCHEDULE_QUERY_KEY });
   const createMutation = useMutation({
     mutationFn: createCounselorSchedule,
@@ -670,7 +709,7 @@ export default function MySchedule() {
                               {halfToTime(item.startHalf)}~{halfToTime(item.endHalf)}
                             </span>
                             <span className="mt-0.5 text-[8px] leading-tight">
-                              유형 {schedule.counselingTypeId} ·{' '}
+                              {typeLabel(schedule.counselingTypeId)} ·{' '}
                               {COUNSELOR_SCHEDULE_STATUS_LABEL[schedule.status]}
                             </span>
                             <span className="text-[8px] leading-tight">
@@ -699,8 +738,8 @@ export default function MySchedule() {
                     className="rounded-[6px] border border-[#E5E7EB] p-3 text-[12px]"
                   >
                     <p className="font-semibold text-[#1F2328]">
-                      유형 {schedule.counselingTypeId} · {formatKstDateTime(schedule.startsAt)} ~{' '}
-                      {formatKstDateTime(schedule.endsAt)}
+                      {typeLabel(schedule.counselingTypeId)} · {formatKstDateTime(schedule.startsAt)}{' '}
+                      ~ {formatKstDateTime(schedule.endsAt)}
                     </p>
                     <p className="mt-1 text-[#656D76]">
                       {COUNSELOR_SCHEDULE_STATUS_LABEL[schedule.status]} ·{' '}
@@ -740,6 +779,7 @@ export default function MySchedule() {
               type="submit"
               form="counselorScheduleForm"
               loading={isSubmitting}
+              disabled={!canSubmitType}
             >
               {editingSchedule ? '수정' : '저장'}
             </Button>
@@ -747,7 +787,14 @@ export default function MySchedule() {
         }
       >
         <form id="counselorScheduleForm" onSubmit={handleSubmit}>
-          <ScheduleForm form={form} setForm={setForm} formError={formError} />
+          <ScheduleForm
+            form={form}
+            setForm={setForm}
+            formError={formError}
+            types={counselingTypes}
+            typesLoading={typesLoading}
+            typesError={typesError}
+          />
         </form>
       </Drawer>
       <Modal
