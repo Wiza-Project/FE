@@ -339,8 +339,9 @@ function ApplicationReview({ programId }) {
       {/* FilterBar */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-4 flex gap-3 flex-wrap items-end">
         <div className="flex flex-col gap-1 w-36">
-          <label className="text-[10px] font-semibold text-[#656D76]">상태</label>
+          <label htmlFor="participation-filter-status" className="text-[10px] font-semibold text-[#656D76]">상태</label>
           <select
+            id="participation-filter-status"
             value={filterStatus}
             onChange={(e) => {
               setFs(e.target.value);
@@ -569,10 +570,11 @@ function ApplicationReview({ programId }) {
       >
         <div className="flex flex-col gap-4">
           <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+            <label htmlFor="participation-reject-detail" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
               반려 사유 <span className="text-[#CF222E]">*</span>
             </label>
             <textarea
+              id="participation-reject-detail"
               value={rejectDetail}
               onChange={(e) => setRjDetail(e.target.value)}
               rows={4}
@@ -718,10 +720,11 @@ function AttendanceManage() {
             </div>
           )}
           <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+            <label htmlFor="participation-edit-reason" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
               수정 사유 <span className="text-[#CF222E]">*</span>
             </label>
             <textarea
+              id="participation-edit-reason"
               value={editReason}
               onChange={(e) => setEditReason(e.target.value)}
               rows={3}

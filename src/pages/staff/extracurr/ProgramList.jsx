@@ -166,9 +166,10 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
           </select>
         </div>
         <div className="col-span-2">
-          <label className="block text-[10px] font-semibold text-[#656D76] mb-1">프로그램명</label>
+          <label htmlFor="admin-program-keyword" className="block text-[10px] font-semibold text-[#656D76] mb-1">프로그램명</label>
           <div className="flex gap-1.5">
             <input
+              id="admin-program-keyword"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && runSearch()}
