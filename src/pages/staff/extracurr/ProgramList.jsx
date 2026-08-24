@@ -12,9 +12,11 @@ const PAGE_SIZE = 10;
 // 공통코드 API로 한글 라벨을 받아올 수 없다. 행에 표시하는 상태 뱃지는 서버가 내려주는
 // programStatusLabel을 그대로 쓰고, 필터용 select만 임시로 enum 코드를 한글로 옮겨 적었다.
 // 실제 서버 응답과 다르면 이 매핑만 고치면 된다.
+// DRAFT는 이름과 달리 "등록 직후 ~ 모집 마감 전까지의 모집중 상태"를 뜻한다(컬럼 기본값과의
+// 하위 호환 때문에 이름만 DRAFT로 남아있음 — ProgramStatus enum 주석 참고). 라벨은 실제 의미대로 "모집중".
 const STATUS_OPTIONS = [
   { value: '', label: '전체' },
-  { value: 'DRAFT', label: '작성중' },
+  { value: 'DRAFT', label: '모집중' },
   { value: 'OPERATING', label: '운영중' },
   { value: 'CLOSED', label: '종료' },
 ];
@@ -211,7 +213,6 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
               <thead>
                 <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
                   {[
-                    'ID',
                     '프로그램명',
                     '분류',
                     '운영기간',
@@ -222,7 +223,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
                   ].map((h, i) => (
                     <th
                       key={h}
-                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 5 ? 'text-center' : 'text-left'}`}
+                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 4 ? 'text-center' : 'text-left'}`}
                     >
                       {h}
                     </th>
@@ -232,7 +233,7 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
               <tbody>
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
+                    <td colSpan={7} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
                       검색 결과가 없습니다.
                     </td>
                   </tr>
@@ -242,9 +243,6 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
                       key={p.id}
                       className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
                     >
-                      <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6] whitespace-nowrap">
-                        {p.id}
-                      </td>
                       <td className="px-4 py-3 max-w-[200px]">
                         <p className="font-semibold text-[#1F2328] truncate">{p.name}</p>
                         <p className="text-[10px] text-[#9AA0A6]">{p.dept}</p>
