@@ -75,6 +75,21 @@ export const COUNSELOR_SCHEDULE_STATUS_LABEL = {
   [COUNSELOR_SCHEDULE_STATUS.CLOSED]: '마감',
 };
 
+/**
+ * 상담 유형의 신청 경로 — 백엔드 application_route enum 기준.
+ * DIRECT는 상담사가 연 일정을 골라 예약하는 흐름, CENTER는 일정 없이 센터에 접수를 요청하는 흐름입니다.
+ * 학생 온라인 신청은 현재 DIRECT만 제공하며 CENTER(센터 접수)는 후순위라, 화면 분기에 이 상수를 씁니다.
+ */
+export const APPLICATION_ROUTE = {
+  DIRECT: 'DIRECT',
+  CENTER: 'CENTER',
+};
+
+export const APPLICATION_ROUTE_LABEL = {
+  [APPLICATION_ROUTE.DIRECT]: '온라인 신청',
+  [APPLICATION_ROUTE.CENTER]: '센터 신청',
+};
+
 /** 승인 상태 — 프로그램 신청, 참여신청, 마일리지 실적신청 공통 */
 export const APPROVAL_STATUS = {
   REQUESTED: 'REQUESTED',

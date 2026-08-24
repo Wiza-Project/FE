@@ -9,6 +9,7 @@ import {
   SkeletonLoader,
 } from '@/components/common';
 import { fetchCounselingTypes, fetchAvailableSchedules } from '@/api/counsel';
+import { APPLICATION_ROUTE, APPLICATION_ROUTE_LABEL } from '@/constants/domain';
 
 const ACCENT = '#0891B2';
 
@@ -117,6 +118,9 @@ export default function CounselingApply({ onComplete, onBack }) {
   } = useQuery({
     queryKey: ['counselingTypes'],
     queryFn: fetchCounselingTypes,
+    // 서버는 활성 유형 전체(DIRECT·CENTER)를 내려주지만, 학생 온라인 신청은 현재 DIRECT만 제공한다.
+    // CENTER(센터 접수)는 후순위라 화면에서 걸러낸다. 이 필터는 UX 차단이고 최종 방어는 백엔드가 한다.
+    select: (types) => types.filter((type) => type.applicationRoute === APPLICATION_ROUTE.DIRECT),
   });
 
   // Step 0 — consent
@@ -173,6 +177,18 @@ export default function CounselingApply({ onComplete, onBack }) {
   const chosenSlot = schedules.find((s) => s.scheduleId === selectedSlot);
 
   const handleFinalSubmit = async () => {
+    // 이미 제출 중이면 중복 요청을 막는다.
+    if (submitting) {
+      return;
+    }
+    // 다이얼로그가 열린 사이 일정이 갱신돼 선택 슬롯이 사라졌을 수 있다.
+    // (다른 학생이 먼저 예약해 refetch로 목록에서 빠지는 경우 등)
+    // 이때는 신청을 진행하지 않고 다이얼로그를 닫은 뒤 선택을 초기화한다.
+    if (!chosenSlot) {
+      setSubmitConfirm(false);
+      setSelectedSlot(null);
+      return;
+    }
     setSubmitConfirm(false);
     setSubmitting(true);
     await new Promise((r) => setTimeout(r, 900));
@@ -418,7 +434,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                           color: isSelected ? ACCENT : '#656D76',
                         }}
                       >
-                        신청 경로: {type.applicationRoute}
+                        신청 경로: {APPLICATION_ROUTE_LABEL[type.applicationRoute] ?? type.applicationRoute}
                       </span>
                       <span
                         className="text-[10px] font-bold px-2 py-0.5 rounded-full"
