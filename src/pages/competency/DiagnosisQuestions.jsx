@@ -29,6 +29,15 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
+  // answers state의 동기 미러. useState functional updater는 setter 호출 시 즉시 실행되지
+  // 않고 다음 render에서 실행되므로, rollback에 쓸 이전 값은 이 ref에서 동기적으로 읽는다.
+  const answersRef = useRef({});
+  const applyAnswers = (updater) => {
+    const next = typeof updater === 'function' ? updater(answersRef.current) : updater;
+    answersRef.current = next;
+    setAnswers(next);
+  };
+
   const {
     data: resumeData,
     isLoading,
@@ -50,7 +59,7 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
     resumeData.items.forEach((item) => {
       if (item.selectedValue != null) initialAnswers[item.questionId] = Number(item.selectedValue);
     });
-    setAnswers(initialAnswers);
+    applyAnswers(initialAnswers);
     const firstUnansweredIdx = resumeData.items.findIndex((item) => item.selectedValue == null);
     const targetIdx = firstUnansweredIdx === -1 ? resumeData.items.length - 1 : firstUnansweredIdx;
     setPage(Math.max(0, Math.floor(targetIdx / QUESTIONS_PER_PAGE)));
@@ -74,19 +83,16 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
 
   const saveMutation = useMutation({
     mutationFn: saveAssessmentResponse,
-    // 낙관적 갱신 직전 값을 캡처해 실패 시 정확히 그 값으로 되돌릴 수 있게 한다.
+    // 낙관적 갱신 직전 값을 answersRef에서 동기적으로 캡처해 실패 시 정확히 그 값으로 되돌릴 수 있게 한다.
     onMutate: (variables) => {
-      let previousValue;
-      setAnswers((prev) => {
-        previousValue = prev[variables.questionId];
-        return { ...prev, [variables.questionId]: variables.selectedValue };
-      });
+      const previousValue = answersRef.current[variables.questionId];
+      applyAnswers((prev) => ({ ...prev, [variables.questionId]: variables.selectedValue }));
       setPendingIds((prev) => new Set(prev).add(variables.questionId));
       return { previousValue };
     },
     onError: (e, variables, context) => {
       // 실패 시 원래 값으로 복구(미응답 아님). 응답이 없던 문항이었다면 previousValue가 undefined이므로 삭제한다.
-      setAnswers((prev) => {
+      applyAnswers((prev) => {
         const next = { ...prev };
         if (context?.previousValue === undefined) {
           delete next[variables.questionId];
