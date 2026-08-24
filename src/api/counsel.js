@@ -60,6 +60,84 @@ export const fetchAvailableSchedules = async (counselingTypeId) => {
 };
 
 /**
+ * @typedef {Object} CounselingReservation
+ * @property {number} reservationId
+ * @property {number} counselingTypeId
+ * @property {number|null} counselingScheduleId DIRECT 예약의 일정 ID. CENTER 예약은 null일 수 있다.
+ * @property {'REQUESTED'|'APPROVED'|'IN_PROGRESS'|'COMPLETED'|'REJECTED'|'CANCELED'} reservationStatus
+ * @property {string} createdAt UTC ISO-8601 Instant
+ */
+
+/**
+ * @typedef {Object} CounselingReservationPage
+ * @property {CounselingReservation[]} content
+ * @property {number} page 0부터 시작
+ * @property {number} size
+ * @property {number} totalElements
+ * @property {number} totalPages
+ * @property {boolean} first
+ * @property {boolean} last
+ */
+
+/**
+ * 로그인한 학생의 상담 예약 목록을 최신 신청일 순으로 조회한다.
+ * 목록에는 상담 신청 원문이 포함되지 않는다.
+ *
+ * @param {Object} [params]
+ * @param {number} [params.page=0]
+ * @param {number} [params.size=20]
+ * @returns {Promise<CounselingReservationPage>}
+ */
+export const fetchCounselingReservations = async ({ page = 0, size = 20 } = {}) => {
+  const { data } = await apiClient.get('/students/counseling-reservations', {
+    params: { page, size },
+  });
+  return data;
+};
+
+/**
+ * @typedef {Object} CancelCounselingReservationRequest
+ * @property {string} cancellationReason 공백만으로 구성될 수 없다.
+ */
+
+/**
+ * 학생 본인의 예약을 취소한다. 서버가 상태와 마감 시각을 최종 검증한다.
+ *
+ * @param {number} reservationId
+ * @param {CancelCounselingReservationRequest} request
+ * @returns {Promise<CounselingReservation>}
+ */
+export const cancelCounselingReservation = async (reservationId, request) => {
+  const { data } = await apiClient.patch(
+    `/students/counseling-reservations/${reservationId}/cancel`,
+    request,
+  );
+  return data;
+};
+
+/**
+ * @typedef {Object} ChangeCounselingReservationScheduleRequest
+ * @property {number} scheduleId 0보다 큰 새 일정 ID
+ * @property {string} changeReason 공백만으로 구성될 수 없다.
+ */
+
+/**
+ * 학생 본인의 REQUESTED 예약을 같은 상담 유형의 다른 일정으로 변경한다.
+ * 새 일정의 마감·정원·시간 중복은 서버가 잠금 안에서 최종 검증한다.
+ *
+ * @param {number} reservationId
+ * @param {ChangeCounselingReservationScheduleRequest} request
+ * @returns {Promise<CounselingReservation>}
+ */
+export const changeCounselingReservationSchedule = async (reservationId, request) => {
+  const { data } = await apiClient.patch(
+    `/students/counseling-reservations/${reservationId}/schedule`,
+    request,
+  );
+  return data;
+};
+
+/**
  * @typedef {Object} CounselorScheduleRequest
  * @property {number} counselingTypeId
  * @property {string} startsAt UTC ISO-8601 Instant
