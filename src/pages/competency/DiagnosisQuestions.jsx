@@ -387,7 +387,9 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
               <path d="M8 6v4M8 12h.01" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
             <span className="text-[12px] text-[#D97706] font-semibold">
-              미응답 문항 {unanswered}개가 남아 있어 최종 제출할 수 없습니다.
+              {unanswered > 0
+                ? `미응답 문항 ${unanswered}개가 남아 있어 최종 제출할 수 없습니다.`
+                : '응답 저장 중입니다. 잠시 후 다시 시도해 주세요.'}
             </span>
           </div>
         )}
