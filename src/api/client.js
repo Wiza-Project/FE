@@ -7,12 +7,17 @@ export const apiClient = axios.create({
   withCredentials: true,
 });
 
-/** 백엔드가 내려준 에러 코드를 그대로 담는 에러 객체 */
+/**
+ * 백엔드가 내려준 에러 코드를 그대로 담는 에러 객체.
+ * data 는 실패 응답에 함께 실려오는 부가 정보(예: 로그인 실패 시 잔여 시도 횟수·잠금 여부 —
+ * api/auth.js의 login() 참고)이며, 없으면 undefined 입니다.
+ */
 export class ApiError extends Error {
-  constructor(code, message) {
+  constructor(code, message, data) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
+    this.data = data;
   }
 }
 
@@ -66,7 +71,11 @@ apiClient.interceptors.response.use(
     const body = response.data;
     if (body && typeof body === 'object' && 'success' in body) {
       if (!body.success) {
-        throw new ApiError(body.code ?? 'UNKNOWN', body.message ?? '요청에 실패했습니다.');
+        throw new ApiError(
+          body.code ?? 'UNKNOWN',
+          body.message ?? '요청에 실패했습니다.',
+          body.data,
+        );
       }
       response.data = body.data;
     }
@@ -98,7 +107,11 @@ apiClient.interceptors.response.use(
     }
 
     return Promise.reject(
-      new ApiError(body?.code ?? 'NETWORK_ERROR', body?.message ?? '서버와 통신할 수 없습니다.'),
+      new ApiError(
+        body?.code ?? 'NETWORK_ERROR',
+        body?.message ?? '서버와 통신할 수 없습니다.',
+        body?.data,
+      ),
     );
   },
 );

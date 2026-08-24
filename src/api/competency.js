@@ -76,3 +76,172 @@ export const uploadAssessmentQuestions = async (file) => {
   });
   return data;
 };
+
+/**
+ * @typedef {Object} AssessmentQuestion
+ * @property {number} questionId
+ * @property {number} competencyId
+ * @property {string} competencyName
+ * @property {number|null} previousQuestionId
+ * @property {number} versionNo
+ * @property {string} questionText
+ * @property {boolean} reverse
+ * @property {Array<{value: number, label: string}>} responseOptions
+ * @property {boolean} active
+ */
+
+/**
+ * 핵심역량별 진단문항 목록 조회 (SCR-A03 #5). 활성 문항만 문항ID 오름차순으로 내려온다
+ * (하위역량 단위 조회는 지원하지 않음 — 하위역량 자체가 미개발 상태).
+ *
+ * @param {number} competencyId
+ * @returns {Promise<AssessmentQuestion[]>}
+ */
+export const fetchAssessmentQuestions = async (competencyId) => {
+  const { data } = await apiClient.get('/admin/assessment-questions', {
+    params: { competencyId },
+  });
+  return data;
+};
+
+/**
+ * 진단문항 단건 조회. 비활성(구버전) 문항도 조회 가능 — 버전 이력 추적에 사용한다.
+ *
+ * @param {number} questionId
+ * @returns {Promise<AssessmentQuestion>}
+ */
+export const fetchAssessmentQuestion = async (questionId) => {
+  const { data } = await apiClient.get(`/admin/assessment-questions/${questionId}`);
+  return data;
+};
+
+/**
+ * previousQuestionId를 따라가며 이전 버전들을 최신 → 과거 순으로 조회한다.
+ * BE에 버전 이력 목록 API가 없어 단건 조회를 반복 호출해 체인을 직접 구성한다.
+ *
+ * @param {number|null} previousQuestionId 조회를 시작할 직전 버전의 questionId
+ * @returns {Promise<AssessmentQuestion[]>} 최신 → 과거 순
+ */
+export const fetchAssessmentQuestionVersionHistory = async (previousQuestionId) => {
+  const history = [];
+  let currentId = previousQuestionId;
+  while (currentId) {
+    const question = await fetchAssessmentQuestion(currentId);
+    history.push(question);
+    currentId = question.previousQuestionId;
+  }
+  return history;
+};
+
+/**
+ * 진단문항 수정 (SCR-A03 #5). 이미 응답 이력이 있는 문항을 수정하면 서버가 자동으로
+ * 새 버전(문항ID 신규 채번, versionNo+1)을 만들고 기존 문항은 비활성 처리한다 —
+ * "새 버전으로 저장"을 위한 별도 API는 없고, 이 호출 하나로 두 경우가 모두 처리된다.
+ * 응답의 questionId가 요청한 id와 다르면 새 버전이 만들어졌다는 뜻이다.
+ *
+ * @param {Object} params
+ * @param {number} params.questionId
+ * @param {string} params.questionText
+ * @param {boolean} params.reverse
+ * @param {Array<{value: number, label: string}>} params.responseOptions
+ * @returns {Promise<AssessmentQuestion>}
+ */
+export const editAssessmentQuestion = async ({
+  questionId,
+  questionText,
+  reverse,
+  responseOptions,
+}) => {
+  const { data } = await apiClient.patch(`/admin/assessment-questions/${questionId}`, {
+    questionText,
+    reverse,
+    responseOptions,
+  });
+  return data;
+};
+
+/**
+ * @typedef {Object} AssessmentRound
+ * @property {number} assessmentRoundId
+ * @property {string} assessmentName
+ * @property {number} academicYear
+ * @property {string} semesterCode 공통코드 SEMESTER의 code (예: 'SPRING')
+ * @property {string} assessmentType 'PRE'|'POST'
+ * @property {string} startsAt ISO-8601
+ * @property {string} endsAt ISO-8601
+ * @property {Object|null} targetCondition null이면 전체 학생 대상
+ * @property {string} roundStatus
+ */
+
+/**
+ * 진단 회차 등록 (SCR-A04). 학년도·학기·진단구분(사전/사후)+응시기간+응시대상을 한 번에
+ * 등록한다 — `assessment_round`의 응시기간 컬럼이 NOT NULL이라 기본정보만 먼저 저장하는
+ * 단계가 없다(부분 저장 불가). 같은 학년도·학기·진단구분 조합은 서버가 중복 개설을 막는다.
+ *
+ * @param {Object} params
+ * @param {string} params.assessmentName
+ * @param {number} params.academicYear
+ * @param {string} params.semesterCode
+ * @param {'PRE'|'POST'} params.assessmentType
+ * @param {string} params.startsAt ISO-8601
+ * @param {string} params.endsAt ISO-8601
+ * @param {Object|null} [params.targetCondition] 생략/null이면 전체 학생 대상
+ * @returns {Promise<AssessmentRound>}
+ */
+export const registerAssessmentRound = async ({
+  assessmentName,
+  academicYear,
+  semesterCode,
+  assessmentType,
+  startsAt,
+  endsAt,
+  targetCondition,
+}) => {
+  const { data } = await apiClient.post('/admin/assessment-rounds', {
+    assessmentName,
+    academicYear,
+    semesterCode,
+    assessmentType,
+    startsAt,
+    endsAt,
+    targetCondition: targetCondition ?? null,
+  });
+  return data;
+};
+
+/**
+ * 진단 회차 수정 (SCR-A04). 등록과 같은 필드를 모두 다시 보내야 하는 전체 수정이다
+ * (부분 수정 아님). 이미 응시(문항 응답)가 시작된 회차는 서버가 수정 자체를 막는다.
+ *
+ * @param {Object} params
+ * @param {number} params.roundId
+ * @param {string} params.assessmentName
+ * @param {number} params.academicYear
+ * @param {string} params.semesterCode
+ * @param {'PRE'|'POST'} params.assessmentType
+ * @param {string} params.startsAt ISO-8601
+ * @param {string} params.endsAt ISO-8601
+ * @param {Object|null} [params.targetCondition]
+ * @returns {Promise<AssessmentRound>}
+ */
+export const updateAssessmentRound = async ({
+  roundId,
+  assessmentName,
+  academicYear,
+  semesterCode,
+  assessmentType,
+  startsAt,
+  endsAt,
+  targetCondition,
+}) => {
+  const { data } = await apiClient.patch(`/admin/assessment-rounds/${roundId}`, {
+    assessmentName,
+    academicYear,
+    semesterCode,
+    assessmentType,
+    startsAt,
+    endsAt,
+    targetCondition: targetCondition ?? null,
+  });
+  return data;
+};
