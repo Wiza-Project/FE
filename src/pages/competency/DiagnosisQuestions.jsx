@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { fetchAssessmentResume, saveAssessmentResponse } from '@/api/competency';
 import { ApiError } from '@/api/client';
@@ -67,16 +67,43 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
     return map;
   }, [items]);
 
+  // pendingRef: 클릭 시점에 즉시 판정하는 동기 가드(같은 문항 중복 저장 요청 자체를 차단).
+  // pendingIds: 위 상태를 버튼 disabled 표시에 반영하기 위한 렌더링용 state.
+  const pendingRef = useRef(new Set());
+  const [pendingIds, setPendingIds] = useState(() => new Set());
+
   const saveMutation = useMutation({
     mutationFn: saveAssessmentResponse,
-    onError: (e, variables) => {
-      // 저장 실패 시 서버 상태와 어긋나지 않도록 선택을 되돌린다.
+    // 낙관적 갱신 직전 값을 캡처해 실패 시 정확히 그 값으로 되돌릴 수 있게 한다.
+    onMutate: (variables) => {
+      let previousValue;
+      setAnswers((prev) => {
+        previousValue = prev[variables.questionId];
+        return { ...prev, [variables.questionId]: variables.selectedValue };
+      });
+      setPendingIds((prev) => new Set(prev).add(variables.questionId));
+      return { previousValue };
+    },
+    onError: (e, variables, context) => {
+      // 실패 시 원래 값으로 복구(미응답 아님). 응답이 없던 문항이었다면 previousValue가 undefined이므로 삭제한다.
       setAnswers((prev) => {
         const next = { ...prev };
-        delete next[variables.questionId];
+        if (context?.previousValue === undefined) {
+          delete next[variables.questionId];
+        } else {
+          next[variables.questionId] = context.previousValue;
+        }
         return next;
       });
       toast(e instanceof ApiError ? e.message : '응답 저장에 실패했습니다.', 'error');
+    },
+    onSettled: (data, error, variables) => {
+      pendingRef.current.delete(variables.questionId);
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(variables.questionId);
+        return next;
+      });
     },
   });
 
@@ -116,7 +143,8 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
   const posLabel = firstQ ? firstQ.competencyName : '';
 
   const setAnswer = (questionId, val) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: val }));
+    if (pendingRef.current.has(questionId)) return; // 저장 중이면 클릭 자체를 무시(state 반영을 기다리지 않음)
+    pendingRef.current.add(questionId);
     saveMutation.mutate({ attemptId, questionId, selectedValue: val });
   };
 
@@ -238,16 +266,25 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
                 </div>
               </div>
 
-              {/* Likert options */}
+              {/* Likert options — 5개 중 하나만 고르는 상호배타적 선택지라 radiogroup/radio 시맨틱을 쓴다 */}
               <div className="px-6 py-5">
-                <div className="flex gap-3">
+                <div
+                  className="flex gap-3"
+                  role="radiogroup"
+                  aria-label={`${q.questionText} 응답`}
+                >
                   {LIKERT.map((opt) => {
                     const isSelected = selected === opt.value;
+                    const isPending = pendingIds.has(q.questionId);
                     return (
                       <button
                         key={opt.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        disabled={isPending}
                         onClick={() => setAnswer(q.questionId, opt.value)}
-                        className={`flex-1 flex flex-col items-center gap-2 py-3 px-2 rounded-[8px] border-2 transition-all cursor-pointer
+                        className={`flex-1 flex flex-col items-center gap-2 py-3 px-2 rounded-[8px] border-2 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed
                           ${isSelected ? 'border-[#7C3AED] bg-[#F5F3FF]' : 'border-[#E5E7EB] hover:border-[#C4B5FD] hover:bg-[#FAFAFA]'}`}
                       >
                         {/* Number circle */}
