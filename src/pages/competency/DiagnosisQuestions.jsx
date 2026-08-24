@@ -165,9 +165,15 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
       onComplete();
     },
     onError: (e) => {
-      // Q005(미응답 문항 있음): 서버가 응답과 함께 내려준 미응답 questionId로 자동 이동한다.
+      // Q005(미응답 문항 있음): 서버 기준 미응답 문항을 로컬 answers에서도 제거해 화면이
+      // "이미 응답됨"으로 잘못 표시되지 않게 한 뒤, 그 문항으로 자동 이동한다.
       if (e instanceof ApiError && e.code === 'Q005' && Array.isArray(e.data)) {
         const missingIds = e.data;
+        applyAnswers((prev) => {
+          const next = { ...prev };
+          missingIds.forEach((questionId) => delete next[questionId]);
+          return next;
+        });
         const firstMissingIdx = items.findIndex((item) => missingIds.includes(item.questionId));
         if (firstMissingIdx !== -1) {
           setPage(Math.floor(firstMissingIdx / QUESTIONS_PER_PAGE));
