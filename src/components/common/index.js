@@ -9,6 +9,7 @@ export { Input } from './Input';
 export { Select } from './Select';
 export { CommonCodeSelect } from './CommonCodeSelect';
 export { PageHeader } from './PageHeader';
+export { InfoField } from './InfoField';
 export { StatTile } from './StatTile';
 export { FilterBar } from './FilterBar';
 export { DataTable } from './DataTable';
