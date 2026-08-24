@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, Tabs, toast, DonutChart, Pagination } from '@/components/common';
 import {
@@ -14,11 +14,12 @@ import { fetchAllPages } from '@/utils/pagination';
 // ─── Shared program summary bar ───────────────────────────────────────────────
 
 function ProgramBar({ onBack, programId, programName }) {
-  const { data: applications = [] } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['programApplications', programId, '전체'],
     queryFn: () => fetchAllPages((p) => fetchProgramApplications(programId, p)),
     enabled: !!programId,
   });
+  const applications = data ?? [];
   const approved = applications.filter((a) => a.applicationStatus === 'APPROVED').length;
   const waitlisted = applications.filter((a) => a.applicationStatus === 'WAITLISTED').length;
 
@@ -35,18 +36,24 @@ function ProgramBar({ onBack, programId, programName }) {
         <p className="text-[13px] font-black text-[#1F2328] truncate">{programName}</p>
       </div>
       <div className="ml-auto flex gap-4 flex-wrap shrink-0">
-        {[
-          { label: '신청', value: applications.length, color: '#374151' },
-          { label: '승인', value: approved, color: '#059669' },
-          { label: '대기', value: waitlisted, color: '#D97706' },
-        ].map((s) => (
-          <div key={s.label} className="text-center">
-            <div className="text-[16px] font-black" style={{ color: s.color }}>
-              {s.value}
+        {isLoading ? (
+          <span className="text-[11px] text-[#9AA0A6]">불러오는 중...</span>
+        ) : isError ? (
+          <span className="text-[11px] text-[#CF222E]">통계를 불러오지 못했습니다.</span>
+        ) : (
+          [
+            { label: '신청', value: applications.length, color: '#374151' },
+            { label: '승인', value: approved, color: '#059669' },
+            { label: '대기', value: waitlisted, color: '#D97706' },
+          ].map((s) => (
+            <div key={s.label} className="text-center">
+              <div className="text-[16px] font-black" style={{ color: s.color }}>
+                {s.value}
+              </div>
+              <div className="text-[10px] text-[#9AA0A6]">{s.label}</div>
             </div>
-            <div className="text-[10px] text-[#9AA0A6]">{s.label}</div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
@@ -229,6 +236,15 @@ function ApplicationReview({ programId }) {
     enabled: !!programId,
   });
 
+  useEffect(() => {
+    if (!data) return;
+    const lastPage = Math.max(1, data.totalPages || 1);
+    if (page > lastPage) {
+      setPage(lastPage);
+      setSelected(new Set());
+    }
+  }, [data, page]);
+
   const runSearch = () => {
     setPage(1);
     setSelected(new Set());
@@ -341,9 +357,10 @@ function ApplicationReview({ programId }) {
           </select>
         </div>
         <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
-          <label className="text-[10px] font-semibold text-[#656D76]">학번·성명</label>
+          <label htmlFor="participation-search-keyword" className="text-[10px] font-semibold text-[#656D76]">학번·성명</label>
           <div className="flex gap-1.5">
             <input
+              id="participation-search-keyword"
               value={keyword}
               onChange={(e) => setKw(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && runSearch()}

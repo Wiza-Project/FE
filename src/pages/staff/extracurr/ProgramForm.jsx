@@ -50,9 +50,10 @@ function Field({ label, required, error, htmlFor, children }) {
   );
 }
 
-function TextInput({ value, onChange, placeholder = '', error, maxLength }) {
+function TextInput({ id, value, onChange, placeholder = '', error, maxLength }) {
   return (
     <input
+      id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
@@ -62,9 +63,10 @@ function TextInput({ value, onChange, placeholder = '', error, maxLength }) {
   );
 }
 
-function TextArea({ value, onChange, placeholder = '', rows = 3 }) {
+function TextArea({ id, value, onChange, placeholder = '', rows = 3 }) {
   return (
     <textarea
+      id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
@@ -74,9 +76,10 @@ function TextArea({ value, onChange, placeholder = '', rows = 3 }) {
   );
 }
 
-function NumberInput({ value, onChange, min = 0, max, placeholder = '', error }) {
+function NumberInput({ id, value, onChange, min = 0, max, placeholder = '', error }) {
   return (
     <input
+      id={id}
       type="number"
       value={value}
       min={min}
@@ -108,12 +111,14 @@ function IdSelect({ id, value, onChange, options, placeholder = '선택하세요
   );
 }
 
-function DateInput({ value, onChange, error }) {
+function DateInput({ id, value, onChange, error, ariaLabel }) {
   return (
     <input
+      id={id}
       type="date"
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
       className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
@@ -475,8 +480,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           <Section num={1} title="기본정보" id="sec1">
             <div className="grid grid-cols-2 gap-5">
               <div className="col-span-2">
-                <Field label="프로그램명" required error={errors.name}>
+                <Field label="프로그램명" required error={errors.name} htmlFor="programName">
                   <TextInput
+                    id="programName"
                     value={name}
                     onChange={setName}
                     placeholder="예) 2026-1 해외문화체험 워크숍"
@@ -487,8 +493,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               </div>
 
               <div className="col-span-2">
-                <Field label="설명">
+                <Field label="설명" htmlFor="description">
                   <TextArea
+                    id="description"
                     value={description}
                     onChange={setDescription}
                     placeholder="프로그램에 대한 설명을 입력하세요."
@@ -524,22 +531,43 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
             <div className="grid grid-cols-2 gap-5">
               <Field label="모집 기간" required>
                 <div className="flex items-center gap-2">
-                  <DateInput value={recruitStart} onChange={setRcS} error={errors.recruitStart} />
+                  <DateInput
+                    value={recruitStart}
+                    onChange={setRcS}
+                    error={errors.recruitStart}
+                    ariaLabel="모집 시작일"
+                  />
                   <span className="text-[12px] text-[#9AA0A6]">~</span>
-                  <DateInput value={recruitEnd} onChange={setRcE} error={errors.recruitEnd} />
+                  <DateInput
+                    value={recruitEnd}
+                    onChange={setRcE}
+                    error={errors.recruitEnd}
+                    ariaLabel="모집 종료일"
+                  />
                 </div>
               </Field>
 
               <Field label="운영 기간" required>
                 <div className="flex items-center gap-2">
-                  <DateInput value={operStart} onChange={setOpS} error={errors.operStart} />
+                  <DateInput
+                    value={operStart}
+                    onChange={setOpS}
+                    error={errors.operStart}
+                    ariaLabel="운영 시작일"
+                  />
                   <span className="text-[12px] text-[#9AA0A6]">~</span>
-                  <DateInput value={operEnd} onChange={setOpE} error={errors.operEnd} />
+                  <DateInput
+                    value={operEnd}
+                    onChange={setOpE}
+                    error={errors.operEnd}
+                    ariaLabel="운영 종료일"
+                  />
                 </div>
               </Field>
 
-              <Field label="정원" required error={errors.capacity}>
+              <Field label="정원" required error={errors.capacity} htmlFor="capacity">
                 <NumberInput
+                  id="capacity"
                   value={capacity}
                   onChange={setCapacity}
                   min={1}
@@ -555,8 +583,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         <div ref={sec3Ref}>
           <Section num={3} title="역량·정책" id="sec3">
             <div className="grid grid-cols-2 gap-5">
-              <Field label="연계 핵심역량" required error={errors.competencyId}>
+              <Field label="연계 핵심역량" required error={errors.competencyId} htmlFor="competencyId">
                 <IdSelect
+                  id="competencyId"
                   value={competencyId}
                   onChange={setCompetencyId}
                   options={competencyOptions}
@@ -566,8 +595,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                 />
               </Field>
 
-              <Field label="마일리지 정책">
+              <Field label="마일리지 정책" htmlFor="mileagePolicyId">
                 <IdSelect
+                  id="mileagePolicyId"
                   value={mileagePolicyId}
                   onChange={setMileagePolicyId}
                   options={MILEAGE_POLICY_OPTIONS}
