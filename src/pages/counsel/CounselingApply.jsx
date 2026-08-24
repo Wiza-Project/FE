@@ -174,6 +174,10 @@ export default function CounselingApply({ onComplete, onBack }) {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [memo, setMemo] = useState('');
   const [submitConfirm, setSubmitConfirm] = useState(false);
+  // 메모 입력값 검증 오류와 API 제출 실패 오류를 분리한다.
+  // memoError는 메모 필드에만 연결하고(aria-invalid/aria-describedby),
+  // submitError(일정 만료 등 제출 실패)는 별도 알림 영역에 표시해 메모 필드에 잘못 묶이지 않게 한다.
+  const [memoError, setMemoError] = useState('');
   const [submitError, setSubmitError] = useState('');
   // 서버 생성 응답에는 상담사명·일시·장소·유형명이 없어서, 완료 화면에 표시할 값을
   // 제출 시점의 chosenType/chosenSlot에서 미리 스냅샷해 둔다. 제출 후 availableSchedules를
@@ -660,24 +664,35 @@ export default function CounselingApply({ onComplete, onBack }) {
               value={memo}
               onChange={(e) => {
                 setMemo(e.target.value);
+                setMemoError('');
                 setSubmitError('');
               }}
               placeholder="상담에서 다루고 싶은 내용이나 어려운 점을 간략히 작성해 주세요."
               rows={4}
               required
-              aria-invalid={!!submitError}
-              aria-describedby={submitError ? 'counseling-memo-error' : undefined}
+              aria-invalid={!!memoError}
+              aria-describedby={memoError ? 'counseling-memo-error' : undefined}
               className="w-full px-3 py-2.5 text-[13px] border border-[#E5E7EB] rounded-[6px] resize-none focus:outline-none focus:border-[#0891B2] placeholder:text-[#9AA0A6]"
             />
             <p className="text-[11px] text-[#9AA0A6] mt-1.5">
               입력한 내용은 담당 상담사만 열람합니다.
             </p>
-            {submitError && (
+            {memoError && (
               <p id="counseling-memo-error" role="alert" className="text-[12px] text-[#CF222E] mt-2 font-semibold">
-                {submitError}
+                {memoError}
               </p>
             )}
           </div>
+
+          {/* 제출 실패(일정 만료 등)는 메모 필드가 아니라 별도 알림 영역에 표시한다. */}
+          {submitError && (
+            <div
+              role="alert"
+              className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-4 py-3 text-[13px] font-semibold text-[#CF222E]"
+            >
+              {submitError}
+            </div>
+          )}
 
           <div className="flex gap-2 justify-between">
             <Button size="sm" variant="secondary" onClick={() => setStep(1)}>
@@ -693,7 +708,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                   return;
                 }
                 if (memo.trim() === '') {
-                  setSubmitError('상담 희망 내용을 입력해 주세요.');
+                  setMemoError('상담 희망 내용을 입력해 주세요.');
                   return;
                 }
                 setSubmitConfirm(true);
