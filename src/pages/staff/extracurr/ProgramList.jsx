@@ -128,8 +128,6 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
     setSubmittedKeyword(keyword);
   };
 
-  const handleUnsupported = (message) => toast(message, 'info');
-
   return (
     <div>
       {/* Header */}
@@ -281,14 +279,6 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
                             className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB]"
                           >
                             참여관리
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleUnsupported('모집 마감 처리 API가 아직 준비되지 않았습니다.')
-                            }
-                            className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors bg-[#F3F4F6] text-[#9AA0A6] cursor-not-allowed"
-                          >
-                            모집마감
                           </button>
                         </div>
                       </td>

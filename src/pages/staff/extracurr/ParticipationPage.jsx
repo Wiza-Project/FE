@@ -376,12 +376,6 @@ function ApplicationReview({ programId }) {
             </button>
           </div>
         </div>
-        <button
-          onClick={() => toast('엑셀 다운로드 API가 아직 준비되지 않았습니다.', 'info')}
-          className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#9AA0A6] cursor-not-allowed self-end"
-        >
-          엑셀 다운로드
-        </button>
       </div>
 
       <div className="flex items-center justify-end mb-2">

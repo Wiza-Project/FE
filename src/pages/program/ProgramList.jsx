@@ -555,6 +555,13 @@ export default function ProgramList({ onDetail, onMyApplications }) {
           <p className="text-[13px] text-[#1F2328]">
             {applyTarget && `[${applyTarget.name}]에 신청하시겠습니까? 신청 후 승인까지 1~2 영업일 소요될 수 있습니다.`}
           </p>
+          {applyTarget && isFull(applyTarget) && (
+            <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-[8px] px-4 py-3">
+              <p className="text-[12px] font-bold text-[#92400E]">
+                정원이 마감되어 신청 시 대기열로 등록됩니다.
+              </p>
+            </div>
+          )}
           <label className="flex items-start gap-2.5 cursor-pointer">
             <input
               type="checkbox"
