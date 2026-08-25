@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import ReservationManage from './ReservationManage';
 import SessionRecord from './SessionRecord';
 import SessionResult from './SessionResult';
@@ -6,8 +7,12 @@ import CenterIntake from './CenterIntake';
 import MySchedule from './MySchedule';
 import { useAuthStore } from '@/stores/authStore';
 import { USER_ROLE } from '@/constants/domain';
+import { fetchPendingCounselorReservations, pendingReservationsQueryKey } from '@/api/counsel';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
+
+// 상담사(ST200) 전용 메뉴. 예약 관리는 상담사 본인 일정에 걸린 예약만 다루므로 일반 교직원에게는 숨긴다.
+const COUNSELOR_ONLY_KEYS = new Set(['schedule', 'reservation']);
 
 const NAV_ITEMS = [
   { key: 'schedule', label: '내 일정', icon: '📅', desc: '가능 시간대 관리' },
@@ -16,7 +21,6 @@ const NAV_ITEMS = [
     label: '예약 관리',
     icon: '📋',
     desc: '예약 승인·반려 및 오늘 일정',
-    badge: 3,
   },
   { key: 'record', label: '상담 기록', icon: '📝', desc: '비공개 기록 및 공개 요약 작성' },
   { key: 'result', label: '상담 결과', icon: '✅', desc: '결과 확정 및 정정 이력' },
@@ -32,9 +36,21 @@ export default function StaffCounselingPage() {
   const isCounselor = useAuthStore((state) =>
     (state.user?.roleCodes ?? []).includes(USER_ROLE.COUNSELOR),
   );
-  const navItems = isCounselor ? NAV_ITEMS : NAV_ITEMS.filter((item) => item.key !== 'schedule');
-  const [nav, setNav] = useState(isCounselor ? 'schedule' : 'reservation');
+  const navItems = isCounselor
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => !COUNSELOR_ONLY_KEYS.has(item.key));
+  const [nav, setNav] = useState(navItems[0].key);
   const current = navItems.find((item) => item.key === nav) ?? navItems[0];
+
+  // 뱃지는 실제 대기 건수만 표시한다. ReservationManage의 첫 페이지 조회와 같은 queryKey를 써서
+  // 캐시를 공유하므로(상담사가 예약 관리 탭을 열어도) 중복 요청이 발생하지 않는다.
+  // 프론트 메뉴 노출은 UX용 1차 차단일 뿐이며 실제 데이터 접근 권한은 서버가 최종 판단한다.
+  const { data: pendingPage } = useQuery({
+    queryKey: pendingReservationsQueryKey(0),
+    queryFn: () => fetchPendingCounselorReservations({ page: 0, size: 20 }),
+    enabled: isCounselor,
+  });
+  const pendingCount = pendingPage?.totalElements ?? 0;
 
   return (
     <div className="flex gap-0 min-h-[calc(100vh-120px)]">
@@ -56,6 +72,7 @@ export default function StaffCounselingPage() {
         <nav className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden">
           {navItems.map((item, i) => {
             const active = nav === item.key;
+            const badge = item.key === 'reservation' && pendingCount > 0 ? pendingCount : null;
             return (
               <button
                 key={item.key}
@@ -73,12 +90,12 @@ export default function StaffCounselingPage() {
                     >
                       {item.label}
                     </p>
-                    {item.badge && (
+                    {badge && (
                       <span
                         className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white shrink-0"
                         style={{ background: '#CF222E' }}
                       >
-                        {item.badge}
+                        {badge}
                       </span>
                     )}
                   </div>
@@ -115,7 +132,7 @@ export default function StaffCounselingPage() {
         </div>
 
         {isCounselor && nav === 'schedule' && <MySchedule />}
-        {nav === 'reservation' && <ReservationManage />}
+        {isCounselor && nav === 'reservation' && <ReservationManage />}
         {nav === 'record' && <SessionRecord />}
         {nav === 'result' && <SessionResult />}
         {nav === 'intake' && <CenterIntake />}
