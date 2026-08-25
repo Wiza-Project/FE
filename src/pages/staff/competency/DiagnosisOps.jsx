@@ -166,9 +166,6 @@ const COLLEGE_DATA = [
 
 // 학년은 공통코드가 없어 고정값을 쓴다(GRADE 코드그룹 미도입).
 const GRADES = [1, 2, 3, 4];
-// 단과대는 학적 도메인에 단과대 계층 자체가 없어(학과 공통코드에 상위 그룹이 없음) 여전히
-// 목업이다. 서버 target_condition 해석기도 colleges 키를 지원하지 않고 에러로 거부한다.
-const COLLEGES = ['공과대학', '경영대학', '사회과학대학', '인문대학', '자연과학대학', '글로벌대학'];
 
 const ASSESSMENT_TYPES = [
   { value: 'PRE', label: '사전진단' },
@@ -193,7 +190,6 @@ const toDateInputValue = (isoStr) => {
 const describeTarget = (targetCondition, majorLabel) => {
   if (!targetCondition) return '전체 재학생';
   if (targetCondition.grades?.length) return targetCondition.grades.map((g) => `${g}학년`).join(', ');
-  if (targetCondition.colleges?.length) return targetCondition.colleges.join(', ');
   if (targetCondition.majorCodeIds?.length) {
     return targetCondition.majorCodeIds.map((id) => majorLabel(id)).join(', ');
   }
@@ -213,7 +209,6 @@ function RoundManage({ rounds, setRounds }) {
   const [fEnd, setFEnd] = useState('');
   const [fTargetMode, setFTM] = useState('전체');
   const [fGrades, setFGrades] = useState([]);
-  const [fColleges, setFColl] = useState([]);
   const [fDepts, setFDepts] = useState([]);
   const [formError, setFormError] = useState('');
 
@@ -222,6 +217,7 @@ function RoundManage({ rounds, setRounds }) {
 
   const {
     data: majorCodes = [],
+    isLoading: majorLoading,
     isError: majorError,
     refetch: refetchMajors,
   } = useCommonCode('MAJOR');
@@ -237,7 +233,6 @@ function RoundManage({ rounds, setRounds }) {
     setFEnd('');
     setFTM('전체');
     setFGrades([]);
-    setFColl([]);
     setFDepts([]);
     setFormError('');
     setDrawerOpen(true);
@@ -255,22 +250,14 @@ function RoundManage({ rounds, setRounds }) {
     if (tc?.grades?.length) {
       setFTM('학년');
       setFGrades(tc.grades);
-      setFColl([]);
-      setFDepts([]);
-    } else if (tc?.colleges?.length) {
-      setFTM('단과대');
-      setFColl(tc.colleges);
-      setFGrades([]);
       setFDepts([]);
     } else if (tc?.majorCodeIds?.length) {
       setFTM('학과');
       setFDepts(tc.majorCodeIds);
       setFGrades([]);
-      setFColl([]);
     } else {
       setFTM('전체');
       setFGrades([]);
-      setFColl([]);
       setFDepts([]);
     }
     setFormError('');
@@ -283,7 +270,6 @@ function RoundManage({ rounds, setRounds }) {
 
   const buildTargetCondition = () => {
     if (fTargetMode === '학년' && fGrades.length) return { grades: fGrades };
-    if (fTargetMode === '단과대' && fColleges.length) return { colleges: fColleges };
     if (fTargetMode === '학과' && fDepts.length) return { majorCodeIds: fDepts };
     return null;
   };
@@ -544,7 +530,7 @@ function RoundManage({ rounds, setRounds }) {
           <div>
             <label className="block text-[11px] font-semibold text-[#656D76] mb-2">대상 지정</label>
             <div className="flex gap-2 mb-3 flex-wrap">
-              {['전체', '학년', '단과대', '학과'].map((m) => (
+              {['전체', '학년', '학과'].map((m) => (
                 <button
                   key={m}
                   onClick={() => setFTM(m)}
@@ -575,23 +561,11 @@ function RoundManage({ rounds, setRounds }) {
                 ))}
               </div>
             )}
-            {fTargetMode === '단과대' && (
-              <div className="flex gap-2 flex-wrap">
-                {COLLEGES.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => toggleList(fColleges, c, setFColl)}
-                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fColleges.includes(c) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
-                    style={fColleges.includes(c) ? { background: ACCENT } : {}}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            )}
             {fTargetMode === '학과' && (
               <div className="flex gap-2 flex-wrap">
-                {majorError ? (
+                {majorLoading ? (
+                  <p className="text-[11px] text-[#9AA0A6]">학과 목록을 불러오는 중입니다.</p>
+                ) : majorError ? (
                   <div className="flex items-center gap-2 text-[11px] text-[#CF222E]">
                     학과 목록을 불러오지 못했습니다.
                     <button
@@ -602,7 +576,7 @@ function RoundManage({ rounds, setRounds }) {
                     </button>
                   </div>
                 ) : majorCodes.length === 0 ? (
-                  <p className="text-[11px] text-[#9AA0A6]">학과 목록을 불러오는 중입니다.</p>
+                  <p className="text-[11px] text-[#9AA0A6]">등록된 학과가 없습니다.</p>
                 ) : (
                   majorCodes.map((m) => (
                     <button
