@@ -701,6 +701,7 @@ function ResponseManage({ rounds }) {
         <select
           value={roundId}
           onChange={(e) => setRoundId(e.target.value)}
+          aria-label="진단 회차 선택"
           className="h-9 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151] min-w-[220px]"
         >
           <option value="">회차 선택</option>
