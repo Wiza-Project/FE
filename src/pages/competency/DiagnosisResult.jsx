@@ -85,6 +85,12 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
     );
   }
 
+  // scores가 비어있으면 200을 내려주지 않는 게 BE 계약(AssessmentResultService)이지만,
+  // 계약이 어긋나도 아래 lowest.competencyName 접근에서 죽지 않도록 방어한다.
+  if (result.scores.length === 0) {
+    return <EmptyState message="집계된 역량 점수가 없습니다." sub="잠시 후 다시 시도해 주세요." />;
+  }
+
   const labels = result.scores.map((s) => s.competencyName);
   const values = result.scores.map((s) => Number(s.convertedScore));
   const compareValues = values.map(() => Number(result.overallAverageScore));
