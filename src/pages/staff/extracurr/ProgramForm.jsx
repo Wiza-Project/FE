@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, FileUpload, StatusBadge, toast } from '@/components/common';
 import {
   createProgram,
@@ -167,6 +167,7 @@ function getEditErrorMessage(error) {
  */
 export default function ProgramForm({ programId, onBack, onSubmit }) {
   const isEdit = !!programId;
+  const queryClient = useQueryClient();
 
   // Section 1 — 기본정보
   const [name, setName] = useState('');
@@ -287,6 +288,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     mutationFn: createProgram,
     onSuccess: (data) => {
       toast(`'${data.programName}' 프로그램이 등록되었습니다.`, 'success');
+      queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
       onSubmit();
     },
     onError: (err) => {
@@ -298,6 +300,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     mutationFn: (payload) => updateProgram(programId, payload),
     onSuccess: () => {
       toast('수정 내용이 저장되었습니다.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
       onSubmit();
     },
     onError: (err) => {

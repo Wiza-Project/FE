@@ -376,12 +376,6 @@ function ApplicationReview({ programId }) {
             </button>
           </div>
         </div>
-        <button
-          onClick={() => toast('엑셀 다운로드 API가 아직 준비되지 않았습니다.', 'info')}
-          className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#9AA0A6] cursor-not-allowed self-end"
-        >
-          엑셀 다운로드
-        </button>
       </div>
 
       <div className="flex items-center justify-end mb-2">
@@ -431,8 +425,12 @@ function ApplicationReview({ programId }) {
               ) : (
                 filtered.map((a) => {
                   const aStyle = APPR_STYLE[a.applicationStatus] ?? APPR_STYLE.APPLIED;
-                  const canApprove = a.applicationStatus === 'APPLIED' || a.applicationStatus === 'WAITLISTED';
-                  const canReject = a.applicationStatus !== 'REJECTED' && a.applicationStatus !== 'CANCELLED';
+                  // 백엔드(findApplicationForUpdate)가 승인/반려 둘 다 APPLIED/WAITLISTED 상태에서만
+                  // 허용하므로(그 외엔 APPLICATION_ALREADY_PROCESSED), 두 버튼의 활성 조건을 동일하게 맞춘다
+                  // — 승인/반려 한쪽을 누르면 상태가 바뀌어 두 버튼이 함께 비활성화되어야 한다.
+                  const canDecide = a.applicationStatus === 'APPLIED' || a.applicationStatus === 'WAITLISTED';
+                  const canApprove = canDecide;
+                  const canReject = canDecide;
                   return (
                     <tr
                       key={a.applicationId}
@@ -533,7 +531,7 @@ function ApplicationReview({ programId }) {
                 onClick={() => {
                   const ids = eligibleIds(
                     [...selected],
-                    (s) => s !== 'REJECTED' && s !== 'CANCELLED',
+                    (s) => s === 'APPLIED' || s === 'WAITLISTED',
                   );
                   if (ids.length === 0) {
                     toast('반려 가능한 항목이 없습니다.', 'error');
