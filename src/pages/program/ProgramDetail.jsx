@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PageHeader, StatusBadge, Button, ConfirmDialog, toast } from '@/components/common';
-import { fetchProgramDetail } from '@/api/programs';
+import { fetchProgramDetail, downloadProgramOperationPlan } from '@/api/programs';
 import { applyToProgram } from '@/api/programApplications';
 import { formatDate } from '@/utils/date';
 
@@ -25,6 +25,7 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
   const [agreed, setAgreed] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!programId) return;
@@ -63,6 +64,17 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
       toast(err.message ?? '신청에 실패했습니다.', 'danger');
     } finally {
       setApplying(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await downloadProgramOperationPlan(programId, detail.fileName);
+    } catch (err) {
+      toast(err.message ?? '파일 다운로드에 실패했습니다.', 'danger');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -171,6 +183,31 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                   <span className="text-[13px] font-black text-[#D97706]">
                     {p.mileagePoints}점
                   </span>
+                </div>
+              )}
+              {p.fileName && (
+                <div className="flex px-5 py-3">
+                  <span className="w-24 flex-shrink-0 text-[13px] font-semibold text-[#656D76]">
+                    첨부파일
+                  </span>
+                  <button
+                    onClick={handleDownload}
+                    disabled={downloading}
+                    className="flex items-center gap-1.5 text-[13px] text-[#2563EB] hover:underline disabled:opacity-60 disabled:no-underline min-w-0"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="#2563EB"
+                      className="flex-shrink-0"
+                    >
+                      <path d="M4 0h8l4 4v10a2 2 0 01-2 2H4a2 2 0 01-2-2V2a2 2 0 012-2z" />
+                    </svg>
+                    <span className="truncate">
+                      {downloading ? '다운로드 중…' : p.fileName}
+                    </span>
+                  </button>
                 </div>
               )}
             </div>

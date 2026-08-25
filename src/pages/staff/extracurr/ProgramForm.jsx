@@ -6,6 +6,7 @@ import {
   fetchCompetencyOptions,
   fetchProgramDetailAdmin,
   updateProgram,
+  uploadProgramOperationPlan,
 } from '@/api/programs';
 import { ApiError } from '@/api/client';
 import { useCommonCode } from '@/hooks/useCommonCode';
@@ -189,6 +190,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   // Validation / submit state
   const [errors, setErrors] = useState({});
   const [prefilled, setPrefilled] = useState(false);
+  const [fileGroupId, setFileGroupId] = useState(null);
 
   const sec1Ref = useRef(null);
   const sec2Ref = useRef(null);
@@ -308,6 +310,17 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     },
   });
 
+  const uploadMutation = useMutation({
+    mutationFn: uploadProgramOperationPlan,
+    onSuccess: (data) => {
+      setFileGroupId(data.fileGroupId);
+      toast('운영계획서가 업로드되었습니다.', 'success');
+    },
+    onError: (err) => {
+      toast(err.message ?? '운영계획서 업로드에 실패했습니다.', 'error');
+    },
+  });
+
   const validatePeriodRule = () => {
     if (recruitStart && recruitEnd && recruitStart >= recruitEnd) {
       return '모집 시작일은 모집 종료일보다 빨라야 합니다.';
@@ -372,9 +385,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   };
 
   const buildPayload = () => ({
-    // 실제 첨부 업로드 API가 아직 없어 등록 시엔 항상 생략(백엔드에서 optional).
-    // 수정 시에는 키 자체를 생략해 백엔드가 기존 첨부(file_group_id)를 그대로 유지하도록 한다.
-    ...(isEdit ? {} : { fileGroupId: null }),
+    // 새로 업로드한 파일이 있으면 그 fileGroupId를 보낸다.
+    // 수정 모드에서 파일을 바꾸지 않았다면 키 자체를 생략해 백엔드가 기존 첨부(file_group_id)를 그대로 유지하도록 한다.
+    ...(isEdit ? (fileGroupId != null ? { fileGroupId } : {}) : { fileGroupId }),
     // 운영단위는 화면에 입력란이 없다 — 등록 시엔 항상 생략(백엔드 기본값 사용), 수정 시에도
     // 키 자체를 생략해 백엔드가 기존 값을 그대로 유지하도록 한다.
     ...(isEdit ? {} : { operatingUnitCodeId: null }),
@@ -449,7 +462,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     );
   }
 
-  const saving = isEdit ? updateMutation.isPending : registerMutation.isPending;
+  const saving =
+    (isEdit ? updateMutation.isPending : registerMutation.isPending) || uploadMutation.isPending;
 
   return (
     <div>
@@ -636,14 +650,18 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
             <FileUpload
               accept=".pdf,.hwp,.doc,.docx"
               onFiles={(files) => {
-                if (files.length > 0) toast(`'${files[0].name}' 첨부됨`, 'success');
+                if (files.length > 0) uploadMutation.mutate(files[0]);
               }}
             />
-            <p className="text-[10px] text-[#9AA0A6] mt-1.5">
-              {isEdit
-                ? '실제 파일 업로드 연동 전이라 여기서 새로 올려도 저장되지 않으며, 기존에 첨부된 파일이 있다면 그대로 유지됩니다.'
-                : '실제 파일 업로드 연동 전이라 등록 시 서버에는 전송되지 않습니다.'}
-            </p>
+            {uploadMutation.isPending ? (
+              <p className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
+            ) : (
+              isEdit && (
+                <p className="text-[10px] text-[#9AA0A6] mt-1.5">
+                  새 파일을 첨부하지 않으면 기존에 첨부된 파일이 그대로 유지됩니다.
+                </p>
+              )
+            )}
           </Field>
         </Section>
       </div>
