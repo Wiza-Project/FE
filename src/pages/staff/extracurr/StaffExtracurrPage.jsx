@@ -10,10 +10,12 @@ import ParticipationPage from './ParticipationPage';
 export default function StaffExtracurrPage() {
   const [view, setView] = useState('list');
   const [editId, setEditId] = useState(undefined);
+  const [participationTarget, setParticipationTarget] = useState(null);
 
   const goList = () => {
     setView('list');
     setEditId(undefined);
+    setParticipationTarget(null);
   };
 
   if (view === 'new') {
@@ -24,8 +26,14 @@ export default function StaffExtracurrPage() {
     return <ProgramForm programId={editId} onBack={goList} onSubmit={goList} />;
   }
 
-  if (view === 'participation') {
-    return <ParticipationPage onBack={goList} />;
+  if (view === 'participation' && participationTarget) {
+    return (
+      <ParticipationPage
+        programId={participationTarget.id}
+        programName={participationTarget.name}
+        onBack={goList}
+      />
+    );
   }
 
   return (
@@ -35,7 +43,10 @@ export default function StaffExtracurrPage() {
         setEditId(id);
         setView('edit');
       }}
-      onParticipation={() => setView('participation')}
+      onParticipation={(id, name) => {
+        setParticipationTarget({ id, name });
+        setView('participation');
+      }}
     />
   );
 }

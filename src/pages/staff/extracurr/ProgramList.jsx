@@ -1,201 +1,47 @@
-import { useState } from 'react';
-import { Button, ConfirmDialog, Modal, StatusBadge, toast } from '@/components/common';
-import { useCommonCode } from '@/hooks/useCommonCode';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { StatusBadge, Pagination, ConfirmDialog, toast, Button } from '@/components/common';
+import { fetchProgramsAdmin, deleteProgram } from '@/api/programs';
+import { ApiError } from '@/api/client';
+import { formatDate } from '@/utils/date';
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
+const PAGE_SIZE = 10;
 
-const PROGRAMS = [
-  {
-    id: 'P001',
-    name: '해외문화체험 워크숍',
-    category: '글로벌',
-    operPeriod: '2026-09-01~09-07',
-    recruitPeriod: '2026-08-01~08-16',
-    applied: 20,
-    capacity: 30,
-    status: '모집중',
-    dept: '학생역량센터',
-    semester: '2026-1',
-  },
-  {
-    id: 'P002',
-    name: '진로탐색 워크숍 A',
-    category: '진로',
-    operPeriod: '2026-09-10~09-11',
-    recruitPeriod: '2026-08-01~08-20',
-    applied: 15,
-    capacity: 20,
-    status: '모집중',
-    dept: '비교과운영부서',
-    semester: '2026-1',
-  },
-  {
-    id: 'P003',
-    name: '리더십 캠프',
-    category: '리더십',
-    operPeriod: '2026-09-15~09-16',
-    recruitPeriod: '2026-08-05~08-22',
-    applied: 28,
-    capacity: 30,
-    status: '운영중',
-    dept: '진로심리상담센터',
-    semester: '2026-1',
-  },
-  {
-    id: 'P004',
-    name: '독서인증제 2026-1',
-    category: '학습',
-    operPeriod: '2026-03-02~08-31',
-    recruitPeriod: '2026-03-02~03-14',
-    applied: 42,
-    capacity: 50,
-    status: '운영중',
-    dept: '취창업지원과',
-    semester: '2026-1',
-  },
-  {
-    id: 'P005',
-    name: 'NCS 직업기초 특강',
-    category: '취업',
-    operPeriod: '2026-09-20~09-21',
-    recruitPeriod: '2026-08-10~08-25',
-    applied: 18,
-    capacity: 25,
-    status: '모집중',
-    dept: '학생역량센터',
-    semester: '2026-1',
-  },
-  {
-    id: 'P006',
-    name: '빅데이터 분석 워크숍',
-    category: '학습',
-    operPeriod: '2026-09-25~09-26',
-    recruitPeriod: '2026-08-10~08-22',
-    applied: 12,
-    capacity: 15,
-    status: '모집중',
-    dept: '비교과운영부서',
-    semester: '2026-1',
-  },
-  {
-    id: 'P007',
-    name: '창업 아이디어 경진대회',
-    category: '창업',
-    operPeriod: '2026-10-01~10-02',
-    recruitPeriod: '2026-08-15~08-30',
-    applied: 8,
-    capacity: 20,
-    status: '승인',
-    dept: '진로심리상담센터',
-    semester: '2026-1',
-  },
-  {
-    id: 'P008',
-    name: '글쓰기 클리닉',
-    category: '학습',
-    operPeriod: '2026-10-05~10-06',
-    recruitPeriod: '2026-08-20~09-05',
-    applied: 0,
-    capacity: 20,
-    status: '심사요청',
-    dept: '취창업지원과',
-    semester: '2026-1',
-  },
-  {
-    id: 'P009',
-    name: '영어 프레젠테이션 클리닉',
-    category: '글로벌',
-    operPeriod: '2026-10-10',
-    recruitPeriod: '2026-08-20~09-10',
-    applied: 0,
-    capacity: 15,
-    status: '작성중',
-    dept: '학생역량센터',
-    semester: '2026-1',
-  },
-  {
-    id: 'P010',
-    name: '봉사단 해외봉사 프로그램',
-    category: '봉사',
-    operPeriod: '2025-12-20~12-27',
-    recruitPeriod: '2025-11-01~11-15',
-    applied: 24,
-    capacity: 24,
-    status: '종료',
-    dept: '비교과운영부서',
-    semester: '2025-2',
-  },
-  {
-    id: 'P011',
-    name: '멘토링 프로그램 2025-2',
-    category: '진로',
-    operPeriod: '2025-09-01~12-15',
-    recruitPeriod: '2025-08-01~08-20',
-    applied: 60,
-    capacity: 60,
-    status: '종료',
-    dept: '진로심리상담센터',
-    semester: '2025-2',
-  },
-  {
-    id: 'P012',
-    name: '문화예술 체험 프로그램',
-    category: '문화',
-    operPeriod: '2026-10-15~10-16',
-    recruitPeriod: '2026-09-01~09-20',
-    applied: 0,
-    capacity: 30,
-    status: '반려',
-    dept: '취창업지원과',
-    semester: '2026-1',
-  },
+// 백엔드 ProgramStatus enum(DRAFT/OPERATING/CLOSED)은 CommonCode가 아니라 순수 Java enum이라
+// 공통코드 API로 한글 라벨을 받아올 수 없다. 행에 표시하는 상태 뱃지는 서버가 내려주는
+// programStatusLabel을 그대로 쓰고, 필터용 select만 임시로 enum 코드를 한글로 옮겨 적었다.
+// 실제 서버 응답과 다르면 이 매핑만 고치면 된다.
+// DRAFT는 이름과 달리 "등록 직후 ~ 모집 마감 전까지의 모집중 상태"를 뜻한다(컬럼 기본값과의
+// 하위 호환 때문에 이름만 DRAFT로 남아있음 — ProgramStatus enum 주석 참고). 라벨은 실제 의미대로 "모집중".
+const STATUS_OPTIONS = [
+  { value: '', label: '전체' },
+  { value: 'DRAFT', label: '모집중' },
+  { value: 'OPERATING', label: '운영중' },
+  { value: 'CLOSED', label: '종료' },
 ];
 
-const WAITLIST = [
-  {
-    rank: 1,
-    studentId: '20231500',
-    name: '강다은',
-    dept: '경영학과',
-    appliedAt: '2026-08-12 14:22',
-  },
-  {
-    rank: 2,
-    studentId: '20240102',
-    name: '임채원',
-    dept: '컴퓨터공학과',
-    appliedAt: '2026-08-12 15:03',
-  },
-  {
-    rank: 3,
-    studentId: '20232201',
-    name: '송민준',
-    dept: '산업공학과',
-    appliedAt: '2026-08-12 16:45',
-  },
-  {
-    rank: 4,
-    studentId: '20241300',
-    name: '한소율',
-    dept: '심리학과',
-    appliedAt: '2026-08-13 09:11',
-  },
-];
+// ProgramAdminListItemResponseDTO(GET /api/admin/programs) -> 화면에서 쓰는 행 모양으로 변환.
+const toRow = (dto) => ({
+  id: dto.programId,
+  name: dto.programName,
+  category: dto.programTypeCodeName,
+  dept: dto.operatingUnitCodeName,
+  operPeriod: `${formatDate(dto.operationStartsAt)} ~ ${formatDate(dto.operationEndsAt)}`,
+  recruitPeriod: `${formatDate(dto.recruitmentStartsAt)} ~ ${formatDate(dto.recruitmentEndsAt)}`,
+  applied: dto.applicantCount ?? 0,
+  capacity: dto.capacity ?? 0,
+  status: dto.programStatusLabel,
+  raw: dto,
+});
 
-const SEMESTERS = ['전체', '2026-1', '2025-2', '2025-1'];
-const STATUS_LIST = ['전체', '작성중', '심사요청', '승인', '반려', '모집중', '운영중', '종료'];
-const CATEGORIES = ['전체', '학습', '진로', '취업', '리더십', '글로벌', '봉사', '창업', '문화'];
-
-// ─── Which actions are available per status ───────────────────────────────────
-
-function canEdit(s) {
-  return s === '작성중' || s === '반려';
+function getDeleteErrorMessage(error) {
+  if (!(error instanceof ApiError)) {
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  if (error.code === 'A004') return '이 프로그램을 삭제할 권한이 없습니다.';
+  if (error.code === 'P010') return error.message || '모집이 종료된 프로그램은 삭제할 수 없습니다.';
+  return error.message || '삭제 중 오류가 발생했습니다.';
 }
-function canCloseRecruit(s) {
-  return s === '모집중';
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ApplyBar({ applied, capacity }) {
   const pct = capacity > 0 ? Math.min(100, (applied / capacity) * 100) : 0;
@@ -220,66 +66,68 @@ function ApplyBar({ applied, capacity }) {
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
-
 /**
+ * 교직원 비교과 프로그램 목록. GET /api/admin/programs 연동.
+ *
  * @param {Object} props
  * @param {() => void} props.onNew
- * @param {(id: string) => void} props.onEdit
- * @param {() => void} props.onParticipation
+ * @param {(id: number, program: object) => void} props.onEdit
+ * @param {(id: number, programName: string) => void} props.onParticipation
  */
 export default function ProgramList({ onNew, onEdit, onParticipation }) {
-  const [semester, setSemester] = useState('전체');
-  const [status, setStatus] = useState('전체');
-  const [category, setCategory] = useState('전체');
-  const [dept, setDept] = useState('전체');
+  const [status, setStatus] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [submittedKeyword, setSubmittedKeyword] = useState('');
+  const [page, setPage] = useState(1);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const [closeTarget, setCloseTarget] = useState(null);
-  const [waitlistTarget, setWaitlistTarget] = useState(null);
-  const [waitlist, setWaitlist] = useState(WAITLIST);
-  const [promoteTarget, setPromoteTarget] = useState(null);
+  const queryClient = useQueryClient();
+  const adminProgramsQueryKey = ['adminPrograms', { status, keyword: submittedKeyword, page }];
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: adminProgramsQueryKey,
+    queryFn: () =>
+      fetchProgramsAdmin({
+        status: status || undefined,
+        keyword: submittedKeyword || undefined,
+        page: page - 1,
+        size: PAGE_SIZE,
+      }),
+  });
 
-  const { data: departmentCodes = [] } = useCommonCode('DEPARTMENT');
-  const depts = ['전체', ...departmentCodes.map((c) => c.codeName)];
+  useEffect(() => {
+    if (!data) return;
+    const lastPage = Math.max(1, data.totalPages || 1);
+    if (page > lastPage) setPage(lastPage);
+  }, [data, page]);
 
-  const filtered = PROGRAMS.filter(
-    (p) =>
-      (semester === '전체' || p.semester === semester) &&
-      (status === '전체' || p.status === status) &&
-      (category === '전체' || p.category === category) &&
-      (dept === '전체' || p.dept === dept) &&
-      (!keyword || p.name.includes(keyword) || p.id.includes(keyword)),
-  );
+  const deleteMutation = useMutation({
+    mutationFn: deleteProgram,
+    onSuccess: () => {
+      toast('삭제되었습니다.', 'success');
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
+    },
+    onError: (err) => {
+      toast(getDeleteErrorMessage(err), 'error');
+      setDeleteTarget(null);
+      // 상태 경합(예: 다른 탭에서 방금 모집이 종료됨) 가능성이 있으니 최신 isDeletable을 다시 받아온다.
+      queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
+    },
+  });
 
-  const handleCopy = (p) => {
-    toast(`'${p.name}'을 복사했습니다. 새 프로그램으로 저장하세요.`, 'success');
+  const handleDeleteConfirm = () => {
+    if (deleteMutation.isPending || !deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id);
   };
 
-  const handleCloseConfirm = () => {
-    if (!closeTarget) return;
-    toast(`'${closeTarget.name}' 모집을 마감했습니다.`, 'success');
-    setCloseTarget(null);
-  };
+  const paged = (data?.content ?? []).map(toRow);
+  const totalItems = data?.totalElements ?? 0;
+  const totalPages = Math.max(1, data?.totalPages || 1);
+  const currentPage = Math.min(page, totalPages);
 
-  const handlePromote = () => {
-    if (!promoteTarget) return;
-    const remaining = (waitlistTarget?.capacity ?? 0) - (waitlistTarget?.applied ?? 0);
-    toast(
-      `${promoteTarget.rank}번 대기자 ${promoteTarget.name}을(를) 참여자로 전환했습니다. 잔여 정원 ${remaining - 1}명. 학생에게 알림이 발송됩니다.`,
-      'success',
-    );
-    setWaitlist((prev) =>
-      prev.filter((w) => w.rank !== promoteTarget.rank).map((w, i) => ({ ...w, rank: i + 1 })),
-    );
-    setPromoteTarget(null);
-  };
-
-  const handleExclude = (entry) => {
-    setWaitlist((prev) =>
-      prev.filter((w) => w.rank !== entry.rank).map((w, i) => ({ ...w, rank: i + 1 })),
-    );
-    toast(`${entry.name} 학생을 대기열에서 제외했습니다.`, 'info');
+  const runSearch = () => {
+    setPage(1);
+    setSubmittedKeyword(keyword);
   };
 
   return (
@@ -289,50 +137,54 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
         <div>
           <h1 className="text-[20px] font-black text-[#1F2328]">비교과 프로그램 관리</h1>
           <p className="text-[13px] text-[#9AA0A6] mt-0.5">
-            프로그램 개설·심사·모집·운영 전 주기를 관리합니다.
+            프로그램 개설·모집·운영 전 주기를 관리합니다.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onParticipation}>
-            참여·결과 관리
-          </Button>
-          <Button onClick={onNew} style={{ background: '#374151' }}>
-            + 프로그램 등록
-          </Button>
-        </div>
+        <Button onClick={onNew} style={{ background: '#374151' }}>
+          + 프로그램 등록
+        </Button>
       </div>
 
       {/* FilterBar */}
-      <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-4 grid grid-cols-5 gap-3">
-        {[
-          { label: '학기', value: semester, set: setSemester, opts: SEMESTERS },
-          { label: '상태', value: status, set: setStatus, opts: STATUS_LIST },
-          { label: '분류', value: category, set: setCategory, opts: CATEGORIES },
-          { label: '주관부서', value: dept, set: setDept, opts: depts },
-        ].map((f) => (
-          <div key={f.label}>
-            <label className="block text-[10px] font-semibold text-[#656D76] mb-1">{f.label}</label>
-            <select
-              value={f.value}
-              onChange={(e) => f.set(e.target.value)}
-              className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
-            >
-              {f.opts.map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </select>
-          </div>
-        ))}
+      <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-4 grid grid-cols-3 gap-3">
         <div>
-          <label className="block text-[10px] font-semibold text-[#656D76] mb-1">
-            프로그램명·ID
+          <label htmlFor="admin-program-status" className="block text-[10px] font-semibold text-[#656D76] mb-1">
+            상태
           </label>
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="검색..."
-            className="w-full h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
-          />
+          <select
+            id="admin-program-status"
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+            className="w-full h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
+          >
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label htmlFor="admin-program-keyword" className="block text-[10px] font-semibold text-[#656D76] mb-1">프로그램명</label>
+          <div className="flex gap-1.5">
+            <input
+              id="admin-program-keyword"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+              placeholder="검색..."
+              className="flex-1 h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
+            />
+            <button
+              onClick={runSearch}
+              className="h-8 px-3 text-[12px] font-bold rounded-[6px] bg-[#374151] text-white hover:bg-[#1F2937] transition-colors"
+            >
+              조회
+            </button>
+          </div>
         </div>
       </div>
 
@@ -341,207 +193,127 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
         <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
           <span className="text-[13px] font-bold text-[#1F2328]">프로그램 목록</span>
           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#374151]">
-            {filtered.length}개
+            {totalItems}개
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[12px]">
-            <thead>
-              <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                {[
-                  'ID',
-                  '프로그램명',
-                  '분류',
-                  '운영기간',
-                  '모집기간',
-                  '신청/정원',
-                  '상태',
-                  '관리',
-                ].map((h, i) => (
-                  <th
-                    key={h}
-                    className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 5 ? 'text-center' : 'text-left'}`}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
-                    검색 결과가 없습니다.
-                  </td>
+        {isError && (
+          <div className="px-4 py-12 text-center text-[13px] text-[#CF222E]">
+            {error?.message ?? '프로그램 목록을 불러오지 못했습니다.'}
+          </div>
+        )}
+
+        {isLoading && !isError && (
+          <div className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">불러오는 중...</div>
+        )}
+
+        {!isLoading && !isError && (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
+                  {[
+                    '프로그램명',
+                    '분류',
+                    '운영기간',
+                    '모집기간',
+                    '신청/정원',
+                    '상태',
+                    '관리',
+                  ].map((h, i) => (
+                    <th
+                      key={h}
+                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 4 ? 'text-center' : 'text-left'}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ) : (
-                filtered.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6] whitespace-nowrap">
-                      {p.id}
-                    </td>
-                    <td className="px-4 py-3 max-w-[200px]">
-                      <p className="font-semibold text-[#1F2328] truncate">{p.name}</p>
-                      <p className="text-[10px] text-[#9AA0A6]">{p.dept}</p>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-[#656D76]">{p.category}</td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#444D56] whitespace-nowrap">
-                      {p.operPeriod}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#444D56] whitespace-nowrap">
-                      {p.recruitPeriod}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ApplyBar applied={p.applied} capacity={p.capacity} />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <StatusBadge status={p.status} size="sm" />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 justify-center flex-wrap">
-                        <button
-                          disabled={!canEdit(p.status)}
-                          onClick={() => onEdit(p.id)}
-                          className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-[#F3F4F6] text-[#374151] hover:bg-[#F3F4F6]"
-                        >
-                          수정
-                        </button>
-                        <button
-                          disabled={!canCloseRecruit(p.status)}
-                          onClick={() => setCloseTarget(p)}
-                          className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-[#FEF3C7] text-[#D97706] hover:bg-[#FDE68A]"
-                        >
-                          모집마감
-                        </button>
-                        {(p.status === '모집중' || p.status === '운영중') &&
-                          p.applied >= p.capacity && (
-                            <button
-                              onClick={() => {
-                                setWaitlistTarget(p);
-                                setWaitlist(WAITLIST);
-                              }}
-                              className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] text-[#656D76] hover:bg-[#E5E7EB] transition-colors"
-                            >
-                              대기열
-                            </button>
-                          )}
-                        <button
-                          onClick={() => handleCopy(p)}
-                          className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors bg-[#F3F4F6] text-[#656D76] hover:bg-[#E5E7EB]"
-                        >
-                          복사
-                        </button>
-                      </div>
+              </thead>
+              <tbody>
+                {paged.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
+                      검색 결과가 없습니다.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  paged.map((p) => (
+                    <tr
+                      key={p.id}
+                      className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
+                    >
+                      <td className="px-4 py-3 max-w-[200px]">
+                        <p className="font-semibold text-[#1F2328] truncate">{p.name}</p>
+                        <p className="text-[10px] text-[#9AA0A6]">{p.dept}</p>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-[#656D76]">{p.category}</td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-[#444D56] whitespace-nowrap">
+                        {p.operPeriod}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-[#444D56] whitespace-nowrap">
+                        {p.recruitPeriod}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ApplyBar applied={p.applied} capacity={p.capacity} />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <StatusBadge status={p.status} size="sm" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 justify-center flex-wrap">
+                          <button
+                            disabled={!p.raw.isEditable}
+                            onClick={() => onEdit(p.id, p.raw)}
+                            className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB]"
+                          >
+                            수정
+                          </button>
+                          <button
+                            disabled={!p.raw.isDeletable}
+                            onClick={() => setDeleteTarget(p)}
+                            className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-[#FEE2E2] text-[#CF222E] hover:bg-[#FECACA]"
+                          >
+                            삭제
+                          </button>
+                          <button
+                            onClick={() => onParticipation(p.id, p.name)}
+                            className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB]"
+                          >
+                            참여관리
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!isLoading && !isError && (
+          <div className="px-4 pb-3">
+            <Pagination
+              page={currentPage}
+              totalPages={totalPages}
+              onChange={setPage}
+              totalItems={totalItems}
+              pageSize={PAGE_SIZE}
+            />
+          </div>
+        )}
       </div>
 
-      {/* ── Modals ── */}
-
-      {/* Close recruit confirm */}
       <ConfirmDialog
-        open={!!closeTarget}
-        title="모집 마감 확인"
-        message={`'${closeTarget?.name}' 모집을 마감합니다.\n마감 후에는 신규 신청을 받을 수 없습니다.`}
-        confirmLabel="마감 처리"
+        open={!!deleteTarget}
+        title="프로그램 삭제 확인"
+        message="정말 삭제하시겠습니까?"
+        confirmLabel="삭제"
         danger
-        onConfirm={handleCloseConfirm}
-        onCancel={() => setCloseTarget(null)}
-      />
-
-      {/* Waitlist modal */}
-      <Modal
-        open={!!waitlistTarget}
-        onClose={() => setWaitlistTarget(null)}
-        title={`대기열 관리 — ${waitlistTarget?.name ?? ''}`}
-        size="lg"
-        footer={
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setWaitlistTarget(null)}>
-              닫기
-            </Button>
-          </div>
-        }
-      >
-        <div className="mb-4 p-3 rounded-[8px] bg-[#F3F4F6] border border-[#E5E7EB] text-[12px] text-[#374151]">
-          <span className="font-bold">정원 초과 대기자 {waitlist.length}명</span>이 있습니다. 승격
-          시 학생에게 자동 알림이 발송됩니다.
-        </div>
-        <table className="w-full border-collapse text-[12px]">
-          <thead>
-            <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-              {['순번', '학번', '성명', '학과', '신청일시', '관리'].map((h, i) => (
-                <th
-                  key={h}
-                  className={`px-3 py-2.5 text-[10px] font-semibold text-[#656D76] ${i < 4 ? 'text-center' : i === 4 ? 'text-left' : 'text-center'}`}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {waitlist.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="py-8 text-center text-[12px] text-[#9AA0A6]">
-                  대기자가 없습니다.
-                </td>
-              </tr>
-            ) : (
-              waitlist.map((w) => (
-                <tr
-                  key={w.rank}
-                  className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA]"
-                >
-                  <td className="px-3 py-3 text-center font-black text-[13px] text-[#374151]">
-                    {w.rank}
-                  </td>
-                  <td className="px-3 py-3 text-center font-mono text-[11px] text-[#9AA0A6]">
-                    {w.studentId}
-                  </td>
-                  <td className="px-3 py-3 text-center font-bold text-[#1F2328]">{w.name}</td>
-                  <td className="px-3 py-3 text-center text-[#656D76]">{w.dept}</td>
-                  <td className="px-3 py-3 font-mono text-[11px] text-[#9AA0A6]">{w.appliedAt}</td>
-                  <td className="px-3 py-3 text-center">
-                    <div className="flex gap-1.5 justify-center">
-                      <button
-                        onClick={() => setPromoteTarget(w)}
-                        className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0] transition-colors"
-                      >
-                        승격
-                      </button>
-                      <button
-                        onClick={() => handleExclude(w)}
-                        className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] bg-[#FEE2E2] text-[#CF222E] hover:bg-[#FECACA] transition-colors"
-                      >
-                        제외
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </Modal>
-
-      {/* Promote confirm */}
-      <ConfirmDialog
-        open={!!promoteTarget}
-        title="대기자 승격 확인"
-        message={`${promoteTarget?.rank}번 대기자 ${promoteTarget?.name}을(를) 참여자로 전환합니다.\n잔여 정원 ${(waitlistTarget?.capacity ?? 0) - (waitlistTarget?.applied ?? 0) - 1 > 0 ? (waitlistTarget?.capacity ?? 0) - (waitlistTarget?.applied ?? 0) - 1 : 0}명.\n학생에게 카카오 알림톡·이메일이 자동 발송됩니다.`}
-        confirmLabel="승격 처리"
-        onConfirm={handlePromote}
-        onCancel={() => setPromoteTarget(null)}
+        loading={deleteMutation.isPending}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => !deleteMutation.isPending && setDeleteTarget(null)}
       />
     </div>
   );
