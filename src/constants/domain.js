@@ -144,6 +144,8 @@ export const COUNSELING_RESERVATION_ERROR_CODE = {
   RESERVATION_NOT_FOUND: 'S003',
   CANCELLATION_NOT_ALLOWED: 'S004',
   FORBIDDEN: 'A004',
+  /** 이미 처리(승인/반려)된 예약을 다시 승인·반려하려 할 때. 상담사 승인·반려 API 전용. */
+  ALREADY_PROCESSED: 'S005',
 };
 
 /**
