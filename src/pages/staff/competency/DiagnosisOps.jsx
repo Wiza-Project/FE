@@ -608,6 +608,7 @@ function RoundManage({ rounds, setRounds }) {
                     <button
                       key={m.codeId}
                       onClick={() => toggleList(fDepts, m.codeId, setFDepts)}
+                      aria-pressed={fDepts.includes(m.codeId)}
                       className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fDepts.includes(m.codeId) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
                       style={fDepts.includes(m.codeId) ? { background: ACCENT } : {}}
                     >
