@@ -1,9 +1,28 @@
-import { useState } from 'react';
-import { Button, ConfirmDialog, Modal, Tabs, toast, DonutChart } from '@/components/common';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, Modal, Tabs, toast, DonutChart, Pagination } from '@/components/common';
+import {
+  fetchProgramApplications,
+  approveApplication,
+  rejectApplication,
+  bulkApproveApplications,
+  bulkRejectApplications,
+} from '@/api/programs';
+import { formatDate } from '@/utils/date';
+import { fetchAllPages } from '@/utils/pagination';
 
 // ─── Shared program summary bar ───────────────────────────────────────────────
 
-function ProgramBar({ onBack }) {
+function ProgramBar({ onBack, programId, programName }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['programApplications', programId, '전체'],
+    queryFn: () => fetchAllPages((p) => fetchProgramApplications(programId, p)),
+    enabled: !!programId,
+  });
+  const applications = data ?? [];
+  const approved = applications.filter((a) => a.applicationStatus === 'APPROVED').length;
+  const waitlisted = applications.filter((a) => a.applicationStatus === 'WAITLISTED').length;
+
   return (
     <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-5 py-3 mb-5 flex items-center gap-5 flex-wrap">
       <button
@@ -14,245 +33,42 @@ function ProgramBar({ onBack }) {
       </button>
       <div className="h-4 w-px bg-[#E5E7EB] shrink-0" />
       <div className="min-w-0">
-        <p className="text-[13px] font-black text-[#1F2328] truncate">해외문화체험 워크숍</p>
-        <p className="text-[10px] text-[#9AA0A6]">모집기간: 2026-08-01 ~ 08-16</p>
+        <p className="text-[13px] font-black text-[#1F2328] truncate">{programName}</p>
       </div>
       <div className="ml-auto flex gap-4 flex-wrap shrink-0">
-        {[
-          { label: '신청', value: 20, color: '#374151' },
-          { label: '승인', value: 14, color: '#059669' },
-          { label: '대기', value: 4, color: '#D97706' },
-          { label: '잔여 정원', value: 10, color: '#6B7280' },
-        ].map((s) => (
-          <div key={s.label} className="text-center">
-            <div className="text-[16px] font-black" style={{ color: s.color }}>
-              {s.value}
+        {isLoading ? (
+          <span className="text-[11px] text-[#9AA0A6]">불러오는 중...</span>
+        ) : isError ? (
+          <span className="text-[11px] text-[#CF222E]">통계를 불러오지 못했습니다.</span>
+        ) : (
+          [
+            { label: '신청', value: applications.length, color: '#374151' },
+            { label: '승인', value: approved, color: '#059669' },
+            { label: '대기', value: waitlisted, color: '#D97706' },
+          ].map((s) => (
+            <div key={s.label} className="text-center">
+              <div className="text-[16px] font-black" style={{ color: s.color }}>
+                {s.value}
+              </div>
+              <div className="text-[10px] text-[#9AA0A6]">{s.label}</div>
             </div>
-            <div className="text-[10px] text-[#9AA0A6]">{s.label}</div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-// ─── Dummy data ───────────────────────────────────────────────────────────────
-
-const QUAL_STYLE = {
-  적합: { bg: '#D1FAE5', text: '#059669' },
-  '학년 미달': { bg: '#FEE2E2', text: '#CF222E' },
-  '선수요건 미충족': { bg: '#FEE2E2', text: '#CF222E' },
-  중복신청: { bg: '#FEF3C7', text: '#D97706' },
-};
+// ProgramApplicationAdminListItemResponseDTO의 applicationStatus 코드 -> 뱃지 색상.
 const APPR_STYLE = {
-  검토중: { bg: '#F3F4F6', text: '#6B7280' },
-  승인: { bg: '#D1FAE5', text: '#059669' },
-  반려: { bg: '#FEE2E2', text: '#CF222E' },
-  대기: { bg: '#FEF3C7', text: '#D97706' },
+  APPLIED: { bg: '#F3F4F6', text: '#6B7280' },
+  WAITLISTED: { bg: '#FEF3C7', text: '#D97706' },
+  APPROVED: { bg: '#D1FAE5', text: '#059669' },
+  REJECTED: { bg: '#FEE2E2', text: '#CF222E' },
+  CANCELLED: { bg: '#F3F4F6', text: '#9AA0A6' },
 };
 
-const APPLICANTS = [
-  {
-    id: 'A01',
-    appliedAt: '08-01',
-    studentId: '20231234',
-    name: '홍길동',
-    dept: '컴퓨터공학과',
-    grade: 3,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A02',
-    appliedAt: '08-01',
-    studentId: '20231111',
-    name: '김영희',
-    dept: '경영학과',
-    grade: 2,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A03',
-    appliedAt: '08-02',
-    studentId: '20230777',
-    name: '이민수',
-    dept: '산업공학과',
-    grade: 3,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A04',
-    appliedAt: '08-02',
-    studentId: '20241002',
-    name: '박철수',
-    dept: '경영학과',
-    grade: 1,
-    qual: '학년 미달',
-    status: '검토중',
-  },
-  {
-    id: 'A05',
-    appliedAt: '08-03',
-    studentId: '20232050',
-    name: '최지수',
-    dept: '심리학과',
-    grade: 3,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A06',
-    appliedAt: '08-03',
-    studentId: '20231876',
-    name: '정하준',
-    dept: '컴퓨터공학과',
-    grade: 3,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A07',
-    appliedAt: '08-04',
-    studentId: '20240345',
-    name: '오수빈',
-    dept: '사회복지학과',
-    grade: 1,
-    qual: '학년 미달',
-    status: '검토중',
-  },
-  {
-    id: 'A08',
-    appliedAt: '08-04',
-    studentId: '20231654',
-    name: '윤태양',
-    dept: '경영학과',
-    grade: 3,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A09',
-    appliedAt: '08-05',
-    studentId: '20230912',
-    name: '임채원',
-    dept: '컴퓨터공학과',
-    grade: 4,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A10',
-    appliedAt: '08-05',
-    studentId: '20232200',
-    name: '강다은',
-    dept: '심리학과',
-    grade: 3,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A11',
-    appliedAt: '08-06',
-    studentId: '20231390',
-    name: '송민준',
-    dept: '산업공학과',
-    grade: 2,
-    qual: '선수요건 미충족',
-    status: '검토중',
-  },
-  {
-    id: 'A12',
-    appliedAt: '08-06',
-    studentId: '20240799',
-    name: '한소율',
-    dept: '심리학과',
-    grade: 2,
-    qual: '적합',
-    status: '대기',
-  },
-  {
-    id: 'A13',
-    appliedAt: '08-07',
-    studentId: '20241300',
-    name: '류진서',
-    dept: '경영학과',
-    grade: 2,
-    qual: '적합',
-    status: '대기',
-  },
-  {
-    id: 'A14',
-    appliedAt: '08-08',
-    studentId: '20232900',
-    name: '배수아',
-    dept: '컴퓨터공학과',
-    grade: 3,
-    qual: '중복신청',
-    status: '검토중',
-  },
-  {
-    id: 'A15',
-    appliedAt: '08-08',
-    studentId: '20231010',
-    name: '조현우',
-    dept: '사회복지학과',
-    grade: 3,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A16',
-    appliedAt: '08-09',
-    studentId: '20232510',
-    name: '신지민',
-    dept: '심리학과',
-    grade: 2,
-    qual: '적합',
-    status: '대기',
-  },
-  {
-    id: 'A17',
-    appliedAt: '08-10',
-    studentId: '20231780',
-    name: '전민재',
-    dept: '경영학과',
-    grade: 3,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A18',
-    appliedAt: '08-11',
-    studentId: '20240610',
-    name: '황은서',
-    dept: '산업공학과',
-    grade: 1,
-    qual: '학년 미달',
-    status: '검토중',
-  },
-  {
-    id: 'A19',
-    appliedAt: '08-12',
-    studentId: '20231900',
-    name: '문지호',
-    dept: '컴퓨터공학과',
-    grade: 3,
-    qual: '적합',
-    status: '승인',
-  },
-  {
-    id: 'A20',
-    appliedAt: '08-13',
-    studentId: '20232100',
-    name: '방수진',
-    dept: '경영학과',
-    grade: 2,
-    qual: '적합',
-    status: '대기',
-  },
-];
+// ─── Dummy data (②③ 탭용, 백엔드 API 준비 전까지 유지) ─────────────────────────
 
 const ATT_STYLE = {
   출: { bg: '#D1FAE5', text: '#059669', label: '출' },
@@ -377,8 +193,6 @@ const STUDENTS_RAW = [
   },
 ];
 
-const REJECTION_REASONS = ['선택하세요', '자격요건 미달', '서류 미비', '정원 초과', '기타'];
-
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function attRate(att) {
@@ -386,50 +200,110 @@ function attRate(att) {
   return Math.round((present / att.length) * 100);
 }
 
-function computeVerdict(s) {
-  const rate = attRate(s.att);
-  if (rate >= 80 && s.journalCount >= 5 && s.surveyDone) return '수료';
-  if (rate < 80 || s.journalCount < 5) return '미수료';
-  return '보류';
-}
-
-function missReason(s) {
-  const parts = [];
-  if (attRate(s.att) < 80) parts.push(`출석률 기준(80%) 미달 (실제 ${attRate(s.att)}%)`);
-  if (s.journalCount < 5) parts.push(`활동일지 미제출 (${s.journalCount}/5회)`);
-  if (!s.surveyDone) parts.push('만족도 설문 미완료');
-  return parts.join(', ');
-}
-
 // ─── ① 신청 심사 ─────────────────────────────────────────────────────────────
 
-function ApplicationReview() {
-  const [rows, setRows] = useState(APPLICANTS);
-  const [selected, setSelected] = useState(new Set());
+const PAGE_SIZE = 20;
+
+function ApplicationReview({ programId }) {
+  const queryClient = useQueryClient();
   const [filterStatus, setFs] = useState('전체');
-  const [filterDept, setFd] = useState('전체');
-  const [filterGrade, setFg] = useState('전체');
   const [keyword, setKw] = useState('');
+  const [submittedKeyword, setSubmittedKeyword] = useState('');
+  const [selected, setSelected] = useState(new Set());
   const [rejectOpen, setRjOpen] = useState(false);
-  const [rejectReason, setRjReason] = useState('선택하세요');
   const [rejectDetail, setRjDetail] = useState('');
+  const [rejectTargetIds, setRejectTargetIds] = useState([]);
+  const [page, setPage] = useState(1);
 
-  const depts = ['전체', ...Array.from(new Set(APPLICANTS.map((a) => a.dept)))];
-  const grades = ['전체', '1학년', '2학년', '3학년', '4학년'];
-  const statuses = ['전체', '검토중', '승인', '반려', '대기'];
+  const statuses = [
+    { value: '전체', label: '전체' },
+    { value: 'APPLIED', label: '검토중' },
+    { value: 'WAITLISTED', label: '대기' },
+    { value: 'APPROVED', label: '승인' },
+    { value: 'REJECTED', label: '반려' },
+  ];
 
-  const filtered = rows.filter(
-    (a) =>
-      (filterStatus === '전체' || a.status === filterStatus) &&
-      (filterDept === '전체' || a.dept === filterDept) &&
-      (filterGrade === '전체' || `${a.grade}학년` === filterGrade) &&
-      (!keyword || a.name.includes(keyword) || a.studentId.includes(keyword)),
-  );
+  const queryKey = ['programApplications', programId, filterStatus, submittedKeyword, page];
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey,
+    queryFn: () =>
+      fetchProgramApplications(programId, {
+        status: filterStatus === '전체' ? undefined : filterStatus,
+        keyword: submittedKeyword || undefined,
+        page: page - 1,
+        size: PAGE_SIZE,
+      }),
+    enabled: !!programId,
+  });
 
-  const allChecked = filtered.length > 0 && filtered.every((a) => selected.has(a.id));
+  useEffect(() => {
+    if (!data) return;
+    const lastPage = Math.max(1, data.totalPages || 1);
+    if (page > lastPage) {
+      setPage(lastPage);
+      setSelected(new Set());
+    }
+  }, [data, page]);
+
+  const runSearch = () => {
+    setPage(1);
+    setSelected(new Set());
+    setSubmittedKeyword(keyword);
+  };
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['programApplications', programId] });
+
+  const approveMutation = useMutation({
+    mutationFn: (applicationId) => approveApplication(programId, applicationId),
+    onSuccess: () => {
+      invalidate();
+      setSelected(new Set());
+      toast('승인 처리했습니다.', 'success');
+    },
+    onError: (err) => toast(err.message ?? '승인에 실패했습니다.', 'error'),
+  });
+
+  const bulkApproveMutation = useMutation({
+    mutationFn: (ids) => bulkApproveApplications(programId, ids),
+    onSuccess: (_, ids) => {
+      invalidate();
+      setSelected(new Set());
+      toast(`${ids.length}건을 승인했습니다.`, 'success');
+    },
+    onError: (err) => toast(err.message ?? '일괄 승인에 실패했습니다.', 'error'),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ ids, reason }) =>
+      ids.length === 1
+        ? rejectApplication(programId, ids[0], reason)
+        : bulkRejectApplications(programId, ids, reason),
+    onSuccess: (_, { ids }) => {
+      invalidate();
+      setSelected(new Set());
+      setRjOpen(false);
+      setRjDetail('');
+      setRejectTargetIds([]);
+      toast(`${ids.length}건을 반려했습니다.`, 'info');
+    },
+    onError: (err) => toast(err.message ?? '반려에 실패했습니다.', 'error'),
+  });
+
+  const rows = data?.content ?? [];
+  const filtered = rows;
+
+  // 일괄 승인/반려는 개별 행 버튼(canApprove/canReject)과 동일한 상태 조건만 대상으로 한다.
+  // 체크박스 자체는 상태와 무관하게 선택 가능하므로, 실제 요청 직전에 조건에 안 맞는 건을 걸러낸다.
+  const eligibleIds = (ids, isEligible) =>
+    ids.filter((id) => {
+      const app = filtered.find((a) => a.applicationId === id);
+      return !!app && isEligible(app.applicationStatus);
+    });
+
+  const allChecked = filtered.length > 0 && filtered.every((a) => selected.has(a.applicationId));
   const toggleAll = () => {
     if (allChecked) setSelected(new Set());
-    else setSelected(new Set(filtered.map((a) => a.id)));
+    else setSelected(new Set(filtered.map((a) => a.applicationId)));
   };
   const toggle = (id) =>
     setSelected((prev) => {
@@ -438,65 +312,82 @@ function ApplicationReview() {
       return next;
     });
 
-  const handleApprove = (ids) => {
-    setRows((prev) =>
-      prev.map((a) => (ids.includes(a.id) && a.qual === '적합' ? { ...a, status: '승인' } : a)),
-    );
-    setSelected(new Set());
-    toast(`${ids.length}건을 승인했습니다.`, 'success');
+  const openReject = (ids) => {
+    setRejectTargetIds(ids);
+    setRjDetail('');
+    setRjOpen(true);
   };
 
   const handleRejectConfirm = () => {
-    if (rejectReason === '선택하세요') {
-      toast('반려 사유 코드를 선택해 주세요.', 'error');
+    if (!rejectDetail.trim()) {
+      toast('반려 사유를 입력해 주세요.', 'error');
       return;
     }
-    const ids = [...selected];
-    setRows((prev) => prev.map((a) => (ids.includes(a.id) ? { ...a, status: '반려' } : a)));
-    setSelected(new Set());
-    setRjOpen(false);
-    setRjReason('선택하세요');
-    setRjDetail('');
-    toast(`${ids.length}건을 반려했습니다. 학생에게 사유가 공개됩니다.`, 'info');
+    rejectMutation.mutate({ ids: rejectTargetIds, reason: rejectDetail.trim() });
   };
+
+  if (isError) {
+    return (
+      <div className="bg-white rounded-[8px] border border-[#FEE2E2] px-4 py-12 text-center text-[13px] text-[#CF222E]">
+        {error?.message ?? '신청 목록을 불러오지 못했습니다.'}
+      </div>
+    );
+  }
 
   return (
     <div>
       {/* FilterBar */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-4 flex gap-3 flex-wrap items-end">
-        {[
-          { label: '상태', value: filterStatus, set: setFs, opts: statuses },
-          { label: '학과', value: filterDept, set: setFd, opts: depts },
-          { label: '학년', value: filterGrade, set: setFg, opts: grades },
-        ].map((f) => (
-          <div key={f.label} className="flex flex-col gap-1 w-36">
-            <label className="text-[10px] font-semibold text-[#656D76]">{f.label}</label>
-            <select
-              value={f.value}
-              onChange={(e) => f.set(e.target.value)}
-              className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-            >
-              {f.opts.map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </select>
-          </div>
-        ))}
+        <div className="flex flex-col gap-1 w-36">
+          <label htmlFor="participation-filter-status" className="text-[10px] font-semibold text-[#656D76]">상태</label>
+          <select
+            id="participation-filter-status"
+            value={filterStatus}
+            onChange={(e) => {
+              setFs(e.target.value);
+              setPage(1);
+              setSelected(new Set());
+            }}
+            className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
+          >
+            {statuses.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
-          <label className="text-[10px] font-semibold text-[#656D76]">학번·성명</label>
-          <input
-            value={keyword}
-            onChange={(e) => setKw(e.target.value)}
-            placeholder="검색..."
-            className="h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-          />
+          <label htmlFor="participation-search-keyword" className="text-[10px] font-semibold text-[#656D76]">학번·성명</label>
+          <div className="flex gap-1.5">
+            <input
+              id="participation-search-keyword"
+              value={keyword}
+              onChange={(e) => setKw(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+              placeholder="검색..."
+              className="flex-1 h-8 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
+            />
+            <button
+              onClick={runSearch}
+              className="h-8 px-3 text-[12px] font-bold rounded-[6px] bg-[#374151] text-white hover:bg-[#1F2937] transition-colors"
+            >
+              조회
+            </button>
+          </div>
         </div>
         <button
-          onClick={() => toast('엑셀 파일을 다운로드합니다.', 'info')}
-          className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#374151] hover:text-[#374151] transition-colors self-end"
+          onClick={() => toast('엑셀 다운로드 API가 아직 준비되지 않았습니다.', 'info')}
+          className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#9AA0A6] cursor-not-allowed self-end"
         >
           엑셀 다운로드
         </button>
+      </div>
+
+      <div className="flex items-center justify-end mb-2">
+        <span className="text-[10px] text-[#9AA0A6]">
+          ※ 전체 선택은 현재 페이지에 표시된 항목에만 적용됩니다.
+        </span>
       </div>
 
       {/* Table */}
@@ -510,92 +401,107 @@ function ApplicationReview() {
                     type="checkbox"
                     checked={allChecked}
                     onChange={toggleAll}
+                    aria-label="전체 신청자 선택"
                     className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                   />
                 </th>
-                {['신청일', '학번', '성명', '학과', '학년', '자격검증', '상태', '처리'].map(
-                  (h, i) => (
-                    <th
-                      key={h}
-                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 5 ? 'text-center' : 'text-left'}`}
-                    >
-                      {h}
-                    </th>
-                  ),
-                )}
+                {['신청일', '학번', '성명', '상태', '처리'].map((h, i) => (
+                  <th
+                    key={h}
+                    className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 3 ? 'text-center' : 'text-left'}`}
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((a) => {
-                const qStyle = QUAL_STYLE[a.qual];
-                const aStyle = APPR_STYLE[a.status];
-                const canApprove = a.qual === '적합' && a.status !== '승인';
-                return (
-                  <tr
-                    key={a.id}
-                    className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(a.id) ? 'bg-[#F3F4F6]' : ''}`}
-                  >
-                    <td className="px-4 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(a.id)}
-                        onChange={() => toggle(a.id)}
-                        className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
-                      />
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
-                      {a.appliedAt}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
-                      {a.studentId}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-[#1F2328]">{a.name}</td>
-                    <td className="px-4 py-3 text-[#656D76]">{a.dept}</td>
-                    <td className="px-4 py-3 text-center text-[#656D76]">{a.grade}학년</td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: qStyle.bg, color: qStyle.text }}
-                      >
-                        {a.qual}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: aStyle.bg, color: aStyle.text }}
-                      >
-                        {a.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex gap-1.5 justify-center">
-                        <button
-                          disabled={!canApprove}
-                          onClick={() => handleApprove([a.id])}
-                          className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
+                    불러오는 중...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
+                    신청자가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((a) => {
+                  const aStyle = APPR_STYLE[a.applicationStatus] ?? APPR_STYLE.APPLIED;
+                  const canApprove = a.applicationStatus === 'APPLIED' || a.applicationStatus === 'WAITLISTED';
+                  const canReject = a.applicationStatus !== 'REJECTED' && a.applicationStatus !== 'CANCELLED';
+                  return (
+                    <tr
+                      key={a.applicationId}
+                      className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(a.applicationId) ? 'bg-[#F3F4F6]' : ''}`}
+                    >
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(a.applicationId)}
+                          onChange={() => toggle(a.applicationId)}
+                          aria-label={`${a.studentName} 선택`}
+                          className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
+                        {formatDate(a.appliedAt)}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
+                        {a.studentNo}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-[#1F2328]">{a.studentName}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: aStyle.bg, color: aStyle.text }}
                         >
-                          승인
-                        </button>
-                        <button
-                          disabled={a.status === '반려'}
-                          onClick={() => {
-                            setSelected(new Set([a.id]));
-                            setRjOpen(true);
-                          }}
-                          className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] bg-[#FEE2E2] text-[#CF222E] hover:bg-[#FECACA] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          반려
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                          {a.applicationStatusLabel ?? a.applicationStatus}
+                          {a.applicationStatus === 'WAITLISTED' && a.waitlistOrder != null
+                            ? ` (${a.waitlistOrder}번)`
+                            : ''}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex gap-1.5 justify-center">
+                          <button
+                            disabled={!canApprove}
+                            onClick={() => approveMutation.mutate(a.applicationId)}
+                            className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            승인
+                          </button>
+                          <button
+                            disabled={!canReject}
+                            onClick={() => openReject([a.applicationId])}
+                            className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] bg-[#FEE2E2] text-[#CF222E] hover:bg-[#FECACA] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            반려
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={data?.totalPages || 1}
+        onChange={(p) => {
+          setPage(p);
+          setSelected(new Set());
+        }}
+        totalItems={data?.totalElements}
+        pageSize={PAGE_SIZE}
+      />
 
       {/* Fixed bottom bar */}
       {selected.size > 0 && (
@@ -606,14 +512,17 @@ function ApplicationReview() {
               <Button
                 size="sm"
                 style={{ background: '#059669' }}
-                onClick={() =>
-                  handleApprove(
-                    [...selected].filter((id) => {
-                      const a = rows.find((r) => r.id === id);
-                      return a?.qual === '적합';
-                    }),
-                  )
-                }
+                onClick={() => {
+                  const ids = eligibleIds(
+                    [...selected],
+                    (s) => s === 'APPLIED' || s === 'WAITLISTED',
+                  );
+                  if (ids.length === 0) {
+                    toast('일괄 승인 가능한 항목이 없습니다.', 'error');
+                    return;
+                  }
+                  bulkApproveMutation.mutate(ids);
+                }}
               >
                 선택 일괄 승인
               </Button>
@@ -622,7 +531,15 @@ function ApplicationReview() {
                 variant="outline"
                 style={{ borderColor: '#CF222E', color: '#CF222E' }}
                 onClick={() => {
-                  setRjOpen(true);
+                  const ids = eligibleIds(
+                    [...selected],
+                    (s) => s !== 'REJECTED' && s !== 'CANCELLED',
+                  );
+                  if (ids.length === 0) {
+                    toast('반려 가능한 항목이 없습니다.', 'error');
+                    return;
+                  }
+                  openReject(ids);
                 }}
               >
                 선택 반려
@@ -653,24 +570,11 @@ function ApplicationReview() {
       >
         <div className="flex flex-col gap-4">
           <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-              사유 코드 <span className="text-[#CF222E]">*</span>
-            </label>
-            <select
-              value={rejectReason}
-              onChange={(e) => setRjReason(e.target.value)}
-              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-            >
-              {REJECTION_REASONS.map((r) => (
-                <option key={r}>{r}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-              상세 사유
+            <label htmlFor="participation-reject-detail" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+              반려 사유 <span className="text-[#CF222E]">*</span>
             </label>
             <textarea
+              id="participation-reject-detail"
               value={rejectDetail}
               onChange={(e) => setRjDetail(e.target.value)}
               rows={4}
@@ -816,10 +720,11 @@ function AttendanceManage() {
             </div>
           )}
           <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+            <label htmlFor="participation-edit-reason" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
               수정 사유 <span className="text-[#CF222E]">*</span>
             </label>
             <textarea
+              id="participation-edit-reason"
               value={editReason}
               onChange={(e) => setEditReason(e.target.value)}
               rows={3}
@@ -837,120 +742,85 @@ function AttendanceManage() {
 }
 
 // ─── ③ 결과 등록·이수 판정 ───────────────────────────────────────────────────
+// 수료/미수료는 서버 스케줄러(ProgramStatusScheduler)가 운영종료 후 출석률과
+// 프로그램별 이수기준(completion_rate)을 비교해 매분 자동 확정한다. 그래서 이 탭은
+// 수동 확정 액션 없이 신청자 목록 응답의 completionStatus/certificateNo를 그대로
+// 보여주기만 한다. 이수증은 PDF 파일이 아니라 certificateNo 문자열로만 관리되므로
+// 별도 발급 버튼 없이 값이 있으면 "이수증 발급됨"으로 표시한다.
 
-function ResultJudge() {
-  const initial = STUDENTS_RAW.map((s) => ({
-    ...s,
-    att: [...s.att],
-    verdict: computeVerdict(s),
-    confirmState: 'pending',
-    overrideReason: '',
-  }));
+// CompletionStatus 코드 -> 뱃지 색상/라벨.
+const COMPLETION_STYLE = {
+  COMPLETED: { bg: '#D1FAE5', text: '#059669', label: '수료' },
+  FAILED: { bg: '#FEE2E2', text: '#CF222E', label: '미수료' },
+};
+const PENDING_STYLE = { bg: '#F3F4F6', text: '#6B7280', label: '판정전' };
 
-  const [rows, setRows] = useState(initial);
-  const [selected, setSelected] = useState(new Set());
-  const [confirmOpen, setConfirmOpen] = useState(null);
-  const [reasonEdit, setReasonEdit] = useState(null);
-  const [submitted, setSubmitted] = useState(false);
+function ResultJudge({ programId }) {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['programApplications', programId, '전체'],
+    queryFn: () => fetchAllPages((p) => fetchProgramApplications(programId, p)),
+    enabled: !!programId,
+  });
 
-  const confirmed = rows.filter((r) => r.confirmState === 'confirmed');
-  const passCount = confirmed.filter((r) => r.verdict === '수료').length;
-  const failCount = confirmed.filter((r) => r.verdict === '미수료').length;
-  const holdCount = rows.filter((r) => r.confirmState === 'pending').length;
+  // 이수판정은 승인된(참여 확정) 신청자만 대상이다.
+  const rows = (data ?? []).filter((a) => a.applicationStatus === 'APPROVED');
+  const completed = rows.filter((r) => r.completionStatus === 'COMPLETED').length;
+  const failed = rows.filter((r) => r.completionStatus === 'FAILED').length;
+  const pending = rows.length - completed - failed;
 
-  const VERDICT_STYLE = {
-    수료: { bg: '#D1FAE5', text: '#059669' },
-    미수료: { bg: '#FEE2E2', text: '#CF222E' },
-    보류: { bg: '#F3F4F6', text: '#6B7280' },
-  };
-
-  const toggle = (sid) =>
-    setSelected((prev) => {
-      const n = new Set(prev);
-      n.has(sid) ? n.delete(sid) : n.add(sid);
-      return n;
-    });
-  const allChecked =
-    rows.length > 0 &&
-    rows.filter((r) => r.confirmState === 'pending').every((r) => selected.has(r.studentId));
-  const toggleAll = () => {
-    const pending = rows.filter((r) => r.confirmState === 'pending').map((r) => r.studentId);
-    if (allChecked) setSelected(new Set());
-    else setSelected(new Set(pending));
-  };
-
-  const doConfirm = (verdict) => {
-    const ids = [...selected];
-    const targetVerdict = verdict === 'pass' ? '수료' : '미수료';
-    // Validate: 미수료 rows need reason
-    const needReason = rows.filter(
-      (r) => ids.includes(r.studentId) && r.verdict === '미수료' && !r.overrideReason.trim(),
-    );
-    if (verdict === 'fail' && needReason.length > 0) {
-      toast(`미수료 처리 시 사유 입력이 필수입니다. (${needReason.length}건)`, 'error');
-      return;
-    }
-    setRows((prev) =>
-      prev.map((r) =>
-        ids.includes(r.studentId) ? { ...r, verdict: targetVerdict, confirmState: 'confirmed' } : r,
-      ),
-    );
-    setSelected(new Set());
-    setConfirmOpen(null);
-    setSubmitted(true);
-    toast(
-      `${ids.length}건을 ${targetVerdict === '수료' ? '수료' : '미수료'} 확정했습니다. ${targetVerdict === '수료' ? '마일리지 200점이 자동 적립됩니다.' : ''}`,
-      'success',
-    );
-  };
-
-  const attPct = Math.round((rows.filter((r) => r.verdict === '수료').length / rows.length) * 100);
   const donutData = [
-    { label: '수료', value: rows.filter((r) => r.verdict === '수료').length, color: '#059669' },
-    { label: '미수료', value: rows.filter((r) => r.verdict === '미수료').length, color: '#CF222E' },
-    { label: '보류', value: rows.filter((r) => r.verdict === '보류').length, color: '#D1D5DB' },
+    { label: '수료', value: completed, color: '#059669' },
+    { label: '미수료', value: failed, color: '#CF222E' },
+    { label: '판정전', value: pending, color: '#D1D5DB' },
   ];
+  const completionPct = rows.length > 0 ? Math.round((completed / rows.length) * 100) : 0;
+
+  if (isError) {
+    return (
+      <div className="bg-white rounded-[8px] border border-[#FEE2E2] px-4 py-12 text-center text-[13px] text-[#CF222E]">
+        {error?.message ?? '신청 목록을 불러오지 못했습니다.'}
+      </div>
+    );
+  }
 
   return (
     <div>
-      {/* Criterion card + donut */}
+      {/* Summary + donut */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 mb-5 flex items-start gap-8">
         <div className="flex-1">
-          <h3 className="text-[13px] font-bold text-[#1F2328] mb-3">이수 기준</h3>
-          <div className="flex flex-col gap-2">
+          <h3 className="text-[13px] font-bold text-[#1F2328] mb-3">이수 판정 안내</h3>
+          <p className="text-[12px] text-[#656D76] leading-relaxed">
+            운영 종료 후 출석률이 프로그램별 이수기준을 충족하면 서버가 자동으로 수료/미수료를
+            확정합니다. 이 화면은 그 결과를 표시만 하며, 별도의 수동 확정 절차는 없습니다.
+          </p>
+          <div className="mt-4 flex gap-2 flex-wrap">
             {[
-              { label: '출석률', req: '80% 이상', icon: '📅' },
-              { label: '활동일지', req: '5회 모두', icon: '📝' },
-              { label: '만족도 설문', req: '완료', icon: '✅' },
-            ].map((c) => (
-              <div key={c.label} className="flex items-center gap-3">
-                <span className="text-[16px]">{c.icon}</span>
-                <span className="text-[12px] font-semibold text-[#1F2328] w-24">{c.label}</span>
-                <span className="text-[12px] text-[#059669] font-bold">{c.req}</span>
-              </div>
+              { label: `수료 ${completed}`, bg: '#D1FAE5', text: '#059669' },
+              { label: `미수료 ${failed}`, bg: '#FEE2E2', text: '#CF222E' },
+              { label: `판정전 ${pending}`, bg: '#F3F4F6', text: '#9AA0A6' },
+            ].map((b) => (
+              <span
+                key={b.label}
+                className="text-[11px] font-black px-3 py-1 rounded-full"
+                style={{ background: b.bg, color: b.text }}
+              >
+                {b.label}
+              </span>
             ))}
           </div>
-          {submitted && (
-            <div className="mt-4 flex gap-2 flex-wrap">
-              {[
-                { label: `수료 ${passCount}`, bg: '#D1FAE5', text: '#059669' },
-                { label: `미수료 ${failCount}`, bg: '#FEE2E2', text: '#CF222E' },
-                { label: `보류 ${holdCount}`, bg: '#F3F4F6', text: '#9AA0A6' },
-              ].map((b) => (
-                <span
-                  key={b.label}
-                  className="text-[11px] font-black px-3 py-1 rounded-full"
-                  style={{ background: b.bg, color: b.text }}
-                >
-                  {b.label}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
         <div className="shrink-0">
-          <p className="text-[11px] font-bold text-[#656D76] mb-2 text-center">수료 예정률</p>
-          <DonutChart segments={donutData} size={140} centerValue={`${attPct}%`} />
+          <p className="text-[11px] font-bold text-[#656D76] mb-2 text-center">수료율</p>
+          {rows.length > 0 ? (
+            <DonutChart segments={donutData} size={140} centerValue={`${completionPct}%`} />
+          ) : (
+            <div
+              role="status"
+              className="w-[140px] h-[140px] flex items-center justify-center text-center text-[11px] text-[#9AA0A6] rounded-full border border-dashed border-[#E5E7EB] px-3"
+            >
+              승인된 참여자가 없어 표시할 데이터가 없습니다.
+            </div>
+          )}
         </div>
       </div>
 
@@ -960,248 +830,66 @@ function ResultJudge() {
           <table className="w-full border-collapse text-[12px]">
             <thead>
               <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                <th className="w-10 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    onChange={toggleAll}
-                    className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
-                  />
-                </th>
-                {['학번', '성명', '출석률', '활동일지', '설문', '판정', '미수료 사유', '처리'].map(
-                  (h, i) => (
-                    <th
-                      key={h}
-                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 2 ? 'text-center' : 'text-left'}`}
-                    >
-                      {h}
-                    </th>
-                  ),
-                )}
+                {['학번', '성명', '판정', '이수증'].map((h, i) => (
+                  <th
+                    key={h}
+                    className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 2 ? 'text-center' : 'text-left'}`}
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
-                const rate = attRate(r.att);
-                const vStyle = VERDICT_STYLE[r.verdict];
-                const isFail = r.verdict === '미수료';
-                const confirmed_ = r.confirmState === 'confirmed';
-                return (
-                  <tr
-                    key={r.studentId}
-                    className={`border-b border-[#F3F4F6] last:border-0 transition-colors ${isFail ? 'bg-[#FFF5F5] hover:bg-[#FEE2E2]/40' : selected.has(r.studentId) ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'}`}
-                  >
-                    <td className="px-4 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(r.studentId)}
-                        onChange={() => toggle(r.studentId)}
-                        disabled={confirmed_}
-                        className="accent-[#374151] w-3.5 h-3.5 cursor-pointer disabled:opacity-40"
-                      />
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
-                      {r.studentId}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-[#1F2328]">{r.name}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`font-black text-[12px] ${rate < 80 ? 'text-[#CF222E]' : 'text-[#059669]'}`}
-                      >
-                        {rate}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`font-bold text-[12px] ${r.journalCount < 5 ? 'text-[#CF222E]' : 'text-[#059669]'}`}
-                      >
-                        {r.journalCount}/5
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.surveyDone ? 'bg-[#D1FAE5] text-[#059669]' : 'bg-[#FEE2E2] text-[#CF222E]'}`}
-                      >
-                        {r.surveyDone ? '완료' : '미완료'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="inline-flex items-center gap-1.5">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
+                    불러오는 중...
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
+                    승인된 참여자가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => {
+                  const style = COMPLETION_STYLE[r.completionStatus] ?? PENDING_STYLE;
+                  return (
+                    <tr
+                      key={r.applicationId}
+                      className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
+                    >
+                      <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
+                        {r.studentNo}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-[#1F2328]">{r.studentName}</td>
+                      <td className="px-4 py-3 text-center">
                         <span
                           className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                          style={{ background: vStyle.bg, color: vStyle.text }}
+                          style={{ background: style.bg, color: style.text }}
                         >
-                          {r.verdict}
+                          {style.label}
                         </span>
-                        {confirmed_ && (
-                          <span className="text-[9px] font-bold text-[#059669]">확정</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 max-w-[200px]">
-                      {isFail ? (
-                        reasonEdit?.sid === r.studentId ? (
-                          <div className="flex gap-1.5">
-                            <input
-                              value={reasonEdit.val}
-                              onChange={(e) =>
-                                setReasonEdit({ sid: r.studentId, val: e.target.value })
-                              }
-                              className="flex-1 h-7 px-2 text-[11px] rounded-[4px] border border-[#374151] bg-white focus:outline-none"
-                            />
-                            <button
-                              onClick={() => {
-                                setRows((prev) =>
-                                  prev.map((row) =>
-                                    row.studentId === r.studentId
-                                      ? { ...row, overrideReason: reasonEdit?.val ?? '' }
-                                      : row,
-                                  ),
-                                );
-                                setReasonEdit(null);
-                              }}
-                              className="h-7 px-2 text-[10px] font-bold text-white rounded-[4px] bg-[#374151]"
-                            >
-                              저장
-                            </button>
-                          </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {r.certificateNo ? (
+                          <span className="text-[11px] text-[#059669] font-semibold">
+                            이수증 발급됨 <span className="font-mono text-[#9AA0A6]">({r.certificateNo})</span>
+                          </span>
                         ) : (
-                          <button
-                            onClick={() =>
-                              setReasonEdit({
-                                sid: r.studentId,
-                                val: r.overrideReason || missReason(r),
-                              })
-                            }
-                            className={`text-left text-[11px] leading-snug w-full ${r.overrideReason || missReason(r) ? 'text-[#CF222E]' : 'text-[#9AA0A6] italic'} hover:underline`}
-                          >
-                            {r.overrideReason || missReason(r) || '사유 입력 (필수)'}
-                          </button>
-                        )
-                      ) : (
-                        <span className="text-[11px] text-[#D1D5DB]">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {confirmed_ ? (
-                        <span className="text-[10px] font-bold text-[#9AA0A6]">처리완료</span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            if (r.verdict === '미수료' && !(r.overrideReason || missReason(r))) {
-                              toast('미수료 사유를 먼저 입력해 주세요.', 'error');
-                              return;
-                            }
-                            setSelected(new Set([r.studentId]));
-                            setConfirmOpen(r.verdict === '수료' ? 'pass' : 'fail');
-                          }}
-                          className={`h-6 px-2.5 text-[10px] font-bold rounded-[4px] transition-colors ${r.verdict === '수료' ? 'bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0]' : 'bg-[#FEE2E2] text-[#CF222E] hover:bg-[#FECACA]'}`}
-                        >
-                          확정
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                          <span className="text-[11px] text-[#D1D5DB]">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
-
-      {/* Fixed action bar */}
-      <div className="fixed bottom-0 left-[240px] right-0 bg-white border-t border-[#E5E7EB] shadow-[0_-2px_12px_rgba(0,0,0,0.08)] z-40">
-        <div className="max-w-[1200px] mx-auto px-6 py-3 flex items-center gap-4">
-          <span className="text-[13px] text-[#9AA0A6]">
-            {selected.size > 0 ? `${selected.size}건 선택됨` : '행을 선택해 일괄 처리하세요.'}
-          </span>
-          <div className="ml-auto flex gap-2 flex-wrap">
-            <Button
-              size="sm"
-              disabled={selected.size === 0}
-              style={{ background: '#059669' }}
-              onClick={() => {
-                if (selected.size > 0) setConfirmOpen('pass');
-              }}
-            >
-              선택 수료 확정
-            </Button>
-            <Button
-              size="sm"
-              disabled={selected.size === 0}
-              variant="outline"
-              style={{ borderColor: '#CF222E', color: '#CF222E' }}
-              onClick={() => {
-                if (selected.size > 0) setConfirmOpen('fail');
-              }}
-            >
-              미수료 확정
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setConfirmOpen('cert');
-              }}
-            >
-              이수증 일괄 발급
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Pass confirm */}
-      <Modal
-        open={confirmOpen === 'pass'}
-        onClose={() => setConfirmOpen(null)}
-        title="수료 확정"
-        size="sm"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setConfirmOpen(null)}>
-              취소
-            </Button>
-            <Button size="sm" style={{ background: '#059669' }} onClick={() => doConfirm('pass')}>
-              수료 확정
-            </Button>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          <p className="text-[13px] text-[#444D56]">
-            선택한 <span className="font-bold">{selected.size}건</span>을 수료로 확정합니다.
-          </p>
-          <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[12px] text-[#92400E] leading-relaxed">
-            수료 확정 시 <strong>마일리지 200점이 자동 적립</strong>됩니다(설문 완료자 한정).
-            <br />
-            동일 프로그램 중복 적립은 차단됩니다.
-          </div>
-        </div>
-      </Modal>
-
-      {/* Fail confirm */}
-      <ConfirmDialog
-        open={confirmOpen === 'fail'}
-        title="미수료 확정"
-        message={`선택한 ${selected.size}건을 미수료로 확정합니다. 미수료 사유가 학생에게 공개됩니다.`}
-        confirmLabel="미수료 확정"
-        danger
-        onConfirm={() => doConfirm('fail')}
-        onCancel={() => setConfirmOpen(null)}
-      />
-
-      {/* Cert confirm */}
-      <ConfirmDialog
-        open={confirmOpen === 'cert'}
-        title="이수증 일괄 발급"
-        message={`수료 확정된 ${passCount}건의 이수증을 PDF로 일괄 발급합니다.`}
-        confirmLabel="발급 시작"
-        onConfirm={() => {
-          setConfirmOpen(null);
-          toast(`이수증 ${passCount}부 PDF 생성을 시작합니다.`, 'success');
-        }}
-        onCancel={() => setConfirmOpen(null)}
-      />
     </div>
   );
 }
@@ -1214,7 +902,13 @@ function ResultJudge() {
  * @param {Object} props
  * @param {() => void} props.onBack
  */
-export default function ParticipationPage({ onBack }) {
+/**
+ * @param {Object} props
+ * @param {number} props.programId
+ * @param {string} props.programName
+ * @param {() => void} props.onBack
+ */
+export default function ParticipationPage({ programId, programName, onBack }) {
   const [tab, setTab] = useState('review');
 
   const TABS = [
@@ -1225,15 +919,15 @@ export default function ParticipationPage({ onBack }) {
 
   return (
     <div>
-      <ProgramBar onBack={onBack} />
+      <ProgramBar onBack={onBack} programId={programId} programName={programName} />
 
       <div className="mb-5">
         <Tabs tabs={TABS} active={tab} onChange={setTab} accentColor="#374151" />
       </div>
 
-      {tab === 'review' && <ApplicationReview />}
+      {tab === 'review' && <ApplicationReview programId={programId} />}
       {tab === 'attendance' && <AttendanceManage />}
-      {tab === 'result' && <ResultJudge />}
+      {tab === 'result' && <ResultJudge programId={programId} />}
     </div>
   );
 }

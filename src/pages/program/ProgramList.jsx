@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { fetchPrograms } from '@/api/programs';
 import { PageHeader, StatusBadge, Pagination, Button } from '@/components/common';
 import { formatDate } from '@/utils/date';
-import { useCommonCode } from '@/hooks/useCommonCode';
+import { fetchAllPages } from '@/utils/pagination';
 
 const ACCENT = '#2563EB';
 
@@ -13,12 +13,22 @@ const toRow = (dto) => ({
   category: dto.programTypeCodeName,
   dept: dto.operatingUnitCodeName,
   period: `${formatDate(dto.recruitmentStartsAt)} ~ ${formatDate(dto.recruitmentEndsAt)}`,
+  recruitStart: dto.recruitmentStartsAt,
+  recruitEnd: dto.recruitmentEndsAt,
   capacity: dto.capacity ?? 0,
   status: dto.programStatusLabel,
   applied: dto.applicantCount ?? 0,
   competency: dto.competencyName ?? null,
   mileage: dto.mileagePoints ?? 0,
 });
+
+// 백엔드 상태 라벨(programStatusLabel)은 화면마다 매핑이 달라 신뢰하기 어려워,
+// 모집 기간(recruitmentStartsAt~recruitmentEndsAt)을 직접 비교해 "모집중" 여부를 판단한다.
+const isRecruiting = (p) => {
+  if (!p.recruitStart || !p.recruitEnd) return false;
+  const now = Date.now();
+  return new Date(p.recruitStart).getTime() <= now && now <= new Date(p.recruitEnd).getTime();
+};
 
 const COMP_OPTIONS = [
   { value: '', label: '핵심역량 전체' },
@@ -34,14 +44,6 @@ const SORT_OPTIONS = [
   { value: 'new', label: '신규순' },
   { value: 'deadline', label: '마감임박순' },
   { value: 'recommend', label: '추천순' },
-];
-
-const CHIPS = [
-  { label: '전체', count: 128 },
-  { label: '모집중', count: 24 },
-  { label: '마감임박', count: 5 },
-  { label: '신청가능', count: 18 },
-  { label: '내 학과 대상', count: 11 },
 ];
 
 const COMP_COLORS = {
@@ -88,38 +90,30 @@ export default function ProgramList({ onDetail, onMyApplications }) {
   const [chip, setChip] = useState('전체');
   const [sort, setSort] = useState('new');
   const [comp, setComp] = useState('');
-  const [dept, setDept] = useState('');
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
-  const [programs, setPrograms] = useState([]);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  const [allPrograms, setAllPrograms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const PAGE_SIZE = 10;
 
-  const { data: departmentCodes = [] } = useCommonCode('DEPARTMENT');
-  const deptOptions = [
-    { value: '', label: '주관부서 전체' },
-    ...departmentCodes.map((c) => ({ value: c.code, label: c.codeName })),
-  ];
-
+  // 핵심역량/모집중 칩 필터가 백엔드 쿼리 파라미터로 지원되지 않아,
+  // 검색어(keyword)에 해당하는 전체 목록을 한 번에 받아와 필터링·페이지네이션을 프론트에서 처리한다.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchPrograms({
-      keyword: submittedKeyword || undefined,
-      page: page - 1,
-      size: PAGE_SIZE,
-      sort: 'createdAt,desc',
-    })
-      .then((res) => {
+    fetchAllPages((p) =>
+      fetchPrograms({
+        keyword: submittedKeyword || undefined,
+        sort: 'createdAt,desc',
+        ...p,
+      }),
+    )
+      .then((content) => {
         if (cancelled) return;
-        setPrograms(res.content.map(toRow));
-        setTotalItems(res.totalElements);
-        setTotalPages(res.totalPages || 1);
+        setAllPrograms(content.map(toRow));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -131,14 +125,29 @@ export default function ProgramList({ onDetail, onMyApplications }) {
     return () => {
       cancelled = true;
     };
-  }, [page, submittedKeyword]);
+  }, [submittedKeyword]);
 
-  // 핵심역량/주관부서 필터는 백엔드가 아직 쿼리 파라미터로 지원하지 않아,
-  // 현재 페이지에 이미 내려온 데이터 안에서만 걸러진다(서버 페이지네이션과는 별개).
-  const filtered = programs.filter(
-    (p) => (!comp || p.competency === comp) && (!dept || p.dept === dept),
+  const CHIPS = [
+    { label: '전체', count: allPrograms.length },
+    { label: '모집중', count: allPrograms.filter(isRecruiting).length },
+  ];
+
+  const filtered = allPrograms.filter(
+    (p) => (!comp || p.competency === comp) && (chip !== '모집중' || isRecruiting(p)),
   );
-  const paged = filtered;
+  if (sort === 'deadline') {
+    filtered.sort((a, b) => new Date(a.recruitEnd) - new Date(b.recruitEnd));
+  } else if (sort === 'recommend') {
+    const fillRate = (p) => (p.capacity > 0 ? p.applied / p.capacity : -1);
+    filtered.sort((a, b) => fillRate(b) - fillRate(a));
+  }
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [comp, chip, sort]);
 
   const runSearch = () => {
     setPage(1);
@@ -179,20 +188,6 @@ export default function ProgramList({ onDetail, onMyApplications }) {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold text-[#656D76] uppercase">주관부서</label>
-            <select
-              value={dept}
-              onChange={(e) => setDept(e.target.value)}
-              className="h-9 px-3 pr-7 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white appearance-none focus:outline-none focus:border-[#2563EB]"
-            >
-              {deptOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold text-[#656D76] uppercase">검색어</label>
             <input
               value={keyword}
@@ -205,8 +200,8 @@ export default function ProgramList({ onDetail, onMyApplications }) {
             <button
               onClick={() => {
                 setComp('');
-                setDept('');
                 setKeyword('');
+                setChip('전체');
                 setPage(1);
                 setSubmittedKeyword('');
               }}
