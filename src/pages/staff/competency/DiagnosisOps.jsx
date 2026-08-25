@@ -220,7 +220,11 @@ function RoundManage({ rounds, setRounds }) {
   const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
   const semesterLabel = (code) => semesterCodes.find((s) => s.code === code)?.codeName ?? code;
 
-  const { data: majorCodes = [] } = useCommonCode('MAJOR');
+  const {
+    data: majorCodes = [],
+    isError: majorError,
+    refetch: refetchMajors,
+  } = useCommonCode('MAJOR');
   const majorLabel = (codeId) => majorCodes.find((m) => m.codeId === codeId)?.codeName ?? codeId;
 
   const openDrawer = () => {
@@ -587,7 +591,17 @@ function RoundManage({ rounds, setRounds }) {
             )}
             {fTargetMode === '학과' && (
               <div className="flex gap-2 flex-wrap">
-                {majorCodes.length === 0 ? (
+                {majorError ? (
+                  <div className="flex items-center gap-2 text-[11px] text-[#CF222E]">
+                    학과 목록을 불러오지 못했습니다.
+                    <button
+                      onClick={() => refetchMajors()}
+                      className="underline font-bold hover:opacity-80"
+                    >
+                      다시 시도
+                    </button>
+                  </div>
+                ) : majorCodes.length === 0 ? (
                   <p className="text-[11px] text-[#9AA0A6]">학과 목록을 불러오는 중입니다.</p>
                 ) : (
                   majorCodes.map((m) => (
