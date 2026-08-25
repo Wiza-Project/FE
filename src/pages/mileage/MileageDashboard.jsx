@@ -38,16 +38,23 @@ const BENEFIT_STATUS_LABELS = {
 };
 
 const formatPoints = (value) => Number(value ?? 0).toLocaleString('ko-KR');
+const parseDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 const formatDate = (value) => {
-  if (!value) return '-';
-  return new Intl.DateTimeFormat('ko-KR').format(new Date(value));
+  const date = parseDate(value);
+  if (!date) return '-';
+  return new Intl.DateTimeFormat('ko-KR').format(date);
 };
 const formatDateTime = (value) => {
-  if (!value) return '-';
+  const date = parseDate(value);
+  if (!date) return '-';
   return new Intl.DateTimeFormat('ko-KR', {
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(value));
+  }).format(date);
 };
 
 // Simulation recommendations
