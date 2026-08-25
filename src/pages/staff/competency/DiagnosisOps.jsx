@@ -166,11 +166,9 @@ const COLLEGE_DATA = [
 
 // 학년은 공통코드가 없어 고정값을 쓴다(GRADE 코드그룹 미도입).
 const GRADES = [1, 2, 3, 4];
-// 단과대·학과는 아직 공통코드/학사 도메인 연동이 없어 목업 옵션을 그대로 쓴다.
-// target_condition은 #12 대상자 해석기가 나오기 전까진 서버가 내용을 검증하지 않는 자유 JSON이라,
-// 여기서 정한 { grades[] | colleges[] | departments[] } 형태가 사실상의 잠정 스키마다.
+// 단과대는 학적 도메인에 단과대 계층 자체가 없어(학과 공통코드에 상위 그룹이 없음) 여전히
+// 목업이다. 서버 target_condition 해석기도 colleges 키를 지원하지 않고 에러로 거부한다.
 const COLLEGES = ['공과대학', '경영대학', '사회과학대학', '인문대학', '자연과학대학', '글로벌대학'];
-const DEPTS = ['컴퓨터공학과', '경영학과', '심리학과', '산업공학과', '사회복지학과', '글로벌통상학과'];
 
 const ASSESSMENT_TYPES = [
   { value: 'PRE', label: '사전진단' },
@@ -190,11 +188,15 @@ const toDateInputValue = (isoStr) => {
   return `${y}-${m}-${day}`;
 };
 
-const describeTarget = (targetCondition) => {
+// majorLabel: majorCodeId → codeName 변환 함수. 모듈 레벨 순수 함수라 useCommonCode를
+// 직접 쓸 수 없어, semesterLabel과 같은 패턴으로 호출하는 쪽에서 만들어 넘겨받는다.
+const describeTarget = (targetCondition, majorLabel) => {
   if (!targetCondition) return '전체 재학생';
   if (targetCondition.grades?.length) return targetCondition.grades.map((g) => `${g}학년`).join(', ');
   if (targetCondition.colleges?.length) return targetCondition.colleges.join(', ');
-  if (targetCondition.departments?.length) return targetCondition.departments.join(', ');
+  if (targetCondition.majorCodeIds?.length) {
+    return targetCondition.majorCodeIds.map((id) => majorLabel(id)).join(', ');
+  }
   return '전체 재학생';
 };
 
@@ -217,6 +219,9 @@ function RoundManage({ rounds, setRounds }) {
 
   const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
   const semesterLabel = (code) => semesterCodes.find((s) => s.code === code)?.codeName ?? code;
+
+  const { data: majorCodes = [] } = useCommonCode('MAJOR');
+  const majorLabel = (codeId) => majorCodes.find((m) => m.codeId === codeId)?.codeName ?? codeId;
 
   const openDrawer = () => {
     setEditTarget(null);
@@ -253,9 +258,9 @@ function RoundManage({ rounds, setRounds }) {
       setFColl(tc.colleges);
       setFGrades([]);
       setFDepts([]);
-    } else if (tc?.departments?.length) {
+    } else if (tc?.majorCodeIds?.length) {
       setFTM('학과');
-      setFDepts(tc.departments);
+      setFDepts(tc.majorCodeIds);
       setFGrades([]);
       setFColl([]);
     } else {
@@ -275,7 +280,7 @@ function RoundManage({ rounds, setRounds }) {
   const buildTargetCondition = () => {
     if (fTargetMode === '학년' && fGrades.length) return { grades: fGrades };
     if (fTargetMode === '단과대' && fColleges.length) return { colleges: fColleges };
-    if (fTargetMode === '학과' && fDepts.length) return { departments: fDepts };
+    if (fTargetMode === '학과' && fDepts.length) return { majorCodeIds: fDepts };
     return null;
   };
 
@@ -403,7 +408,7 @@ function RoundManage({ rounds, setRounds }) {
                       {toDateInputValue(r.startsAt)} ~ {toDateInputValue(r.endsAt)}
                     </td>
                     <td className="px-4 py-3 text-center text-[11px] text-[#656D76] whitespace-nowrap">
-                      {describeTarget(r.targetCondition)}
+                      {describeTarget(r.targetCondition, majorLabel)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <StatusBadge status={r.roundStatus} variant="neutral" label="초안" size="sm" />
@@ -582,16 +587,20 @@ function RoundManage({ rounds, setRounds }) {
             )}
             {fTargetMode === '학과' && (
               <div className="flex gap-2 flex-wrap">
-                {DEPTS.map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => toggleList(fDepts, d, setFDepts)}
-                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fDepts.includes(d) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
-                    style={fDepts.includes(d) ? { background: ACCENT } : {}}
-                  >
-                    {d}
-                  </button>
-                ))}
+                {majorCodes.length === 0 ? (
+                  <p className="text-[11px] text-[#9AA0A6]">학과 목록을 불러오는 중입니다.</p>
+                ) : (
+                  majorCodes.map((m) => (
+                    <button
+                      key={m.codeId}
+                      onClick={() => toggleList(fDepts, m.codeId, setFDepts)}
+                      className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fDepts.includes(m.codeId) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
+                      style={fDepts.includes(m.codeId) ? { background: ACCENT } : {}}
+                    >
+                      {m.codeName}
+                    </button>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -606,6 +615,9 @@ function RoundManage({ rounds, setRounds }) {
 function ResponseManage({ rounds }) {
   const [roundId, setRoundId] = useState('');
   const selectedRound = rounds.find((r) => String(r.assessmentRoundId) === roundId) ?? null;
+
+  const { data: majorCodes = [] } = useCommonCode('MAJOR');
+  const majorLabel = (codeId) => majorCodes.find((m) => m.codeId === codeId)?.codeName ?? codeId;
 
   const {
     data: attendance,
@@ -667,7 +679,7 @@ function ResponseManage({ rounds }) {
           <h2 className="text-[16px] font-black text-[#1F2328]">응시 관리</h2>
           <p className="text-[12px] text-[#9AA0A6] mt-0.5">
             {selectedRound
-              ? `진단 회차: ${selectedRound.assessmentName} (${describeTarget(selectedRound.targetCondition)})`
+              ? `진단 회차: ${selectedRound.assessmentName} (${describeTarget(selectedRound.targetCondition, majorLabel)})`
               : '조회할 진단 회차를 선택해 주세요.'}
           </p>
         </div>
