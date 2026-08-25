@@ -113,6 +113,8 @@ export default function ReservationManage() {
       if (mutationError instanceof ApiError && STALE_STATE_CODES.has(mutationError.code)) {
         invalidatePending();
         setRejectTarget(null);
+        toast(getErrorMessage(mutationError), 'error');
+        return;
       }
       setRejectError(getErrorMessage(mutationError));
     },
@@ -320,11 +322,14 @@ export default function ReservationManage() {
               rows={4}
               placeholder="학생에게 공개되는 사유를 입력하세요."
               disabled={rejectMutation.isPending}
+              aria-invalid={rejectError ? true : undefined}
+              aria-describedby={rejectError ? 'decisionReasonError' : undefined}
               className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none bg-white focus:outline-none focus:border-[#374151] disabled:bg-[#F9FAFB]"
             />
           </div>
           {rejectError && (
             <p
+              id="decisionReasonError"
               className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]"
               role="alert"
             >

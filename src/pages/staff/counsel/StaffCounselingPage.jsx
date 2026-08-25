@@ -41,6 +41,7 @@ export default function StaffCounselingPage() {
     : NAV_ITEMS.filter((item) => !COUNSELOR_ONLY_KEYS.has(item.key));
   const [nav, setNav] = useState(navItems[0].key);
   const current = navItems.find((item) => item.key === nav) ?? navItems[0];
+  const selectedNav = current.key;
 
   // 뱃지는 실제 대기 건수만 표시한다. ReservationManage의 첫 페이지 조회와 같은 queryKey를 써서
   // 캐시를 공유하므로(상담사가 예약 관리 탭을 열어도) 중복 요청이 발생하지 않는다.
@@ -131,11 +132,11 @@ export default function StaffCounselingPage() {
           </span>
         </div>
 
-        {isCounselor && nav === 'schedule' && <MySchedule />}
-        {isCounselor && nav === 'reservation' && <ReservationManage />}
-        {nav === 'record' && <SessionRecord />}
-        {nav === 'result' && <SessionResult />}
-        {nav === 'intake' && <CenterIntake />}
+        {isCounselor && selectedNav === 'schedule' && <MySchedule />}
+        {isCounselor && selectedNav === 'reservation' && <ReservationManage />}
+        {selectedNav === 'record' && <SessionRecord />}
+        {selectedNav === 'result' && <SessionResult />}
+        {selectedNav === 'intake' && <CenterIntake />}
       </main>
     </div>
   );
