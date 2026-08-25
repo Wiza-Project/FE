@@ -735,7 +735,16 @@ function ResponseManage({ rounds }) {
               <p className="py-10 text-[12px] text-[#9AA0A6]">불러오는 중...</p>
             ) : (
               <>
-                <DonutChart segments={donutData} size={140} centerValue={rateLabel} />
+                {targetCount > 0 ? (
+                  <DonutChart segments={donutData} size={140} centerValue={rateLabel} />
+                ) : (
+                  <div
+                    role="status"
+                    className="w-[140px] h-[140px] flex items-center justify-center text-center text-[11px] text-[#9AA0A6] rounded-full border border-dashed border-[#E5E7EB] px-3"
+                  >
+                    대상자가 없어 표시할 데이터가 없습니다.
+                  </div>
+                )}
                 <div className="flex gap-6 text-[12px]">
                   <div className="text-center">
                     <div className="text-[20px] font-black" style={{ color: ACCENT }}>
