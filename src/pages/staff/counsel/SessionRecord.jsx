@@ -70,7 +70,6 @@ const ATTENDANCE_OPTIONS = [
   COUNSELING_SESSION_ATTENDANCE_STATUS.NO_SHOW,
 ];
 
-// 목록 조회·액션 실패를 상황별 문구로 구분한다. 403(권한 없음)과 404(자원 없음)를 같은 문구로 뭉개지 않는다.
 function getSessionErrorMessage(error) {
   if (!(error instanceof ApiError))
     return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
@@ -142,8 +141,7 @@ export default function SessionRecord() {
     enabled: detailSessionId !== null,
   });
 
-  const invalidateList = () =>
-    queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
+  const invalidateList = () => queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
   const invalidateDetail = () => {
     if (detailSessionId !== null) {
       queryClient.invalidateQueries({ queryKey: counselingSessionDetailQueryKey(detailSessionId) });
@@ -280,7 +278,10 @@ export default function SessionRecord() {
       return;
     }
     setFormError('');
-    cancelMutation.mutate({ sessionId: detail.sessionId, request: { cancellationReason: trimmed } });
+    cancelMutation.mutate({
+      sessionId: detail.sessionId,
+      request: { cancellationReason: trimmed },
+    });
   };
 
   const content = sessionPage?.content ?? [];
@@ -335,16 +336,23 @@ export default function SessionRecord() {
             <table className="w-full border-collapse text-[12px]">
               <thead>
                 <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                  {['회기', '학생', '상담유형', '시작 ~ 종료', '출석', '회기상태', '다음 회기 예정', '상세'].map(
-                    (h, i) => (
-                      <th
-                        key={h}
-                        className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 7 ? 'text-center' : 'text-left'}`}
-                      >
-                        {h}
-                      </th>
-                    ),
-                  )}
+                  {[
+                    '회기',
+                    '학생',
+                    '상담유형',
+                    '시작 ~ 종료',
+                    '출석',
+                    '회기상태',
+                    '다음 회기 예정',
+                    '상세',
+                  ].map((h, i) => (
+                    <th
+                      key={h}
+                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 7 ? 'text-center' : 'text-left'}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -424,7 +432,11 @@ export default function SessionRecord() {
         footer={
           formMode === 'followup' ? (
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setFormMode(null)} disabled={followUpMutation.isPending}>
+              <Button
+                variant="outline"
+                onClick={() => setFormMode(null)}
+                disabled={followUpMutation.isPending}
+              >
                 취소
               </Button>
               <Button loading={followUpMutation.isPending} onClick={submitFollowUp}>
@@ -433,7 +445,11 @@ export default function SessionRecord() {
             </div>
           ) : formMode === 'complete' ? (
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setFormMode(null)} disabled={completeMutation.isPending}>
+              <Button
+                variant="outline"
+                onClick={() => setFormMode(null)}
+                disabled={completeMutation.isPending}
+              >
                 취소
               </Button>
               <Button loading={completeMutation.isPending} onClick={submitComplete}>
@@ -442,7 +458,11 @@ export default function SessionRecord() {
             </div>
           ) : formMode === 'cancel' ? (
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setFormMode(null)} disabled={cancelMutation.isPending}>
+              <Button
+                variant="outline"
+                onClick={() => setFormMode(null)}
+                disabled={cancelMutation.isPending}
+              >
                 취소
               </Button>
               <Button variant="danger" loading={cancelMutation.isPending} onClick={submitCancel}>
@@ -465,7 +485,10 @@ export default function SessionRecord() {
         ) : !detail ? null : formMode === 'followup' ? (
           <div className="flex flex-col gap-4">
             <div>
-              <label htmlFor="followUpStart" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+              <label
+                htmlFor="followUpStart"
+                className="block text-[11px] font-semibold text-[#656D76] mb-1.5"
+              >
                 시작 시각 <span className="text-[#CF222E]">*</span>
               </label>
               <input
@@ -478,7 +501,10 @@ export default function SessionRecord() {
               />
             </div>
             <div>
-              <label htmlFor="followUpEnd" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+              <label
+                htmlFor="followUpEnd"
+                className="block text-[11px] font-semibold text-[#656D76] mb-1.5"
+              >
                 종료 시각 <span className="text-[#CF222E]">*</span>
               </label>
               <input
@@ -491,7 +517,10 @@ export default function SessionRecord() {
               />
             </div>
             {formError && (
-              <p className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]" role="alert">
+              <p
+                className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]"
+                role="alert"
+              >
                 ⚠ {formError}
               </p>
             )}
@@ -523,7 +552,10 @@ export default function SessionRecord() {
               </div>
             </fieldset>
             <div>
-              <label htmlFor="nextSessionInput" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+              <label
+                htmlFor="nextSessionInput"
+                className="block text-[11px] font-semibold text-[#656D76] mb-1.5"
+              >
                 다음 회기 예정 시각 (선택)
               </label>
               <input
@@ -540,7 +572,10 @@ export default function SessionRecord() {
               </p>
             </div>
             {formError && (
-              <p className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]" role="alert">
+              <p
+                className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]"
+                role="alert"
+              >
                 ⚠ {formError}
               </p>
             )}
@@ -548,7 +583,10 @@ export default function SessionRecord() {
         ) : formMode === 'cancel' ? (
           <div className="flex flex-col gap-4">
             <div>
-              <label htmlFor="cancelReason" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+              <label
+                htmlFor="cancelReason"
+                className="block text-[11px] font-semibold text-[#656D76] mb-1.5"
+              >
                 취소 사유 <span className="text-[#CF222E]">*</span>
               </label>
               <textarea
@@ -561,10 +599,15 @@ export default function SessionRecord() {
                 disabled={cancelMutation.isPending}
                 className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151]"
               />
-              <p className="text-[10px] text-[#9AA0A6] mt-1 text-right">{cancelReason.length}/500자</p>
+              <p className="text-[10px] text-[#9AA0A6] mt-1 text-right">
+                {cancelReason.length}/500자
+              </p>
             </div>
             {formError && (
-              <p className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]" role="alert">
+              <p
+                className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]"
+                role="alert"
+              >
                 ⚠ {formError}
               </p>
             )}
@@ -612,18 +655,35 @@ export default function SessionRecord() {
             {detail.cancellationReason && (
               <div className="p-3 rounded-[8px] bg-[#FEF2F2] border border-[#FECACA]">
                 <p className="text-[10px] font-semibold text-[#CF222E] mb-1">취소 사유</p>
-                <p className="text-[12px] text-[#1F2328] whitespace-pre-wrap">{detail.cancellationReason}</p>
+                <p className="text-[12px] text-[#1F2328] whitespace-pre-wrap">
+                  {detail.cancellationReason}
+                </p>
               </div>
             )}
 
             <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" size="sm" disabled={!detail.canCreateFollowUp} onClick={openFollowUpForm}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!detail.canCreateFollowUp}
+                onClick={openFollowUpForm}
+              >
                 후속 회기 생성
               </Button>
-              <Button variant="outline" size="sm" disabled={!detail.canComplete} onClick={openCompleteForm}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!detail.canComplete}
+                onClick={openCompleteForm}
+              >
                 출결 완료 처리
               </Button>
-              <Button variant="outline" size="sm" disabled={!detail.canCancel} onClick={openCancelForm}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!detail.canCancel}
+                onClick={openCancelForm}
+              >
                 회기 취소
               </Button>
             </div>

@@ -28,7 +28,6 @@ const NAV_ITEMS = [
   { key: 'intake', label: '접수·배정', icon: '🏥', desc: '센터 전용 — 접수 및 상담사 배정' },
 ];
 
-
 /**
  * 일반 교직원의 상담 운영 화면 허브입니다. 예약 관리·상담 기록·상담 결과·접수·배정을
  * 로컬 상태로 전환합니다. 상담사에게만 본인 일정 탭을 제공합니다.
@@ -44,9 +43,8 @@ export default function StaffCounselingPage() {
   const current = navItems.find((item) => item.key === nav) ?? navItems[0];
   const selectedNav = current.key;
 
-  // 뱃지는 실제 대기 건수만 표시한다. ReservationManage의 첫 페이지 조회와 같은 queryKey를 써서
-  // 캐시를 공유하므로(상담사가 예약 관리 탭을 열어도) 중복 요청이 발생하지 않는다.
-  // 프론트 메뉴 노출은 UX용 1차 차단일 뿐이며 실제 데이터 접근 권한은 서버가 최종 판단한다.
+  // ReservationManage의 첫 페이지 조회와 같은 queryKey를 써서 캐시를 공유하므로
+  // 상담사가 예약 관리 탭을 열어도 중복 요청이 발생하지 않는다.
   const { data: pendingPage } = useQuery({
     queryKey: pendingReservationsQueryKey(0),
     queryFn: () => fetchPendingCounselorReservations({ page: 0, size: 20 }),

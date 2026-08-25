@@ -474,4 +474,7 @@ export const counselingSessionsQueryKey = (page, sessionStatus) => [
 ];
 
 // 회기 상세 query key. 액션(완료·취소·후속생성) 성공 후 이 키만 무효화한다.
-export const counselingSessionDetailQueryKey = (sessionId) => ['counselingSessionDetail', sessionId];
+export const counselingSessionDetailQueryKey = (sessionId) => [
+  'counselingSessionDetail',
+  sessionId,
+];
