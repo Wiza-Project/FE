@@ -30,6 +30,8 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
     queryKey: ['assessmentResult', attemptId],
     queryFn: () => fetchAssessmentResult(attemptId),
     enabled: !!attemptId,
+    // Q018(미제출)은 재시도해도 같은 결과라 전역 retry:1을 그대로 태우면 스켈레톤만 더 오래 뜬다.
+    retry: (failureCount, err) => !(err instanceof ApiError && err.code === 'Q018') && failureCount < 1,
   });
 
   if (!attemptId) {
