@@ -247,6 +247,23 @@ export const updateAssessmentRound = async ({
 };
 
 /**
+ * 응시율 조회. 회차의 응시 대상자 수 대비 완료 건수를 실시간 집계한다.
+ * target_condition이 없는 회차는 전체 학생을 대상자로 집계한다.
+ *
+ * @param {number} roundId
+ * @returns {Promise<{
+ *   assessmentRoundId: number,
+ *   targetCount: number,
+ *   completedCount: number,
+ *   attendanceRate: number,
+ * }>}
+ */
+export const fetchAssessmentAttendance = async (roundId) => {
+  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/attendance`);
+  return data;
+};
+
+/**
  * @typedef {Object} AssessmentResumeItem
  * @property {number} questionId
  * @property {number} competencyId
