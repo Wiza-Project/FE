@@ -91,11 +91,15 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
     return <EmptyState message="집계된 역량 점수가 없습니다." sub="잠시 후 다시 시도해 주세요." />;
   }
 
-  const labels = result.scores.map((s) => s.competencyName);
-  const values = result.scores.map((s) => Number(s.convertedScore));
+  // 응답 배열 순서에 기대지 않고 displayOrder로 직접 정렬한다 — 여러 화면에서 축 순서를
+  // 동일하게 맞춰야 하는 기준이 이 필드라 서버가 명시적으로 내려준다.
+  const scores = [...result.scores].sort((a, b) => a.displayOrder - b.displayOrder);
+
+  const labels = scores.map((s) => s.competencyName);
+  const values = scores.map((s) => Number(s.convertedScore));
   const compareValues = values.map(() => Number(result.overallAverageScore));
 
-  const lowest = result.scores.reduce((min, s) => (s.convertedScore < min.convertedScore ? s : min), result.scores[0]);
+  const lowest = scores.reduce((min, s) => (s.convertedScore < min.convertedScore ? s : min), scores[0]);
 
   return (
     <div>
@@ -185,7 +189,7 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
                 </tr>
               </thead>
               <tbody>
-                {result.scores.map((s) => {
+                {scores.map((s) => {
                   const jdg = judgment(s.convertedScore);
                   const isLowest = s.competencyId === lowest.competencyId;
                   return (
@@ -221,7 +225,7 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
           <div className="mt-5 pt-4 border-t border-[#F3F4F6]">
             <div className="text-[11px] font-semibold text-[#9AA0A6] uppercase mb-3">점수 분포</div>
             <div className="flex flex-col gap-2">
-              {result.scores.map((s) => {
+              {scores.map((s) => {
                 const isLowest = s.competencyId === lowest.competencyId;
                 return (
                   <div key={s.competencyId} className="flex items-center gap-2">
