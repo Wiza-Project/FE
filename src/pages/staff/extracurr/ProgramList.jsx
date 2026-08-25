@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { StatusBadge, Pagination, ConfirmDialog, toast, Button } from '@/components/common';
 import { fetchProgramsAdmin, deleteProgram } from '@/api/programs';
 import { ApiError } from '@/api/client';
 import { formatDate } from '@/utils/date';
-import { fetchAllPages } from '@/utils/pagination';
 
 const PAGE_SIZE = 10;
 
@@ -83,18 +82,23 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const queryClient = useQueryClient();
-  const adminProgramsQueryKey = ['adminPrograms', { status, keyword: submittedKeyword }];
+  const adminProgramsQueryKey = ['adminPrograms', { status, keyword: submittedKeyword, page }];
   const { data, isLoading, isError, error } = useQuery({
     queryKey: adminProgramsQueryKey,
     queryFn: () =>
-      fetchAllPages((p) =>
-        fetchProgramsAdmin({
-          status: status || undefined,
-          keyword: submittedKeyword || undefined,
-          ...p,
-        }),
-      ),
+      fetchProgramsAdmin({
+        status: status || undefined,
+        keyword: submittedKeyword || undefined,
+        page: page - 1,
+        size: PAGE_SIZE,
+      }),
   });
+
+  useEffect(() => {
+    if (!data) return;
+    const lastPage = Math.max(1, data.totalPages || 1);
+    if (page > lastPage) setPage(lastPage);
+  }, [data, page]);
 
   const deleteMutation = useMutation({
     mutationFn: deleteProgram,
@@ -116,12 +120,10 @@ export default function ProgramList({ onNew, onEdit, onParticipation }) {
     deleteMutation.mutate(deleteTarget.id);
   };
 
-  const rows = (data ?? []).map(toRow);
-
-  const totalItems = rows.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const paged = (data?.content ?? []).map(toRow);
+  const totalItems = data?.totalElements ?? 0;
+  const totalPages = Math.max(1, data?.totalPages || 1);
   const currentPage = Math.min(page, totalPages);
-  const paged = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const runSearch = () => {
     setPage(1);
