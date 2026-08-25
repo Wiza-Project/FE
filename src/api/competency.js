@@ -321,3 +321,30 @@ export const submitAssessment = async (attemptId) => {
   const { data } = await apiClient.post(`/students/assessment-attempts/${attemptId}/submit`);
   return data;
 };
+
+/**
+ * 진단 결과 조회. 역량별 환산점수(방사형 차트)와 전체 평균을 조회한다.
+ * overallAverageScore는 백분위와 무관하게 내 환산점수만으로 항상 계산되는 값이라
+ * percentileAvailable이 false여도 채워져 있다. 아직 채점 전(미제출) attempt를 조회하면
+ * ApiError(코드 Q018)가 throw된다.
+ *
+ * @param {number} attemptId
+ * @returns {Promise<{
+ *   attemptId: number,
+ *   roundId: number,
+ *   submittedAt: string,
+ *   overallAverageScore: number,
+ *   percentileAvailable: boolean,
+ *   scores: Array<{
+ *     competencyId: number,
+ *     competencyName: string,
+ *     displayOrder: number,
+ *     convertedScore: number,
+ *     percentile: number|null,
+ *   }>,
+ * }>}
+ */
+export const fetchAssessmentResult = async (attemptId) => {
+  const { data } = await apiClient.get(`/students/assessment-attempts/${attemptId}/result`);
+  return data;
+};
