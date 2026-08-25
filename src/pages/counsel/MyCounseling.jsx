@@ -446,6 +446,12 @@ function ReservationTab({ onApply }) {
   }, [changeMutation.isPending, resetChangeModal, restoreFocus]);
 
   useEffect(() => {
+    if (cancelModal) {
+      cancelReasonRef.current?.focus();
+    }
+  }, [cancelModal]);
+
+  useEffect(() => {
     if (!cancelModal) {
       return undefined;
     }
@@ -454,10 +460,15 @@ function ReservationTab({ onApply }) {
     const onKeyDown = (event) =>
       handleModalKeyDown(event, modalElement, cancelMutation.isPending, closeCancelModal);
 
-    cancelReasonRef.current?.focus();
     modalElement?.addEventListener('keydown', onKeyDown);
     return () => modalElement?.removeEventListener('keydown', onKeyDown);
   }, [cancelModal, cancelMutation.isPending, closeCancelModal]);
+
+  useEffect(() => {
+    if (changeModal) {
+      changeReasonRef.current?.focus();
+    }
+  }, [changeModal]);
 
   useEffect(() => {
     if (!changeModal) {
@@ -468,7 +479,6 @@ function ReservationTab({ onApply }) {
     const onKeyDown = (event) =>
       handleModalKeyDown(event, modalElement, changeMutation.isPending, closeChangeModal);
 
-    changeReasonRef.current?.focus();
     modalElement?.addEventListener('keydown', onKeyDown);
     return () => modalElement?.removeEventListener('keydown', onKeyDown);
   }, [changeModal, changeMutation.isPending, closeChangeModal]);
