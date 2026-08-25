@@ -1,4 +1,19 @@
-import { apiClient } from './client';
+import { apiClient, downloadFile } from './client';
+
+/**
+ * 운영계획서 업로드. POST /api/admin/programs/files
+ * 프로그램 등록/수정과 별개로 파일을 먼저 올려 fileGroupId를 발급받는다.
+ * @param {File} file
+ * @returns {Promise<{fileGroupId: number}>} ProgramFileUploadResponseDTO
+ */
+export const uploadProgramOperationPlan = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await apiClient.post('/admin/programs/files', formData, {
+    headers: { 'Content-Type': undefined },
+  });
+  return data;
+};
 
 /**
  * 비교과 프로그램 등록. POST /api/admin/programs
@@ -33,6 +48,15 @@ export const fetchProgramDetail = async (programId) => {
   const { data } = await apiClient.get(`/students/programs/${programId}`);
   return data;
 };
+
+/**
+ * 학생용 비교과 프로그램 운영계획서 다운로드. GET /api/students/programs/{programId}/file
+ * 첨부파일이 없으면 404(RESOURCE_NOT_FOUND) — 상세 응답의 fileName이 null이 아닐 때만 호출한다.
+ * @param {number} programId
+ * @param {string} fallbackName 서버가 파일명을 안 줄 때 사용할 이름
+ */
+export const downloadProgramOperationPlan = (programId, fallbackName) =>
+  downloadFile(`/students/programs/${programId}/file`, fallbackName);
 
 /**
  * 로그인한 학생 본인의 회차별 출결 현황 조회. GET /api/students/programs/{programId}/attendances

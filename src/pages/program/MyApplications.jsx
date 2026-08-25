@@ -66,6 +66,7 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
   const [statusFilter, setStatusFilter] = useState('전체');
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
+  const [reapplyingIds, setReapplyingIds] = useState(new Set());
   const PAGE_SIZE = 8;
 
   useEffect(() => {
@@ -114,6 +115,8 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
   };
 
   const runReapply = async (app) => {
+    if (reapplyingIds.has(app.programId)) return;
+    setReapplyingIds((prev) => new Set(prev).add(app.programId));
     try {
       const res = await applyToProgram(app.programId);
       if (res.applicationStatus === 'WAITLISTED') {
@@ -124,6 +127,12 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
       setReloadKey((k) => k + 1);
     } catch (err) {
       toast(err.message ?? '재신청에 실패했습니다.', 'danger');
+    } finally {
+      setReapplyingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(app.programId);
+        return next;
+      });
     }
   };
 
@@ -320,13 +329,18 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                           // 취소/반려는 출결을 볼 수 없는 종결 상태라 관리 버튼 하나만 보여준다.
                           <button
                             onClick={() => handleBtn(app)}
-                            className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors ${
+                            disabled={app.status === '취소' && reapplyingIds.has(app.programId)}
+                            className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                               app.status === '반려'
                                 ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
                                 : 'border border-[#2563EB] text-[#2563EB] hover:bg-[#EFF6FF]'
                             }`}
                           >
-                            {app.status === '반려' ? '사유확인' : '재신청'}
+                            {app.status === '반려'
+                              ? '사유확인'
+                              : reapplyingIds.has(app.programId)
+                                ? '처리 중...'
+                                : '재신청'}
                           </button>
                         ) : (
                           <>

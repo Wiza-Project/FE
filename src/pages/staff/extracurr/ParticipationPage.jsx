@@ -319,6 +319,7 @@ function ApplicationReview({ programId }) {
   };
 
   const handleRejectConfirm = () => {
+    if (rejectMutation.isPending) return;
     if (!rejectDetail.trim()) {
       toast('반려 사유를 입력해 주세요.', 'error');
       return;
@@ -466,14 +467,14 @@ function ApplicationReview({ programId }) {
                       <td className="px-4 py-3 text-center">
                         <div className="flex gap-1.5 justify-center">
                           <button
-                            disabled={!canApprove}
+                            disabled={!canApprove || approveMutation.isPending}
                             onClick={() => approveMutation.mutate(a.applicationId)}
                             className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             승인
                           </button>
                           <button
-                            disabled={!canReject}
+                            disabled={!canReject || rejectMutation.isPending}
                             onClick={() => openReject([a.applicationId])}
                             className="h-6 px-2.5 text-[10px] font-bold rounded-[4px] bg-[#FEE2E2] text-[#CF222E] hover:bg-[#FECACA] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           >
@@ -557,10 +558,18 @@ function ApplicationReview({ programId }) {
         title="반려 · 수정요청"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setRjOpen(false)}>
+            <Button
+              variant="outline"
+              disabled={rejectMutation.isPending}
+              onClick={() => setRjOpen(false)}
+            >
               취소
             </Button>
-            <Button style={{ background: '#CF222E' }} onClick={handleRejectConfirm}>
+            <Button
+              style={{ background: '#CF222E' }}
+              loading={rejectMutation.isPending}
+              onClick={handleRejectConfirm}
+            >
               반려 처리
             </Button>
           </div>
