@@ -86,7 +86,9 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
   const sessionCount = p.sessions?.length ?? 0;
   const location = p.sessions?.[0]?.location || '-';
   const recruitPeriod = `${formatDate(p.recruitmentStartsAt)} ~ ${formatDate(p.recruitmentEndsAt)}`;
-  const isClosed = p.programStatus === 'CLOSED';
+  // 모집기간이 끝나면(OPERATING/CLOSED) 신청을 받지 않는다 — 백엔드 apply()도 모집종료 시각 기준으로
+  // 이미 거부하지만(APPLICATION_PERIOD_CLOSED), 버튼도 미리 막아 불필요한 실패 요청을 없앤다.
+  const isClosed = p.programStatus === 'CLOSED' || p.programStatus === 'OPERATING';
   const applied = p.applicantCount ?? 0;
   const remaining = p.remainingCapacity ?? Math.max(p.capacity - applied, 0);
   const isFull = p.capacity > 0 && remaining <= 0;
@@ -219,48 +221,67 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
             <h2 className="text-[14px] font-bold text-[#1F2328]">신청</h2>
           </div>
           <div className="px-5 py-5 flex flex-col gap-4">
-            {isFull && !isClosed && (
-              <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-[8px] px-4 py-3">
-                <p className="text-[12px] font-bold text-[#92400E]">
-                  정원이 마감되어 신청 시 대기열로 등록됩니다.
-                </p>
-              </div>
-            )}
-
-            {/* Agreement */}
-            {!isClosed && (
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
-                />
-                <span className="text-[12px] text-[#656D76] leading-snug">
-                  프로그램 이용약관 및 개인정보 처리 방침에 동의합니다.
-                </span>
-              </label>
-            )}
-
-            {/* Action buttons */}
-            <div className="flex flex-col gap-2">
-              {isClosed ? (
-                <Button size="md" className="w-full justify-center" disabled>
-                  모집이 종료되었습니다
-                </Button>
-              ) : (
+            {p.myApplicationStatus ? (
+              <>
+                <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded-[8px] px-4 py-3 flex items-center gap-2">
+                  <StatusBadge status={p.myApplicationStatusLabel} size="sm" />
+                  <p className="text-[12px] font-bold text-[#1D4ED8]">이미 신청한 프로그램입니다.</p>
+                </div>
                 <Button
                   size="md"
+                  variant="outline"
                   className="w-full justify-center"
-                  disabled={!agreed}
-                  loading={applying}
-                  style={{ background: agreed ? ACCENT : undefined }}
-                  onClick={() => setConfirmOpen(true)}
+                  onClick={onApplySuccess}
                 >
-                  {isFull ? '대기 신청' : '신청하기'}
+                  내 신청내역 보기
                 </Button>
-              )}
-            </div>
+              </>
+            ) : (
+              <>
+                {isFull && !isClosed && (
+                  <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-[8px] px-4 py-3">
+                    <p className="text-[12px] font-bold text-[#92400E]">
+                      정원이 마감되어 신청 시 대기열로 등록됩니다.
+                    </p>
+                  </div>
+                )}
+
+                {/* Agreement */}
+                {!isClosed && (
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={agreed}
+                      onChange={(e) => setAgreed(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
+                    />
+                    <span className="text-[12px] text-[#656D76] leading-snug">
+                      프로그램 이용약관 및 개인정보 처리 방침에 동의합니다.
+                    </span>
+                  </label>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex flex-col gap-2">
+                  {isClosed ? (
+                    <Button size="md" className="w-full justify-center" disabled>
+                      모집이 마감되었습니다
+                    </Button>
+                  ) : (
+                    <Button
+                      size="md"
+                      className="w-full justify-center"
+                      disabled={!agreed}
+                      loading={applying}
+                      style={{ background: agreed ? ACCENT : undefined }}
+                      onClick={() => setConfirmOpen(true)}
+                    >
+                      {isFull ? '대기 신청' : '신청하기'}
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
