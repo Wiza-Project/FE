@@ -178,6 +178,20 @@ export default function SessionRecord() {
     setFormError(getSessionErrorMessage(mutationError));
   };
 
+  const onFollowUpError = (mutationError) => {
+    // 시간 관련 위반(TIME_CONFLICT/INVALID_STATE)은 같은 입력값을 고쳐 바로 재시도할 수 있으므로
+    // 폼을 닫지 않고 인라인 오류로만 보여준다. 나머지 코드는 공통 stale 처리를 그대로 따른다.
+    if (
+      mutationError instanceof ApiError &&
+      (mutationError.code === COUNSELING_SESSION_ERROR_CODE.TIME_CONFLICT ||
+        mutationError.code === COUNSELING_SESSION_ERROR_CODE.INVALID_STATE)
+    ) {
+      setFormError(getSessionErrorMessage(mutationError));
+      return;
+    }
+    onActionError(mutationError);
+  };
+
   const followUpMutation = useMutation({
     mutationFn: ({ assignmentId, request }) => createFollowUpSession(assignmentId, request),
     onSuccess: () => {
@@ -186,7 +200,7 @@ export default function SessionRecord() {
       toast('후속 회기가 생성되었습니다.', 'success');
       resetForms();
     },
-    onError: onActionError,
+    onError: onFollowUpError,
   });
 
   const completeMutation = useMutation({
@@ -242,6 +256,10 @@ export default function SessionRecord() {
     }
     if (new Date(startsAt) >= new Date(endsAt)) {
       setFormError('종료 시각은 시작 시각보다 이후여야 합니다.');
+      return;
+    }
+    if (new Date(startsAt) > new Date()) {
+      setFormError('시작 시각은 현재 이전이어야 합니다. 후속 회기는 지난 상담의 사후 등록만 가능합니다.');
       return;
     }
     setFormError('');
