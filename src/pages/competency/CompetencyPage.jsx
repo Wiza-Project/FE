@@ -19,7 +19,7 @@ const TAB_CONFIG = [
 const SUB_VIEWS = ['guide', 'questions', 'result', 'history', 'compare', 'recommend'];
 
 // TODO(WP-118 S00): 진단 안내+동의 화면에서 발급받은 실제 attemptId로 교체.
-// S00 API(동의 시 attempt 생성)가 아직 연동되지 않아 응답 화면(#8)만 우선 검증하기 위한 임시값.
+// S00 API(동의 시 attempt 생성)가 아직 연동되지 않아 응답·결과 화면을 우선 검증하기 위한 임시값.
 const DEV_ATTEMPT_ID = 1;
 
 /**
@@ -71,6 +71,7 @@ export default function CompetencyPage() {
 
       {view === 'result' && (
         <DiagnosisResult
+          attemptId={DEV_ATTEMPT_ID}
           onBack={() => setView('history')}
           onCompare={() => setView('compare')}
           onRecommend={() => setView('recommend')}
