@@ -11,8 +11,9 @@ import { fetchPendingCounselorReservations, pendingReservationsQueryKey } from '
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
-// 상담사(ST200) 전용 메뉴. 예약 관리는 상담사 본인 일정에 걸린 예약만 다루므로 일반 교직원에게는 숨긴다.
-const COUNSELOR_ONLY_KEYS = new Set(['schedule', 'reservation']);
+// 상담사(ST200) 전용 메뉴. 예약 관리·회기 관리는 상담사 본인 배정만 다루므로 일반 교직원에게는 숨긴다.
+// 이 목록은 UX용 1차 차단일 뿐이며, 실제 데이터 접근 권한은 각 API를 호출하는 BE가 ROLE_ST200으로 최종 판단한다.
+const COUNSELOR_ONLY_KEYS = new Set(['schedule', 'reservation', 'record']);
 
 const NAV_ITEMS = [
   { key: 'schedule', label: '내 일정', icon: '📅', desc: '가능 시간대 관리' },
@@ -22,7 +23,7 @@ const NAV_ITEMS = [
     icon: '📋',
     desc: '예약 승인·반려 및 오늘 일정',
   },
-  { key: 'record', label: '상담 기록', icon: '📝', desc: '비공개 기록 및 공개 요약 작성' },
+  { key: 'record', label: '회기 관리', icon: '📝', desc: '회기 목록·후속 생성·출결 완료·취소' },
   { key: 'result', label: '상담 결과', icon: '✅', desc: '결과 확정 및 정정 이력' },
   { key: 'intake', label: '접수·배정', icon: '🏥', desc: '센터 전용 — 접수 및 상담사 배정' },
 ];
@@ -134,7 +135,7 @@ export default function StaffCounselingPage() {
 
         {isCounselor && selectedNav === 'schedule' && <MySchedule />}
         {isCounselor && selectedNav === 'reservation' && <ReservationManage />}
-        {selectedNav === 'record' && <SessionRecord />}
+        {isCounselor && selectedNav === 'record' && <SessionRecord />}
         {selectedNav === 'result' && <SessionResult />}
         {selectedNav === 'intake' && <CenterIntake />}
       </main>
