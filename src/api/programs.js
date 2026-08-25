@@ -1,6 +1,21 @@
 import { apiClient } from './client';
 
 /**
+ * 운영계획서 업로드. POST /api/admin/programs/files
+ * 프로그램 등록/수정과 별개로 파일을 먼저 올려 fileGroupId를 발급받는다.
+ * @param {File} file
+ * @returns {Promise<{fileGroupId: number}>} ProgramFileUploadResponseDTO
+ */
+export const uploadProgramOperationPlan = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await apiClient.post('/admin/programs/files', formData, {
+    headers: { 'Content-Type': undefined },
+  });
+  return data;
+};
+
+/**
  * 비교과 프로그램 등록. POST /api/admin/programs
  * @param {Object} payload ProgramRegisterRequestDTO와 동일한 형태
  */
