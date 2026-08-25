@@ -216,3 +216,119 @@ export const closeCounselorSchedule = async (scheduleId) => {
   const { data } = await apiClient.patch(`/counselors/schedules/${scheduleId}/close`);
   return data;
 };
+
+/**
+ * @typedef {Object} CounselorPendingReservationResponse
+ * @property {number} reservationId
+ * @property {number} counselingTypeId
+ * @property {string} counselingTypeName
+ * @property {number} studentId
+ * @property {number} counselingScheduleId
+ * @property {string} startsAt UTC ISO-8601 Instant
+ * @property {string} endsAt UTC ISO-8601 Instant
+ * @property {'REQUESTED'|'REJECTED'} reservationStatus 대기 목록 조회는 항상 REQUESTED, 반려 응답은 REJECTED
+ * @property {string} createdAt UTC ISO-8601 Instant
+ */
+
+/**
+ * @typedef {Object} CounselorPendingReservationPage
+ * @property {CounselorPendingReservationResponse[]} content
+ * @property {number} page 0부터 시작
+ * @property {number} size
+ * @property {number} totalElements
+ * @property {number} totalPages
+ * @property {boolean} first
+ * @property {boolean} last
+ */
+
+/**
+ * 로그인한 상담사 본인 일정에 걸린 REQUESTED 예약만 startsAt ASC로 조회한다.
+ * 목록 항목에는 신청 원문(requestContent)이 포함되지 않는다.
+ *
+ * @param {Object} [params]
+ * @param {number} [params.page=0]
+ * @param {number} [params.size=20]
+ * @returns {Promise<CounselorPendingReservationPage>}
+ */
+export const fetchPendingCounselorReservations = async ({ page = 0, size = 20 } = {}) => {
+  const { data } = await apiClient.get('/counselors/counseling-reservations/pending', {
+    params: { page, size },
+  });
+  return data;
+};
+
+/**
+ * @typedef {Object} CounselorReservationDetailResponse
+ * @property {number} reservationId
+ * @property {number} counselingTypeId
+ * @property {string} counselingTypeName
+ * @property {number} studentId
+ * @property {number|null} counselingScheduleId
+ * @property {string|null} startsAt UTC ISO-8601 Instant
+ * @property {string|null} endsAt UTC ISO-8601 Instant
+ * @property {string} reservationStatus
+ * @property {string} createdAt UTC ISO-8601 Instant
+ * @property {string} requestContent 일정 담당 상담사만 조회 가능
+ * @property {number|null} processedBy 미처리 시 null
+ * @property {string|null} processedAt UTC ISO-8601 Instant, 미처리 시 null
+ * @property {string|null} decisionReason 미처리 시 null
+ */
+
+/**
+ * 예약 상세(신청 원문 포함)를 조회한다. 일정 담당 상담사 본인만 조회할 수 있다.
+ *
+ * @param {number} reservationId
+ * @returns {Promise<CounselorReservationDetailResponse>}
+ */
+export const fetchCounselorReservationDetail = async (reservationId) => {
+  const { data } = await apiClient.get(`/counselors/counseling-reservations/${reservationId}`);
+  return data;
+};
+
+/**
+ * @typedef {Object} CounselorReservationDecisionResponse
+ * @property {number} reservationId
+ * @property {'APPROVED'} reservationStatus
+ * @property {string} processedAt UTC ISO-8601 Instant
+ * @property {number} counselingAssignmentId
+ * @property {number} counselorId
+ * @property {string} assignedAt UTC ISO-8601 Instant
+ */
+
+/**
+ * REQUESTED 예약을 승인한다. 같은 트랜잭션에서 일정 담당 상담사를 최초 활성 배정한다.
+ * 요청 본문은 없다.
+ *
+ * @param {number} reservationId
+ * @returns {Promise<CounselorReservationDecisionResponse>}
+ */
+export const approveCounselingReservation = async (reservationId) => {
+  const { data } = await apiClient.patch(
+    `/counselors/counseling-reservations/${reservationId}/approve`,
+  );
+  return data;
+};
+
+/**
+ * @typedef {Object} RejectCounselingReservationRequest
+ * @property {string} decisionReason 공백만으로 구성될 수 없다. 학생에게 공개된다.
+ */
+
+/**
+ * REQUESTED 예약을 반려한다. 배정은 생성하지 않는다.
+ *
+ * @param {number} reservationId
+ * @param {RejectCounselingReservationRequest} request
+ * @returns {Promise<CounselorPendingReservationResponse>} reservationStatus는 'REJECTED'로 내려온다
+ */
+export const rejectCounselingReservation = async (reservationId, request) => {
+  const { data } = await apiClient.patch(
+    `/counselors/counseling-reservations/${reservationId}/reject`,
+    request,
+  );
+  return data;
+};
+
+// 대기 목록 조회 query key. ReservationManage(첫 페이지)와 StaffCounselingPage(뱃지)가
+// 같은 페이지를 조회할 때 캐시를 공유하도록 두 화면에서 이 함수만 사용한다. 키 배열 형태를 바꾸지 않는다.
+export const pendingReservationsQueryKey = (page) => ['counselorPendingReservations', page];

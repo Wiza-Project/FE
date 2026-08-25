@@ -1,104 +1,165 @@
 import { useState } from 'react';
-import { Button, Modal, StatusBadge, toast } from '@/components/common';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, Modal, Pagination, StatusBadge, toast } from '@/components/common';
+import { ApiError } from '@/api/client';
+import {
+  approveCounselingReservation,
+  fetchCounselorReservationDetail,
+  fetchPendingCounselorReservations,
+  pendingReservationsQueryKey,
+  rejectCounselingReservation,
+} from '@/api/counsel';
+import {
+  COUNSELING_RESERVATION_ERROR_CODE,
+  COUNSELING_RESERVATION_STATUS_LABEL,
+} from '@/constants/domain';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
+const PAGE_SIZE = 20;
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-const RESERVATIONS = [
-  {
-    id: 'CS-2026-0318',
-    appliedAt: '08-12 09:11',
-    studentId: '20231234',
-    name: '홍길동',
-    dept: '컴퓨터공학과',
-    type: '진로·역량',
-    wishDate: '08-14 10:00',
-    status: '대기',
-  },
-  {
-    id: 'CS-2026-0319',
-    appliedAt: '08-12 11:32',
-    studentId: '20231111',
-    name: '김영희',
-    dept: '경영학과',
-    type: '학업고민',
-    wishDate: '08-15 14:00',
-    status: '대기',
-  },
-  {
-    id: 'CS-2026-0320',
-    appliedAt: '08-12 14:05',
-    studentId: '20230777',
-    name: '이민수',
-    dept: '산업공학과',
-    type: '대인관계',
-    wishDate: '08-14 16:00',
-    status: '대기',
-  },
-  {
-    id: 'CS-2026-0315',
-    appliedAt: '08-10 10:20',
-    studentId: '20232050',
-    name: '최지수',
-    dept: '심리학과',
-    type: '심리·정서',
-    wishDate: '08-13 10:00',
-    status: '확정',
-  },
-  {
-    id: 'CS-2026-0316',
-    appliedAt: '08-11 09:44',
-    studentId: '20231876',
-    name: '정하준',
-    dept: '컴퓨터공학과',
-    type: '진로·역량',
-    wishDate: '08-13 14:00',
-    status: '확정',
-  },
-  {
-    id: 'CS-2026-0310',
-    appliedAt: '08-08 16:05',
-    studentId: '20231654',
-    name: '윤태양',
-    dept: '경영학과',
-    type: '학업고민',
-    wishDate: '08-10 11:00',
-    status: '반려',
-  },
-];
+function formatKstDateTime(instant) {
+  if (!instant) return '-';
+  const date = new Date(instant);
+  if (Number.isNaN(date.getTime())) return '-';
+  const kst = new Date(date.getTime() + KST_OFFSET_MS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())} ${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}`;
+}
 
-const TODAY_SESSIONS = RESERVATIONS.filter(
-  (r) => r.wishDate.startsWith('08-13') && r.status === '확정',
-);
+/** 서버가 준 재조회 필요 여부까지 함께 판단해 문구를 만든다(재조회는 호출부에서 처리). */
+function getErrorMessage(error) {
+  if (!(error instanceof ApiError))
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  const { code } = error;
+  if (code === COUNSELING_RESERVATION_ERROR_CODE.ALREADY_PROCESSED)
+    return '다른 곳에서 이미 처리된 예약입니다. 목록을 새로고침했습니다.';
+  if (code === COUNSELING_RESERVATION_ERROR_CODE.RESERVATION_NOT_FOUND)
+    return '해당 예약을 찾을 수 없습니다. 목록을 새로고침했습니다.';
+  if (code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN)
+    return '이 예약에 대한 권한이 변경되었습니다. 목록을 새로고침했습니다.';
+  if (code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE)
+    return '일정 시작 시각이 이미 지나 승인할 수 없습니다. 목록을 새로고침했습니다.';
+  if (code === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT)
+    return error.message || '입력값을 다시 확인해 주세요.';
+  return error.message || '처리 중 오류가 발생했습니다.';
+}
 
-const REJECT_REASONS = ['선택하세요', '일정 충돌', '담당 상담사 부재', '신청 내용 미흡', '기타'];
+// 재조회로 목록에서 사라져야 하는(=서버-클라 상태 불일치) 오류인지 구분한다.
+const STALE_STATE_CODES = new Set([
+  COUNSELING_RESERVATION_ERROR_CODE.ALREADY_PROCESSED,
+  COUNSELING_RESERVATION_ERROR_CODE.RESERVATION_NOT_FOUND,
+  COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN,
+  COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE,
+]);
 
 export default function ReservationManage() {
-  const [rows, setRows] = useState(RESERVATIONS);
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
+  const [detailReservationId, setDetailReservationId] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
-  const [rejectCode, setRejectCode] = useState('선택하세요');
-  const [rejectDetail, setRejectDetail] = useState('');
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewId, setPreviewId] = useState('');
+  const [decisionReason, setDecisionReason] = useState('');
+  const [rejectError, setRejectError] = useState('');
+  // useMutation의 variables는 훅당 하나뿐이라 여러 행을 동시에 승인하면 마지막 클릭 건으로 덮어써진다.
+  // 행별로 정확히 비활성화하려고 진행 중인 예약 ID를 별도 Set으로 관리한다.
+  const [approvingIds, setApprovingIds] = useState(() => new Set());
 
-  const handleConfirm = (id) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: '확정' } : r)));
-    toast(`예약 ${id}을 확정했습니다.`, 'success');
+  const {
+    data: pendingPage,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: pendingReservationsQueryKey(page),
+    queryFn: () => fetchPendingCounselorReservations({ page, size: PAGE_SIZE }),
+  });
+
+  const {
+    data: detail,
+    isLoading: detailLoading,
+    isError: detailIsError,
+  } = useQuery({
+    queryKey: ['counselorReservationDetail', detailReservationId],
+    queryFn: () => fetchCounselorReservationDetail(detailReservationId),
+    enabled: detailReservationId !== null,
+  });
+
+  const invalidatePending = () =>
+    queryClient.invalidateQueries({ queryKey: ['counselorPendingReservations'] });
+
+  const approveMutation = useMutation({
+    mutationFn: approveCounselingReservation,
+    onSuccess: () => {
+      invalidatePending();
+      toast('예약을 승인했습니다. 담당 상담사로 배정되었습니다.', 'success');
+    },
+    onError: (mutationError) => {
+      if (mutationError instanceof ApiError && STALE_STATE_CODES.has(mutationError.code))
+        invalidatePending();
+      toast(getErrorMessage(mutationError), 'error');
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ reservationId, request }) => rejectCounselingReservation(reservationId, request),
+    onSuccess: () => {
+      invalidatePending();
+      setRejectTarget(null);
+      setDecisionReason('');
+      setRejectError('');
+      toast('반려 처리되었습니다. 학생에게 사유가 공개됩니다.', 'info');
+    },
+    onError: (mutationError) => {
+      if (mutationError instanceof ApiError && STALE_STATE_CODES.has(mutationError.code)) {
+        invalidatePending();
+        setRejectTarget(null);
+        toast(getErrorMessage(mutationError), 'error');
+        return;
+      }
+      setRejectError(getErrorMessage(mutationError));
+    },
+  });
+
+  const handleApprove = (reservationId) => {
+    setApprovingIds((prev) => new Set(prev).add(reservationId));
+    approveMutation.mutate(reservationId, {
+      onSettled: () => {
+        setApprovingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(reservationId);
+          return next;
+        });
+      },
+    });
   };
 
-  const handleRejectConfirm = () => {
-    if (rejectCode === '선택하세요') {
-      toast('사유를 선택해 주세요.', 'error');
+  const closeDetail = () => {
+    setDetailReservationId(null);
+    // 상담 신청 원문을 캐시에 남겨두지 않는다.
+    queryClient.removeQueries({ queryKey: ['counselorReservationDetail', detailReservationId] });
+  };
+
+  const openReject = (reservation) => {
+    setRejectTarget(reservation);
+    setDecisionReason('');
+    setRejectError('');
+  };
+
+  const handleRejectSubmit = () => {
+    if (!decisionReason.trim()) {
+      setRejectError('반려 사유를 입력해 주세요.');
       return;
     }
     if (!rejectTarget) return;
-    setRows((prev) => prev.map((r) => (r.id === rejectTarget.id ? { ...r, status: '반려' } : r)));
-    setRejectTarget(null);
-    setRejectCode('선택하세요');
-    setRejectDetail('');
-    toast('반려 처리되었습니다. 학생에게 사유가 공개됩니다.', 'info');
+    rejectMutation.mutate({
+      reservationId: rejectTarget.reservationId,
+      request: { decisionReason: decisionReason.trim() },
+    });
   };
 
-  const pending = rows.filter((r) => r.status === '대기');
+  const content = pendingPage?.content ?? [];
+  const totalElements = pendingPage?.totalElements ?? 0;
+  const totalPages = pendingPage?.totalPages ?? 0;
 
   return (
     <div>
@@ -109,191 +170,141 @@ export default function ReservationManage() {
             대기 중인 예약을 확인하고 승인·반려 처리하세요.
           </p>
         </div>
-        <span
-          className="text-[12px] font-bold px-3 py-1 rounded-full bg-[#F3F4F6]"
-          style={{ color: ACCENT }}
-        >
-          대기 {pending.length}건
-        </span>
+        {!isLoading && !isError && (
+          <span
+            className="text-[12px] font-bold px-3 py-1 rounded-full bg-[#F3F4F6]"
+            style={{ color: ACCENT }}
+          >
+            대기 {totalElements}건
+          </span>
+        )}
       </div>
 
-      {/* Today's sessions */}
-      <div className="mb-5">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-          <h2 className="text-[13px] font-bold text-[#1F2328]">오늘의 상담</h2>
-          <span className="text-[11px] text-[#9AA0A6]">2026-08-13 (목)</span>
-        </div>
-        <div
-          className="grid gap-3"
-          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}
-        >
-          {TODAY_SESSIONS.length === 0 ? (
-            <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 text-[12px] text-[#9AA0A6]">
-              오늘 예정된 상담이 없습니다.
-            </div>
-          ) : (
-            TODAY_SESSIONS.map((s) => (
-              <div
-                key={s.id}
-                className="bg-white rounded-[8px] border-2 p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]"
-                style={{ borderColor: ACCENT }}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="text-[14px] font-black" style={{ color: ACCENT }}>
-                      {s.wishDate.split(' ')[1]}
-                    </p>
-                    <p className="text-[10px] text-[#9AA0A6] font-mono">{s.id}</p>
-                  </div>
-                  <StatusBadge status="확정" size="sm" />
-                </div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div
-                    className="w-7 h-7 rounded-full bg-[#F3F4F6] flex items-center justify-center text-[11px] font-black"
-                    style={{ color: ACCENT }}
-                  >
-                    {s.name[0]}
-                  </div>
-                  <div>
-                    <p className="text-[12px] font-bold text-[#1F2328]">{s.name}</p>
-                    <p className="text-[10px] text-[#9AA0A6]">
-                      {s.studentId} · {s.dept}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#656D76] font-semibold">
-                    {s.type}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setPreviewId(s.id);
-                      setPreviewOpen(true);
-                    }}
-                    className="text-[11px] font-bold hover:underline transition-colors"
-                    style={{ color: ACCENT }}
-                  >
-                    사전정보 보기 →
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Reservation table */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
         <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
           <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-          <span className="text-[13px] font-bold text-[#1F2328]">전체 예약 목록</span>
+          <span className="text-[13px] font-bold text-[#1F2328]">승인 대기 목록</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[12px]">
-            <thead>
-              <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                {[
-                  '예약번호',
-                  '신청일시',
-                  '학번',
-                  '성명',
-                  '학과',
-                  '유형',
-                  '희망 일시',
-                  '상태',
-                  '처리',
-                ].map((h, i) => (
-                  <th
-                    key={h}
-                    className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 7 ? 'text-center' : 'text-left'}`}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                return (
-                  <tr
-                    key={r.id}
-                    className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-[10px]" style={{ color: ACCENT }}>
-                      {r.id}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
-                      {r.appliedAt}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
-                      {r.studentId}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-[#1F2328]">{r.name}</td>
-                    <td className="px-4 py-3 text-[#656D76]">{r.dept}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6]"
-                        style={{ color: ACCENT }}
+
+        {isLoading ? (
+          <p className="p-6 text-center text-[12px] text-[#656D76]">목록을 불러오는 중입니다.</p>
+        ) : isError ? (
+          <p className="p-4 text-[12px] text-[#CF222E]" role="alert">
+            {getErrorMessage(error)}
+          </p>
+        ) : content.length === 0 ? (
+          <p className="p-6 text-center text-[12px] text-[#656D76]">대기 중인 예약이 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
+                  {['예약번호', '상담유형', '학생 ID', '상담 일정', '신청일시', '상태', '처리'].map(
+                    (h, i) => (
+                      <th
+                        key={h}
+                        className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 6 ? 'text-center' : 'text-left'}`}
                       >
-                        {r.type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#444D56] whitespace-nowrap">
-                      {r.wishDate}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={r.status} size="sm" />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1.5 justify-center">
-                        {/* Privacy rule: no content preview in list */}
-                        <button
-                          onClick={() => {
-                            setPreviewId(r.id);
-                            setPreviewOpen(true);
-                          }}
-                          className="h-6 px-2 text-[9px] font-bold rounded-[4px] bg-[#F3F4F6] text-[#656D76] hover:bg-[#E5E7EB] transition-colors"
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {content.map((r) => {
+                  const isApproving = approvingIds.has(r.reservationId);
+                  const isRowBusy = isApproving || (rejectMutation.isPending && rejectTarget?.reservationId === r.reservationId);
+                  return (
+                    <tr
+                      key={r.reservationId}
+                      className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
+                    >
+                      <td className="px-4 py-3 font-mono text-[11px]" style={{ color: ACCENT }}>
+                        {r.reservationId}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6]"
+                          style={{ color: ACCENT }}
                         >
-                          신청내용
-                        </button>
-                        {r.status === '대기' && (
-                          <>
-                            <button
-                              onClick={() => handleConfirm(r.id)}
-                              className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0] transition-colors"
-                            >
-                              예정 확정
-                            </button>
-                            <button
-                              onClick={() => setRejectTarget(r)}
-                              className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#FEE2E2] text-[#CF222E] hover:bg-[#FECACA] transition-colors"
-                            >
-                              반려
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                          {r.counselingTypeName}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
+                        {r.studentId}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-[#444D56] whitespace-nowrap">
+                        {formatKstDateTime(r.startsAt)} ~ {formatKstDateTime(r.endsAt)}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6] whitespace-nowrap">
+                        {formatKstDateTime(r.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={COUNSELING_RESERVATION_STATUS_LABEL[r.reservationStatus]} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5 justify-center">
+                          <button
+                            onClick={() => setDetailReservationId(r.reservationId)}
+                            className="h-6 px-2 text-[9px] font-bold rounded-[4px] bg-[#F3F4F6] text-[#656D76] hover:bg-[#E5E7EB] transition-colors"
+                          >
+                            신청내용
+                          </button>
+                          <button
+                            onClick={() => handleApprove(r.reservationId)}
+                            disabled={isRowBusy}
+                            className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0] disabled:opacity-50 transition-colors"
+                          >
+                            {isApproving ? '승인 중…' : '승인'}
+                          </button>
+                          <button
+                            onClick={() => openReject(r)}
+                            disabled={isRowBusy}
+                            className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#FEE2E2] text-[#CF222E] hover:bg-[#FECACA] disabled:opacity-50 transition-colors"
+                          >
+                            반려
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      {!isLoading && !isError && totalPages > 1 && (
+        <Pagination
+          page={page + 1}
+          totalPages={totalPages}
+          totalItems={totalElements}
+          pageSize={PAGE_SIZE}
+          onChange={(nextPage) => setPage(nextPage - 1)}
+        />
+      )}
 
       {/* Reject modal */}
       <Modal
         open={!!rejectTarget}
-        onClose={() => setRejectTarget(null)}
+        onClose={() => !rejectMutation.isPending && setRejectTarget(null)}
         title="예약 반려"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setRejectTarget(null)}>
+            <Button
+              variant="outline"
+              onClick={() => setRejectTarget(null)}
+              disabled={rejectMutation.isPending}
+            >
               취소
             </Button>
-            <Button style={{ background: '#CF222E' }} onClick={handleRejectConfirm}>
+            <Button
+              variant="danger"
+              loading={rejectMutation.isPending}
+              onClick={handleRejectSubmit}
+            >
               반려 처리
             </Button>
           </div>
@@ -301,62 +312,75 @@ export default function ReservationManage() {
       >
         <div className="flex flex-col gap-4">
           <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5" htmlFor="decisionReason">
               반려 사유 <span className="text-[#CF222E]">*</span>
             </label>
-            <select
-              value={rejectCode}
-              onChange={(e) => setRejectCode(e.target.value)}
-              className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-            >
-              {REJECT_REASONS.map((r) => (
-                <option key={r}>{r}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-              상세 사유
-            </label>
             <textarea
-              value={rejectDetail}
-              onChange={(e) => setRejectDetail(e.target.value)}
-              rows={3}
+              id="decisionReason"
+              value={decisionReason}
+              onChange={(e) => setDecisionReason(e.target.value)}
+              rows={4}
               placeholder="학생에게 공개되는 사유를 입력하세요."
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none bg-white focus:outline-none focus:border-[#374151]"
+              disabled={rejectMutation.isPending}
+              aria-invalid={rejectError ? true : undefined}
+              aria-describedby={rejectError ? 'decisionReasonError' : undefined}
+              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none bg-white focus:outline-none focus:border-[#374151] disabled:bg-[#F9FAFB]"
             />
           </div>
+          {rejectError && (
+            <p
+              id="decisionReasonError"
+              className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]"
+              role="alert"
+            >
+              ⚠ {rejectError}
+            </p>
+          )}
           <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[12px] text-[#92400E]">
             ⚠ 반려 사유는 학생에게 공개됩니다.
           </div>
         </div>
       </Modal>
 
-      {/* Preview modal — minimal info per privacy rule */}
+      {/* Detail modal — 신청 원문은 열람 시에만 조회하고 닫을 때 캐시에서 제거한다 */}
       <Modal
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
+        open={detailReservationId !== null}
+        onClose={closeDetail}
         title="신청 내용 확인"
         footer={
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
-              닫기
-            </Button>
-          </div>
+          <Button variant="outline" onClick={closeDetail}>
+            닫기
+          </Button>
         }
       >
         <div className="flex flex-col gap-3">
-          <div className="p-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB]">
-            <p className="text-[10px] font-mono text-[#9AA0A6] mb-1">{previewId}</p>
-            <p className="text-[12px] font-bold text-[#1F2328] mb-2">
-              진로 방향과 취업 준비에 대해 상담받고 싶습니다. 현재 3학년으로 졸업 이후 진로가
-              막막합니다.
+          {detailLoading ? (
+            <p className="text-center text-[12px] text-[#656D76] py-4">불러오는 중입니다.</p>
+          ) : detailIsError ? (
+            <p className="text-[12px] text-[#CF222E]" role="alert">
+              신청 내용을 불러오지 못했습니다. 다시 시도해 주세요.
             </p>
-            <div className="text-[11px] text-[#9AA0A6]">기타 요청: 대면 희망 / 오전 시간 선호</div>
-          </div>
-          <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[11px] text-[#92400E]">
-            🔒 상담 내용 상세 기록은 담당 상담사만 열람할 수 있습니다.
-          </div>
+          ) : detail ? (
+            <>
+              <div className="p-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB]">
+                <p className="text-[10px] font-mono text-[#9AA0A6] mb-1">
+                  #{detail.reservationId} · {detail.counselingTypeName}
+                </p>
+                <p className="text-[12px] font-bold text-[#1F2328] whitespace-pre-wrap">
+                  {detail.requestContent}
+                </p>
+              </div>
+              {detail.decisionReason && (
+                <div className="p-3 rounded-[8px] bg-[#FEF2F2] border border-[#FECACA]">
+                  <p className="text-[10px] font-semibold text-[#CF222E] mb-1">기존 처리 사유</p>
+                  <p className="text-[12px] text-[#1F2328]">{detail.decisionReason}</p>
+                </div>
+              )}
+              <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[11px] text-[#92400E]">
+                🔒 상담 신청 원문은 담당 상담사만 열람할 수 있습니다.
+              </div>
+            </>
+          ) : null}
         </div>
       </Modal>
     </div>
