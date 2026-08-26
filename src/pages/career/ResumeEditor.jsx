@@ -361,8 +361,17 @@ function CoverLetterTab() {
     const doc = detailQuery.data;
     if (!doc || doc.careerDocumentId === loadedId) return;
     setTitle(doc.documentTitle ?? '');
-    const loadedQuestions = (doc.questions ?? []).map((q, i) => ({
-      questionId: q.questionId ?? `Q${i + 1}`,
+    // 누락된 questionId는 서버가 이미 내려준 값들과 겹치지 않는 다음 번호로 채운다.
+    const existingIds = new Set((doc.questions ?? []).map((q) => q.questionId).filter(Boolean));
+    let fallbackSeq = 1;
+    const nextFallbackId = () => {
+      while (existingIds.has(`Q${fallbackSeq}`)) fallbackSeq += 1;
+      const id = `Q${fallbackSeq}`;
+      existingIds.add(id);
+      return id;
+    };
+    const loadedQuestions = (doc.questions ?? []).map((q) => ({
+      questionId: q.questionId ?? nextFallbackId(),
       question: q.question ?? '',
       answer: q.answer ?? '',
     }));
