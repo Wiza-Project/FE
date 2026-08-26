@@ -461,7 +461,16 @@ function PortfolioFormModal({ open, documentId, onClose, onSaved }) {
                       type="button"
                       className="text-[#059669] font-bold hover:underline"
                       onClick={() =>
-                        downloadPortfolioAttachment(documentId, a.storedFileId, a.originalFileName)
+                        downloadPortfolioAttachment(
+                          documentId,
+                          a.storedFileId,
+                          a.originalFileName
+                        ).catch((err) => {
+                          toast(
+                            getPortfolioErrorMessage(err, '파일 다운로드에 실패했습니다.'),
+                            'error'
+                          );
+                        })
                       }
                     >
                       다운로드

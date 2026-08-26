@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Tabs,
@@ -323,6 +323,19 @@ function CoverLetterTab() {
   const [questions, setQuestions] = useState([]);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
+  // 문항 questionId 채번용 — 배열 길이 기반으로 만들면 삭제 후 추가 시 기존 문항과 충돌할
+  // 수 있어, 지금까지 나온 최대 번호보다 항상 큰 값을 내도록 별도로 관리한다.
+  const nextQuestionSeqRef = useRef(1);
+  const parseQuestionSeq = (id) => {
+    const m = /^Q(\d+)$/.exec(id ?? '');
+    return m ? Number(m[1]) : 0;
+  };
+  const makeQuestionId = () => {
+    const id = `Q${nextQuestionSeqRef.current}`;
+    nextQuestionSeqRef.current += 1;
+    return id;
+  };
+
   // 목록이 로드되면 최신 버전(서버가 최신순으로 내려주는 첫 항목)을 기본 선택한다.
   useEffect(() => {
     const list = listQuery.data?.content;
@@ -348,13 +361,14 @@ function CoverLetterTab() {
     const doc = detailQuery.data;
     if (!doc || doc.careerDocumentId === loadedId) return;
     setTitle(doc.documentTitle ?? '');
-    setQuestions(
-      (doc.questions ?? []).map((q, i) => ({
-        questionId: q.questionId ?? `Q${i + 1}`,
-        question: q.question ?? '',
-        answer: q.answer ?? '',
-      })),
-    );
+    const loadedQuestions = (doc.questions ?? []).map((q, i) => ({
+      questionId: q.questionId ?? `Q${i + 1}`,
+      question: q.question ?? '',
+      answer: q.answer ?? '',
+    }));
+    setQuestions(loadedQuestions);
+    nextQuestionSeqRef.current =
+      Math.max(0, ...loadedQuestions.map((q) => parseQuestionSeq(q.questionId))) + 1;
     setLoadedId(doc.careerDocumentId);
     setCreating(false);
   }, [detailQuery.data, loadedId]);
@@ -364,14 +378,12 @@ function CoverLetterTab() {
     setLoadedId(null);
     setTitle('');
     setQuestions([{ questionId: 'Q1', question: '', answer: '' }]);
+    nextQuestionSeqRef.current = 2;
     setCreating(true);
   };
 
   const addQuestion = () => {
-    setQuestions((prev) => [
-      ...prev,
-      { questionId: `Q${prev.length + 1}`, question: '', answer: '' },
-    ]);
+    setQuestions((prev) => [...prev, { questionId: makeQuestionId(), question: '', answer: '' }]);
   };
 
   const removeQuestion = (idx) => {
@@ -591,7 +603,7 @@ function CoverLetterTab() {
             const chars = q.answer.length;
             return (
               <div
-                key={idx}
+                key={q.questionId}
                 className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden"
               >
                 <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
