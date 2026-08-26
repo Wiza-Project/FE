@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, FileUpload, Modal, StatusBadge, Tabs, toast } from '@/components/common';
+import { Button, FileUpload, StatusBadge, Tabs, toast } from '@/components/common';
 import {
   createProgram,
   fetchCompetencyOptions,
@@ -131,8 +131,10 @@ function DateInput({ id, value, onChange, error, ariaLabel }) {
  * @param {(patch: Object) => void} props.onChange
  * @param {() => void} props.onRemove
  * @param {boolean} props.removable
+ * @param {boolean} [props.startsAtError]
+ * @param {boolean} [props.endsAtError]
  */
-function SessionCard({ index, session, onChange, onRemove, removable }) {
+function SessionCard({ index, session, onChange, onRemove, removable, startsAtError, endsAtError }) {
   return (
     <div className="border border-[#E5E7EB] rounded-[8px] p-4 bg-white">
       <div className="flex items-center justify-between mb-3">
@@ -158,18 +160,20 @@ function SessionCard({ index, session, onChange, onRemove, removable }) {
             />
           </Field>
         </div>
-        <Field label="시작 ~ 종료">
+        <Field label="시작 ~ 종료" required>
           <div className="flex items-center gap-2">
             <DateInput
               value={session.startsAt}
               onChange={(v) => onChange({ startsAt: v })}
               ariaLabel={`${index + 1}회차 시작일`}
+              error={startsAtError}
             />
             <span className="text-[12px] text-[#9AA0A6]">~</span>
             <DateInput
               value={session.endsAt}
               onChange={(v) => onChange({ endsAt: v })}
               ariaLabel={`${index + 1}회차 종료일`}
+              error={endsAtError}
             />
           </div>
         </Field>
@@ -208,11 +212,21 @@ function getDetailErrorMessage(error) {
   return error.message || '프로그램 정보를 불러오지 못했습니다.';
 }
 
+// Bean Validation이 필드경로 그대로("sessions[0].startsAt: 널이어서는 안됩니다") 내려주는
+// 케이스를 위한 안전망. 클라이언트 검증(validate())으로 대부분 걸러지지만, 미처 모르는
+// 회차 필드 요구사항이 더 있을 경우를 대비한다.
+function isSessionFieldValidationError(message) {
+  return typeof message === 'string' && message.includes('sessions[');
+}
+
 function getRegisterErrorMessage(error) {
   if (!(error instanceof ApiError)) {
     return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
   }
   if (error.code === 'A004') return '프로그램을 등록할 권한이 없습니다.';
+  if (isSessionFieldValidationError(error.message)) {
+    return '회차 정보를 다시 확인해 주세요. 시작일과 종료일이 비어있지 않은지 확인해 주세요.';
+  }
   return error.message || '등록 중 오류가 발생했습니다.';
 }
 
@@ -222,6 +236,9 @@ function getEditErrorMessage(error) {
   }
   if (error.code === 'A004') return '이 프로그램을 수정할 권한이 없습니다.';
   if (error.code === 'P009') return error.message || '모집이 종료된 프로그램은 수정할 수 없습니다.';
+  if (isSessionFieldValidationError(error.message)) {
+    return '회차 정보를 다시 확인해 주세요. 시작일과 종료일이 비어있지 않은지 확인해 주세요.';
+  }
   return error.message || '수정 중 오류가 발생했습니다.';
 }
 
@@ -240,8 +257,8 @@ const TABS = [
  * 맞춘 5개 탭으로 구성: 기본정보 / 모집·운영·정원 / 회차 관리 / 역량·정책 / 첨부.
  * 수정 모드는 GET /admin/programs/{id}로 상세를 받아와 프리필한 뒤 PUT으로 저장한다.
  * 회차(장소 포함)는 등록/수정 요청 바디의 `sessions` 배열로 함께 전송되며, 최소 1개가
- * 없으면 백엔드가 P022(PROGRAM_SESSION_REQUIRED)로 거부한다 — 회차 관리 탭은 항상
- * 최소 1장의 카드로 시작해 이 상황을 사전에 방지한다.
+ * 없거나 카드의 시작/종료일이 비어있으면 저장을 막고 토스트로 안내한다(백엔드는 회차가
+ * 아예 없을 때 P022(PROGRAM_SESSION_REQUIRED)로 거부하며, 이 경우도 동일하게 토스트 처리).
  *
  * @param {Object} props
  * @param {number} [props.programId] 편집 대상 ID. 있으면 수정 모드.
@@ -269,7 +286,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
 
   // 회차 관리 — 등록 모드는 항상 1회차 카드로 시작(최소 1개 규칙과 일치)
   const [sessions, setSessions] = useState(() => (isEdit ? [] : [emptySession('new-1')]));
-  const [sessionRequiredModalOpen, setSessionRequiredModalOpen] = useState(false);
+  // 시작/종료일이 비어있는 카드의 localId — SessionCard에 빨간 테두리로 표시하기 위함
+  const [sessionFieldErrors, setSessionFieldErrors] = useState(new Set());
 
   // 역량·정책
   const [competencyId, setCompetencyId] = useState('');
@@ -416,7 +434,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const handleSubmitError = (err) => {
     if (err instanceof ApiError && err.code === 'P022') {
       setActiveTab('sessions');
-      setSessionRequiredModalOpen(true);
+      toast('최소 1회차는 입력해야합니다.', 'error');
       return;
     }
     toast(isEdit ? getEditErrorMessage(err) : getRegisterErrorMessage(err), 'error');
@@ -502,9 +520,17 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     }
     if (sessions.length === 0) {
       setActiveTab('sessions');
-      setSessionRequiredModalOpen(true);
+      toast('최소 1회차는 입력해야합니다.', 'error');
       return false;
     }
+    const invalidSessions = sessions.filter((s) => !s.startsAt || !s.endsAt);
+    if (invalidSessions.length > 0) {
+      setSessionFieldErrors(new Set(invalidSessions.map((s) => s.localId)));
+      setActiveTab('sessions');
+      toast('최소 1회차는 등록해야합니다', 'error');
+      return false;
+    }
+    setSessionFieldErrors(new Set());
     if (newErrors.competencyId) {
       setActiveTab('policy');
       toast('연계 핵심역량을 선택해 주세요.', 'error');
@@ -778,6 +804,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                   onChange={(patch) => updateSession(s.localId, patch)}
                   onRemove={() => removeSession(s.localId)}
                   removable={sessions.length > 1}
+                  startsAtError={sessionFieldErrors.has(s.localId) && !s.startsAt}
+                  endsAtError={sessionFieldErrors.has(s.localId) && !s.endsAt}
                 />
               ))}
               <button
@@ -860,20 +888,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           </Section>
         )}
       </div>
-
-      <Modal
-        open={sessionRequiredModalOpen}
-        onClose={() => setSessionRequiredModalOpen(false)}
-        title="회차 등록이 필요합니다"
-        size="sm"
-        footer={
-          <Button size="sm" onClick={() => setSessionRequiredModalOpen(false)}>
-            확인
-          </Button>
-        }
-      >
-        <p className="text-[13px] text-[#1F2328]">회차는 최소 1개 이상 등록해야 합니다.</p>
-      </Modal>
 
       {/* ── Fixed bottom action bar ── */}
       {/* PortalShell 사이드바(240px)를 가리지 않도록 left-[240px]로 오프셋 (DiagnosisHistory의 고정 바와 동일한 처리) */}
