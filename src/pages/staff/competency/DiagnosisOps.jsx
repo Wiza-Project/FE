@@ -768,6 +768,7 @@ function ResponseManage({ rounds }) {
                       type="checkbox"
                       checked={allChecked}
                       onChange={toggleAll}
+                      aria-label="현재 페이지 미응시자 전체 선택"
                       className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                     />
                   </th>
@@ -792,6 +793,7 @@ function ResponseManage({ rounds }) {
                         type="checkbox"
                         checked={selected.has(r.userId)}
                         onChange={() => toggle(r.userId)}
+                        aria-label={`${r.name} (${r.studentId}) 선택`}
                         className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
                       />
                     </td>
