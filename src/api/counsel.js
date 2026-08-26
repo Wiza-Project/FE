@@ -479,3 +479,69 @@ export const counselingSessionDetailQueryKey = (sessionId) => [
   'counselingSessionDetail',
   sessionId,
 ];
+
+/**
+ * @typedef {Object} CounselingPrivateRecordResponse
+ * @property {number} sessionId
+ * @property {number|null} privateRecordId 기록 없으면 null
+ * @property {number|null} versionNo 첫 초안 1, 기록 없으면 null
+ * @property {string|null} privateContent 비공개 원문. 기록 없으면 null
+ * @property {'EMPTY'|'DRAFT'|'CONFIRMED'} recordStatus
+ * @property {string|null} confirmedAt UTC ISO-8601 Instant. 확정 전 null
+ * @property {boolean} canSaveDraft
+ * @property {boolean} canConfirm
+ */
+
+/**
+ * 회기의 비공개 상담 기록을 조회한다. 담당(또는 과거 담당) 상담사 본인만 조회할 수 있고,
+ * 학생·일반 회기 상세·목록에는 이 원문이 포함되지 않는다. 사용자가 명시적으로 열람을 선택했을
+ * 때만 호출해야 한다(자동 조회 금지 — 상세 모달을 열었다는 이유만으로 부르지 않는다).
+ *
+ * @param {number} sessionId
+ * @returns {Promise<CounselingPrivateRecordResponse>}
+ */
+export const fetchCounselingPrivateRecord = async (sessionId) => {
+  const { data } = await apiClient.get(`/counselors/counseling-sessions/${sessionId}/private-record`);
+  return data;
+};
+
+/**
+ * @typedef {Object} SaveCounselingPrivateRecordRequest
+ * @property {string} privateContent 공백 제거 후 1~10,000자
+ */
+
+/**
+ * 비공개 기록 초안을 생성하거나 수정한다(회기당 미확정 초안 한 행). 확정된 기록은 이 API로
+ * 수정할 수 없다(서버가 409로 거절).
+ *
+ * @param {number} sessionId
+ * @param {SaveCounselingPrivateRecordRequest} request
+ * @returns {Promise<CounselingPrivateRecordResponse>}
+ */
+export const saveCounselingPrivateRecord = async (sessionId, request) => {
+  const { data } = await apiClient.put(
+    `/counselors/counseling-sessions/${sessionId}/private-record`,
+    request,
+  );
+  return data;
+};
+
+/**
+ * 저장된 최신 초안을 확정한다. 원문을 요청 본문으로 다시 보내지 않는다(서버가 이미 저장된
+ * 초안만 확정하며, 확정 후에는 수정·재확정을 허용하지 않는다).
+ *
+ * @param {number} sessionId
+ * @returns {Promise<CounselingPrivateRecordResponse>}
+ */
+export const confirmCounselingPrivateRecord = async (sessionId) => {
+  const { data } = await apiClient.patch(
+    `/counselors/counseling-sessions/${sessionId}/private-record/confirm`,
+  );
+  return data;
+};
+
+// 비공개 기록 전용 query key. 회기 목록·상세 캐시와 완전히 분리해 privateContent가 섞이지 않게 한다.
+export const counselingPrivateRecordQueryKey = (sessionId) => [
+  'counselingPrivateRecord',
+  sessionId,
+];
