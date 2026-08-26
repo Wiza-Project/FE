@@ -40,7 +40,7 @@ const toRow = (dto) => ({
 
 // recruitmentEndsAt이 없는(레거시) 데이터는 마감 아님으로 간주 — 최종 판단은 어차피
 // applyToProgram API 호출 시 백엔드가 한다.
-const isRecruitmentClosed = (iso) => !!iso && new Date(iso).getTime() < Date.now();
+const isRecruitmentClosed = (iso, now) => !!iso && new Date(iso).getTime() < now;
 
 const CANCELABLE = new Set(['APPLIED', 'WAITLISTED', 'APPROVED']);
 
@@ -73,7 +73,13 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [reapplyingIds, setReapplyingIds] = useState(new Set());
+  const [now, setNow] = useState(() => Date.now());
   const PAGE_SIZE = 8;
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -339,8 +345,10 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                             사유확인
                           </button>
                         ) : app.status === '취소' ? (
-                          isRecruitmentClosed(app.recruitmentEndsAt) ? (
+                          isRecruitmentClosed(app.recruitmentEndsAt, now) ? (
                             <span className="text-[11px] text-[#9AA0A6]">신청 불가</span>
+                          ) : app.remainingCapacity == null ? (
+                            <span className="text-[11px] text-[#9AA0A6]">정원 확인 불가</span>
                           ) : (
                             <div className="flex flex-col items-center gap-0.5">
                               <button

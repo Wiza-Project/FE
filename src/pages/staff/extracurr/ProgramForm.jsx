@@ -151,8 +151,9 @@ function SessionCard({ index, session, onChange, onRemove, removable, startsAtEr
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <Field label="회차명">
+          <Field label="회차명" htmlFor={`session-${session.localId}-name`}>
             <TextInput
+              id={`session-${session.localId}-name`}
               value={session.sessionName}
               onChange={(v) => onChange({ sessionName: v })}
               placeholder="예) 1주차 오리엔테이션"
@@ -177,8 +178,9 @@ function SessionCard({ index, session, onChange, onRemove, removable, startsAtEr
             />
           </div>
         </Field>
-        <Field label="장소">
+        <Field label="장소" htmlFor={`session-${session.localId}-location`}>
           <TextInput
+            id={`session-${session.localId}-location`}
             value={session.location}
             onChange={(v) => onChange({ location: v })}
             placeholder="예) 학생회관 3층 세미나실"

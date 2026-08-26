@@ -94,7 +94,7 @@ export function FileUpload({
         </p>
       </div>
       {rejectedNames.length > 0 && (
-        <p className="text-[11px] text-[#CF222E]">
+        <p role="alert" className="text-[11px] text-[#CF222E]">
           허용되지 않은 형식이라 제외되었습니다: {rejectedNames.join(', ')}
         </p>
       )}
