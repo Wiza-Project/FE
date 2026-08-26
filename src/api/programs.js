@@ -81,6 +81,15 @@ export const fetchCompetencyOptions = async () => {
 };
 
 /**
+ * 학생용 "핵심역량" 필터 옵션 조회. GET /api/students/programs/competencies
+ * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number}[]>}
+ */
+export const fetchCompetencyOptionsStudent = async () => {
+  const { data } = await apiClient.get('/students/programs/competencies');
+  return data;
+};
+
+/**
  * 교직원(본인 소유) 비교과 프로그램 목록 조회. GET /api/admin/programs
  * @param {Object} [params]
  * @param {string} [params.status] DRAFT/OPERATING/CLOSED. 생략 시 전체.

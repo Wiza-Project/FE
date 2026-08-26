@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchPrograms, fetchCompetencyOptions } from '@/api/programs';
+import { fetchPrograms, fetchCompetencyOptionsStudent } from '@/api/programs';
 import { applyToProgram } from '@/api/programApplications';
 import { PageHeader, StatusBadge, Pagination, Button, Modal, toast } from '@/components/common';
 import { formatDate } from '@/utils/date';
@@ -98,8 +98,8 @@ export default function ProgramList({ onDetail, onMyApplications }) {
   });
 
   const { data: competencyOptionsData } = useQuery({
-    queryKey: ['competencyOptions'],
-    queryFn: fetchCompetencyOptions,
+    queryKey: ['studentCompetencyOptions'],
+    queryFn: fetchCompetencyOptionsStudent,
   });
 
   const COMP_OPTIONS = [
