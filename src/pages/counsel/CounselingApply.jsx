@@ -283,6 +283,7 @@ export default function CounselingApply({ onComplete, onBack }) {
       }
 
       if (!consentChecked) {
+        setConsentError('기존 동의가 더 이상 유효하지 않습니다. 동의 내용을 확인한 뒤 동의에 체크해 주세요.');
         return;
       }
 
