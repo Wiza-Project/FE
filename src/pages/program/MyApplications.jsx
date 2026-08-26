@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchMyApplications, cancelMyApplication } from '@/api/programApplications';
+import { fetchMyApplications, cancelMyApplication, applyToProgram } from '@/api/programApplications';
 import {
   PageHeader,
   StatTile,
@@ -45,15 +45,16 @@ const BTN_MAP = {
   반려: { label: '사유확인', variant: 'secondary' },
   미수료: { label: '이의신청', variant: 'secondary' },
   대기: { label: '취소', variant: 'outline' },
-  취소: { label: '취소됨', variant: 'secondary' },
+  취소: { label: '재신청', variant: 'outline' },
 };
 
 /**
  * @param {Object} props
+ * @param {() => void} props.onBack
  * @param {(target: {programId: number}) => void} props.onActivity
  * @param {(target: {programId: number, applicationId: number, programName: string}) => void} props.onSurvey
  */
-export default function MyApplications({ onActivity, onSurvey }) {
+export default function MyApplications({ onBack, onActivity, onSurvey }) {
   const [page, setPage] = useState(1);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [apps, setApps] = useState([]);
@@ -65,6 +66,7 @@ export default function MyApplications({ onActivity, onSurvey }) {
   const [statusFilter, setStatusFilter] = useState('전체');
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
+  const [reapplyingIds, setReapplyingIds] = useState(new Set());
   const PAGE_SIZE = 8;
 
   useEffect(() => {
@@ -112,7 +114,33 @@ export default function MyApplications({ onActivity, onSurvey }) {
     }
   };
 
+  const runReapply = async (app) => {
+    if (reapplyingIds.has(app.programId)) return;
+    setReapplyingIds((prev) => new Set(prev).add(app.programId));
+    try {
+      const res = await applyToProgram(app.programId);
+      if (res.applicationStatus === 'WAITLISTED') {
+        toast(`정원이 마감되어 대기 ${res.waitlistOrder ?? ''}순번으로 등록되었습니다.`, 'info');
+      } else {
+        toast('재신청이 완료되었습니다.', 'success');
+      }
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      toast(err.message ?? '재신청에 실패했습니다.', 'danger');
+    } finally {
+      setReapplyingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(app.programId);
+        return next;
+      });
+    }
+  };
+
   const handleBtn = (app) => {
+    if (app.status === '취소') {
+      runReapply(app);
+      return;
+    }
     if (app.status === '수료') {
       onSurvey({ programId: app.programId, applicationId: app.applicationId, programName: app.name });
       return;
@@ -131,10 +159,18 @@ export default function MyApplications({ onActivity, onSurvey }) {
   return (
     <div>
       <PageHeader
-        breadcrumbs={[{ label: '비교과 프로그램' }, { label: '내 신청 내역' }]}
+        breadcrumbs={[
+          { label: '비교과 프로그램', onClick: onBack },
+          { label: '내 신청 내역' },
+        ]}
         title="내 신청 내역"
         subtitle="비교과 프로그램 신청 및 활동 이력을 관리합니다."
         accentColor={ACCENT}
+        actions={
+          <Button size="sm" variant="outline" onClick={onBack}>
+            ← 목록으로
+          </Button>
+        }
       />
 
       {/* Stat tiles: 승인/수료/적립 마일리지는 별도 집계 API가 없어 현재 페이지 데이터 기준 근사치다. */}
@@ -289,26 +325,46 @@ export default function MyApplications({ onActivity, onSurvey }) {
                     </td>
                     <td className="px-3 py-3 text-center">
                       <div className="flex items-center gap-1.5 justify-center">
-                        <button
-                          onClick={() => onActivity({ programId: app.programId })}
-                          className="h-7 px-3 text-[11px] font-bold rounded-[5px] border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors"
-                        >
-                          출결
-                        </button>
-                        <button
-                          onClick={() => handleBtn(app)}
-                          disabled={app.status === '취소'}
-                          className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                            app.status === '반려'
-                              ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
-                              : 'border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'
-                          }`}
-                          style={
-                            app.status === '수료' ? { background: '#7C3AED', color: 'white' } : {}
-                          }
-                        >
-                          {btn?.label ?? app.status}
-                        </button>
+                        {app.status === '취소' || app.status === '반려' ? (
+                          // 취소/반려는 출결을 볼 수 없는 종결 상태라 관리 버튼 하나만 보여준다.
+                          <button
+                            onClick={() => handleBtn(app)}
+                            disabled={app.status === '취소' && reapplyingIds.has(app.programId)}
+                            className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                              app.status === '반려'
+                                ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
+                                : 'border border-[#2563EB] text-[#2563EB] hover:bg-[#EFF6FF]'
+                            }`}
+                          >
+                            {app.status === '반려'
+                              ? '사유확인'
+                              : reapplyingIds.has(app.programId)
+                                ? '처리 중...'
+                                : '재신청'}
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => onActivity({ programId: app.programId })}
+                              className="h-7 px-3 text-[11px] font-bold rounded-[5px] border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors"
+                            >
+                              출결
+                            </button>
+                            <button
+                              onClick={() => handleBtn(app)}
+                              className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                                app.status === '반려'
+                                  ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
+                                  : 'border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'
+                              }`}
+                              style={
+                                app.status === '수료' ? { background: '#7C3AED', color: 'white' } : {}
+                              }
+                            >
+                              {btn?.label ?? app.status}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

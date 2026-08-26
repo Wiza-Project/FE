@@ -144,6 +144,52 @@ export const COUNSELING_RESERVATION_ERROR_CODE = {
   RESERVATION_NOT_FOUND: 'S003',
   CANCELLATION_NOT_ALLOWED: 'S004',
   FORBIDDEN: 'A004',
+  /** 이미 처리(승인/반려)된 예약을 다시 승인·반려하려 할 때. 상담사 승인·반려 API 전용. */
+  ALREADY_PROCESSED: 'S005',
+};
+
+/** 상담 회기의 출석 상태 — CounselingSessionResponse.attendanceStatus. */
+export const COUNSELING_SESSION_ATTENDANCE_STATUS = {
+  SCHEDULED: 'SCHEDULED',
+  PRESENT: 'PRESENT',
+  ABSENT: 'ABSENT',
+  NO_SHOW: 'NO_SHOW',
+};
+
+export const COUNSELING_SESSION_ATTENDANCE_STATUS_LABEL = {
+  [COUNSELING_SESSION_ATTENDANCE_STATUS.SCHEDULED]: '예정',
+  [COUNSELING_SESSION_ATTENDANCE_STATUS.PRESENT]: '출석',
+  // ABSENT/NO_SHOW는 둘 다 '결석'으로 뭉뚱그리지 않는다. 사전 연락 여부가 다른 사유이므로 구분해서 보여준다.
+  [COUNSELING_SESSION_ATTENDANCE_STATUS.ABSENT]: '사전 연락 결석',
+  [COUNSELING_SESSION_ATTENDANCE_STATUS.NO_SHOW]: '사전 연락 없는 불참',
+};
+
+/** 상담 회기 자체의 상태 — CounselingSessionResponse.sessionStatus. */
+export const COUNSELING_SESSION_STATUS = {
+  PLANNED: 'PLANNED',
+  COMPLETED: 'COMPLETED',
+  CANCELED: 'CANCELED',
+};
+
+export const COUNSELING_SESSION_STATUS_LABEL = {
+  [COUNSELING_SESSION_STATUS.PLANNED]: '예정',
+  [COUNSELING_SESSION_STATUS.COMPLETED]: '완료',
+  [COUNSELING_SESSION_STATUS.CANCELED]: '취소',
+};
+
+/** 상담 회기 목록·상세·후속생성·완료·취소 API가 반환하는 업무 오류 코드. */
+export const COUNSELING_SESSION_ERROR_CODE = {
+  INVALID_INPUT: 'C001',
+  UNAUTHENTICATED: 'A001',
+  FORBIDDEN: 'A004',
+  /** 배정 없음 또는 다른 상담사의 배정 */
+  ASSIGNMENT_NOT_FOUND: 'S006',
+  /** 회기 없음 또는 다른 상담사의 회기 */
+  SESSION_NOT_FOUND: 'S007',
+  /** 같은 상담사의 기존 일정·회기와 시간 중복 */
+  TIME_CONFLICT: 'S002',
+  /** 종료된 배정, PLANNED가 아닌 회기의 완료·취소, 미래 후속 회기 생성 등 상태 위반 */
+  INVALID_STATE: 'S008',
 };
 
 /**
