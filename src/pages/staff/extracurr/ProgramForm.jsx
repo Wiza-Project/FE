@@ -117,6 +117,7 @@ function DateInput({ id, value, onChange, error, ariaLabel }) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
+      aria-invalid={!!error}
       className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
@@ -529,7 +530,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     if (invalidSessions.length > 0) {
       setSessionFieldErrors(new Set(invalidSessions.map((s) => s.localId)));
       setActiveTab('sessions');
-      toast('최소 1회차는 등록해야합니다', 'error');
+      toast('모든 회차의 시작일과 종료일을 입력해 주세요.', 'error');
       return false;
     }
     setSessionFieldErrors(new Set());
