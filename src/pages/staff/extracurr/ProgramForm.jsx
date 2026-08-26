@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, FileUpload, StatusBadge, toast } from '@/components/common';
+import { Button, FileUpload, Modal, StatusBadge, Tabs, toast } from '@/components/common';
 import {
   createProgram,
   fetchCompetencyOptions,
@@ -17,12 +17,9 @@ const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
-function Section({ num, title, id, children }) {
+function Section({ num, title, children }) {
   return (
-    <div
-      id={id}
-      className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden"
-    >
+    <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
       <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center gap-3">
         <div
           className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black text-white flex-shrink-0"
@@ -125,6 +122,74 @@ function DateInput({ id, value, onChange, error, ariaLabel }) {
   );
 }
 
+// ─── 회차(세션) 카드 ──────────────────────────────────────────────────────────
+
+/**
+ * @param {Object} props
+ * @param {number} props.index 0-based 배열 위치. 표시 라벨("n회차")과 sessionNo는 여기서 파생된다.
+ * @param {{localId: string|number, sessionName: string, startsAt: string, endsAt: string, location: string}} props.session
+ * @param {(patch: Object) => void} props.onChange
+ * @param {() => void} props.onRemove
+ * @param {boolean} props.removable
+ */
+function SessionCard({ index, session, onChange, onRemove, removable }) {
+  return (
+    <div className="border border-[#E5E7EB] rounded-[8px] p-4 bg-white">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[13px] font-bold text-[#1F2328]">{index + 1}회차</h3>
+        {removable && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-[11px] font-semibold text-[#CF222E] hover:underline"
+          >
+            삭제
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2">
+          <Field label="회차명">
+            <TextInput
+              value={session.sessionName}
+              onChange={(v) => onChange({ sessionName: v })}
+              placeholder="예) 1주차 오리엔테이션"
+              maxLength={200}
+            />
+          </Field>
+        </div>
+        <Field label="시작 ~ 종료">
+          <div className="flex items-center gap-2">
+            <DateInput
+              value={session.startsAt}
+              onChange={(v) => onChange({ startsAt: v })}
+              ariaLabel={`${index + 1}회차 시작일`}
+            />
+            <span className="text-[12px] text-[#9AA0A6]">~</span>
+            <DateInput
+              value={session.endsAt}
+              onChange={(v) => onChange({ endsAt: v })}
+              ariaLabel={`${index + 1}회차 종료일`}
+            />
+          </div>
+        </Field>
+        <Field label="장소">
+          <TextInput
+            value={session.location}
+            onChange={(v) => onChange({ location: v })}
+            placeholder="예) 학생회관 3층 세미나실"
+            maxLength={300}
+          />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+function emptySession(localId) {
+  return { localId, sessionName: '', startsAt: '', endsAt: '', location: '' };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** 'YYYY-MM-DD' → 자정 기준 UTC ISO 문자열(Instant). 4개 날짜를 모두 같은 기준으로 변환해야
@@ -143,6 +208,14 @@ function getDetailErrorMessage(error) {
   return error.message || '프로그램 정보를 불러오지 못했습니다.';
 }
 
+function getRegisterErrorMessage(error) {
+  if (!(error instanceof ApiError)) {
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  if (error.code === 'A004') return '프로그램을 등록할 권한이 없습니다.';
+  return error.message || '등록 중 오류가 발생했습니다.';
+}
+
 function getEditErrorMessage(error) {
   if (!(error instanceof ApiError)) {
     return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
@@ -152,14 +225,23 @@ function getEditErrorMessage(error) {
   return error.message || '수정 중 오류가 발생했습니다.';
 }
 
+const TABS = [
+  { key: 'basic', label: '① 기본정보' },
+  { key: 'schedule', label: '② 모집·운영·정원' },
+  { key: 'sessions', label: '③ 회차 관리' },
+  { key: 'policy', label: '④ 역량·정책' },
+  { key: 'attachment', label: '⑤ 첨부' },
+];
+
 // ─── Main form ────────────────────────────────────────────────────────────────
 
 /**
  * 비교과 프로그램 등록/수정 폼. ProgramRegisterRequestDTO/ProgramUpdateRequestDTO(백엔드)에
- * 맞춘 4개 섹션으로 구성: 기본정보 / 모집·운영·정원 / 역량·정책 / 첨부.
+ * 맞춘 5개 탭으로 구성: 기본정보 / 모집·운영·정원 / 회차 관리 / 역량·정책 / 첨부.
  * 수정 모드는 GET /admin/programs/{id}로 상세를 받아와 프리필한 뒤 PUT으로 저장한다.
- * 운영단위(operatingUnitCodeId)는 로그인한 담당자의 소속 부서로 고정되는 값이라
- * 수정 폼에는 입력란을 두지 않는다 — 요청에 생략하면 백엔드가 기존 값을 그대로 유지한다.
+ * 회차(장소 포함)는 등록/수정 요청 바디의 `sessions` 배열로 함께 전송되며, 최소 1개가
+ * 없으면 백엔드가 P022(PROGRAM_SESSION_REQUIRED)로 거부한다 — 회차 관리 탭은 항상
+ * 최소 1장의 카드로 시작해 이 상황을 사전에 방지한다.
  *
  * @param {Object} props
  * @param {number} [props.programId] 편집 대상 ID. 있으면 수정 모드.
@@ -170,19 +252,26 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const isEdit = !!programId;
   const queryClient = useQueryClient();
 
-  // Section 1 — 기본정보
+  const [activeTab, setActiveTab] = useState('basic');
+
+  // 기본정보
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [programTypeCodeId, setProgramTypeCodeId] = useState('');
+  const [operatingUnitCodeId, setOperatingUnitCodeId] = useState('');
 
-  // Section 2 — 모집·운영·정원
+  // 모집·운영·정원
   const [recruitStart, setRcS] = useState('');
   const [recruitEnd, setRcE] = useState('');
   const [operStart, setOpS] = useState('');
   const [operEnd, setOpE] = useState('');
   const [capacity, setCapacity] = useState('');
 
-  // Section 3 — 역량·정책
+  // 회차 관리 — 등록 모드는 항상 1회차 카드로 시작(최소 1개 규칙과 일치)
+  const [sessions, setSessions] = useState(() => (isEdit ? [] : [emptySession('new-1')]));
+  const [sessionRequiredModalOpen, setSessionRequiredModalOpen] = useState(false);
+
+  // 역량·정책
   const [competencyId, setCompetencyId] = useState('');
   const [mileagePolicyId, setMileagePolicyId] = useState('');
   const [completionRate, setCompletionRate] = useState(80);
@@ -191,10 +280,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const [errors, setErrors] = useState({});
   const [prefilled, setPrefilled] = useState(false);
   const [fileGroupId, setFileGroupId] = useState(null);
-
-  const sec1Ref = useRef(null);
-  const sec2Ref = useRef(null);
-  const sec3Ref = useRef(null);
 
   const {
     data: detailData,
@@ -232,20 +317,36 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   } = useCommonCode('PROGRAM_TYPE');
   const programTypeOptions = programTypeCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
 
+  const {
+    data: departmentCodes = [],
+    isLoading: departmentLoading,
+    isError: departmentErrored,
+  } = useCommonCode('DEPARTMENT');
+  const departmentOptions = departmentCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
+
   // 수정 모드 프리필에 필요한 옵션 조회가 실패했거나(에러) 로딩이 끝났는데도 비어 있으면,
   // prefilled가 영원히 false로 남아 로딩 화면에 갇히므로 별도 상태로 구분해 재시도 UI를 보여준다.
   const optionsUnavailable =
     competencyErrored ||
     programTypeErrored ||
+    departmentErrored ||
     (!competencyLoading &&
       !programTypeLoading &&
-      (competencyOptions.length === 0 || programTypeOptions.length === 0));
+      !departmentLoading &&
+      (competencyOptions.length === 0 ||
+        programTypeOptions.length === 0 ||
+        departmentOptions.length === 0));
 
-  // 수정 모드 프리필: 상세조회 + 역량/분류 옵션 목록이 모두 준비되면 한 번만 채운다
-  // (역량·분류는 상세 응답이 라벨만 주므로 옵션 목록에서 이름이 일치하는 id로 역매핑한다).
+  // 수정 모드 프리필: 상세조회 + 역량/분류/부서 옵션 목록이 모두 준비되면 한 번만 채운다
+  // (역량·분류·부서는 상세 응답이 라벨만 주므로 옵션 목록에서 이름이 일치하는 id로 역매핑한다).
   useEffect(() => {
     if (!isEdit || prefilled || !detailData) return;
-    if (competencyOptions.length === 0 || programTypeOptions.length === 0) return;
+    if (
+      competencyOptions.length === 0 ||
+      programTypeOptions.length === 0 ||
+      departmentOptions.length === 0
+    )
+      return;
 
     setName(detailData.programName ?? '');
     setDescription(detailData.description ?? '');
@@ -283,8 +384,43 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       );
     }
 
+    const departmentMatch = departmentOptions.find(
+      (o) => o.label === detailData.operatingUnitCodeName,
+    );
+    if (departmentMatch) {
+      setOperatingUnitCodeId(String(departmentMatch.id));
+    } else if (detailData.operatingUnitCodeName) {
+      toast(
+        `기존 운영부서('${detailData.operatingUnitCodeName}')를 목록에서 찾지 못했습니다. 다시 선택해 주세요.`,
+        'error',
+      );
+    }
+
+    // 기존 회차가 없는 프로그램(과거 이력)도 화면은 항상 최소 1장으로 시작한다.
+    const existingSessions = Array.isArray(detailData.sessions) ? detailData.sessions : [];
+    setSessions(
+      existingSessions.length > 0
+        ? existingSessions.map((s, i) => ({
+            localId: s.programSessionId ?? `existing-${i}`,
+            sessionName: s.sessionName ?? '',
+            startsAt: formatDate(s.startsAt),
+            endsAt: formatDate(s.endsAt),
+            location: s.location ?? '',
+          }))
+        : [emptySession('new-1')],
+    );
+
     setPrefilled(true);
-  }, [isEdit, prefilled, detailData, competencyOptions, programTypeOptions]);
+  }, [isEdit, prefilled, detailData, competencyOptions, programTypeOptions, departmentOptions]);
+
+  const handleSubmitError = (err) => {
+    if (err instanceof ApiError && err.code === 'P022') {
+      setActiveTab('sessions');
+      setSessionRequiredModalOpen(true);
+      return;
+    }
+    toast(isEdit ? getEditErrorMessage(err) : getRegisterErrorMessage(err), 'error');
+  };
 
   const registerMutation = useMutation({
     mutationFn: createProgram,
@@ -293,9 +429,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
       onSubmit();
     },
-    onError: (err) => {
-      toast(err.message ?? '등록에 실패했습니다.', 'error');
-    },
+    onError: handleSubmitError,
   });
 
   const updateMutation = useMutation({
@@ -305,9 +439,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
       onSubmit();
     },
-    onError: (err) => {
-      toast(getEditErrorMessage(err), 'error');
-    },
+    onError: handleSubmitError,
   });
 
   const uploadMutation = useMutation({
@@ -337,19 +469,24 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const validate = () => {
     const newErrors = {};
     if (!name.trim()) newErrors.name = true;
+    if (!programTypeCodeId) newErrors.programTypeCodeId = true;
+    if (!operatingUnitCodeId) newErrors.operatingUnitCodeId = true;
     if (!recruitStart) newErrors.recruitStart = true;
     if (!recruitEnd) newErrors.recruitEnd = true;
     if (!operStart) newErrors.operStart = true;
     if (!operEnd) newErrors.operEnd = true;
     if (!capacity || Number(capacity) <= 0) newErrors.capacity = true;
     if (!competencyId) newErrors.competencyId = true;
-    // programTypeCodeId는 등록 시엔 생략하면 백엔드가 기본값을 채워주지만, 수정 API는 필수값이다.
-    if (isEdit && !programTypeCodeId) newErrors.programTypeCodeId = true;
     setErrors(newErrors);
 
     if (newErrors.name) {
-      sec1Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveTab('basic');
       toast('필수 입력 항목을 확인해 주세요.', 'error');
+      return false;
+    }
+    if (newErrors.programTypeCodeId || newErrors.operatingUnitCodeId) {
+      setActiveTab('basic');
+      toast('프로그램 분류와 운영부서를 선택해 주세요.', 'error');
       return false;
     }
     if (
@@ -359,24 +496,24 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       newErrors.operEnd ||
       newErrors.capacity
     ) {
-      sec2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveTab('schedule');
       toast('모집·운영 기간과 정원을 확인해 주세요.', 'error');
       return false;
     }
-    if (newErrors.programTypeCodeId) {
-      sec1Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      toast('프로그램 분류를 선택해 주세요.', 'error');
+    if (sessions.length === 0) {
+      setActiveTab('sessions');
+      setSessionRequiredModalOpen(true);
       return false;
     }
     if (newErrors.competencyId) {
-      sec3Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveTab('policy');
       toast('연계 핵심역량을 선택해 주세요.', 'error');
       return false;
     }
 
     const periodError = validatePeriodRule();
     if (periodError) {
-      sec2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveTab('schedule');
       toast(periodError, 'error');
       return false;
     }
@@ -388,10 +525,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     // 새로 업로드한 파일이 있으면 그 fileGroupId를 보낸다.
     // 수정 모드에서 파일을 바꾸지 않았다면 키 자체를 생략해 백엔드가 기존 첨부(file_group_id)를 그대로 유지하도록 한다.
     ...(isEdit ? (fileGroupId != null ? { fileGroupId } : {}) : { fileGroupId }),
-    // 운영단위는 화면에 입력란이 없다 — 등록 시엔 항상 생략(백엔드 기본값 사용), 수정 시에도
-    // 키 자체를 생략해 백엔드가 기존 값을 그대로 유지하도록 한다.
-    ...(isEdit ? {} : { operatingUnitCodeId: null }),
-    programTypeCodeId: programTypeCodeId ? Number(programTypeCodeId) : null,
+    operatingUnitCodeId: Number(operatingUnitCodeId),
+    programTypeCodeId: Number(programTypeCodeId),
     competencyId: Number(competencyId),
     mileagePolicyId: mileagePolicyId ? Number(mileagePolicyId) : null,
     programName: name.trim(),
@@ -402,6 +537,13 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     operationEndsAt: toInstant(operEnd),
     capacity: Number(capacity),
     completionRate,
+    sessions: sessions.map((s, i) => ({
+      sessionNo: i + 1,
+      sessionName: s.sessionName.trim() || null,
+      startsAt: toInstant(s.startsAt),
+      endsAt: toInstant(s.endsAt),
+      location: s.location.trim() || null,
+    })),
   });
 
   const handleRegister = () => {
@@ -412,6 +554,18 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const handleEditSave = () => {
     if (!validate()) return;
     updateMutation.mutate(buildPayload());
+  };
+
+  const updateSession = (localId, patch) => {
+    setSessions((prev) => prev.map((s) => (s.localId === localId ? { ...s, ...patch } : s)));
+  };
+
+  const addSession = () => {
+    setSessions((prev) => [...prev, emptySession(`new-${Date.now()}`)]);
+  };
+
+  const removeSession = (localId) => {
+    setSessions((prev) => (prev.length <= 1 ? prev : prev.filter((s) => s.localId !== localId)));
   };
 
   // 수정 모드: 상세조회가 끝나고 옵션 목록까지 프리필됐을 때만 폼을 보여준다.
@@ -491,10 +645,13 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         )}
       </div>
 
-      <div className="flex flex-col gap-5 pb-24">
-        {/* ── Section 1: 기본정보 ── */}
-        <div ref={sec1Ref}>
-          <Section num={1} title="기본정보" id="sec1">
+      <div className="mb-5">
+        <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} accentColor={ACCENT} />
+      </div>
+
+      <div className="pb-24">
+        {activeTab === 'basic' && (
+          <Section num={1} title="기본정보">
             <div className="grid grid-cols-2 gap-5">
               <div className="col-span-2">
                 <Field label="프로그램명" required error={errors.name} htmlFor="programName">
@@ -520,31 +677,45 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                 </Field>
               </div>
 
-              {/* 운영단위는 화면에 노출하지 않고 백엔드 기본값에 위임한다 (programOptions.js 주석 참고). */}
-              {isEdit && (
-                <Field
-                  label="프로그램분류"
-                  required
+              <Field
+                label="프로그램분류"
+                required
+                error={errors.programTypeCodeId}
+                htmlFor="programTypeCodeId"
+              >
+                <IdSelect
+                  id="programTypeCodeId"
+                  value={programTypeCodeId}
+                  onChange={setProgramTypeCodeId}
+                  options={programTypeOptions}
+                  placeholder="선택하세요"
+                  disabled={programTypeLoading || programTypeErrored}
                   error={errors.programTypeCodeId}
-                  htmlFor="programTypeCodeId"
-                >
-                  <IdSelect
-                    id="programTypeCodeId"
-                    value={programTypeCodeId}
-                    onChange={setProgramTypeCodeId}
-                    options={programTypeOptions}
-                    placeholder="선택하세요"
-                    error={errors.programTypeCodeId}
-                  />
-                </Field>
-              )}
+                />
+              </Field>
+
+              <Field
+                label="운영부서"
+                required
+                error={errors.operatingUnitCodeId}
+                htmlFor="operatingUnitCodeId"
+              >
+                <IdSelect
+                  id="operatingUnitCodeId"
+                  value={operatingUnitCodeId}
+                  onChange={setOperatingUnitCodeId}
+                  options={departmentOptions}
+                  placeholder="선택하세요"
+                  disabled={departmentLoading || departmentErrored}
+                  error={errors.operatingUnitCodeId}
+                />
+              </Field>
             </div>
           </Section>
-        </div>
+        )}
 
-        {/* ── Section 2: 모집·운영·정원 ── */}
-        <div ref={sec2Ref}>
-          <Section num={2} title="모집·운영·정원" id="sec2">
+        {activeTab === 'schedule' && (
+          <Section num={2} title="모집·운영·정원">
             <div className="grid grid-cols-2 gap-5">
               <Field label="모집 기간" required>
                 <div className="flex items-center gap-2">
@@ -594,11 +765,34 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               </Field>
             </div>
           </Section>
-        </div>
+        )}
 
-        {/* ── Section 3: 역량·정책 ── */}
-        <div ref={sec3Ref}>
-          <Section num={3} title="역량·정책" id="sec3">
+        {activeTab === 'sessions' && (
+          <Section num={3} title="회차 관리">
+            <div className="flex flex-col gap-4">
+              {sessions.map((s, i) => (
+                <SessionCard
+                  key={s.localId}
+                  index={i}
+                  session={s}
+                  onChange={(patch) => updateSession(s.localId, patch)}
+                  onRemove={() => removeSession(s.localId)}
+                  removable={sessions.length > 1}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={addSession}
+                className="h-9 px-4 self-start text-[12px] font-bold rounded-[6px] border border-dashed border-[#9AA0A6] text-[#656D76] hover:border-[#374151] hover:text-[#1F2328] transition-colors"
+              >
+                + 회차 추가
+              </button>
+            </div>
+          </Section>
+        )}
+
+        {activeTab === 'policy' && (
+          <Section num={4} title="역량·정책">
             <div className="grid grid-cols-2 gap-5">
               <Field label="연계 핵심역량" required error={errors.competencyId} htmlFor="competencyId">
                 <IdSelect
@@ -642,29 +836,44 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               </div>
             </div>
           </Section>
-        </div>
+        )}
 
-        {/* ── Section 4: 첨부 ── */}
-        <Section num={4} title="첨부" id="sec4">
-          <Field label="운영계획서 첨부 (선택)">
-            <FileUpload
-              accept=".pdf,.hwp,.doc,.docx"
-              onFiles={(files) => {
-                if (files.length > 0) uploadMutation.mutate(files[0]);
-              }}
-            />
-            {uploadMutation.isPending ? (
-              <p className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
-            ) : (
-              isEdit && (
-                <p className="text-[10px] text-[#9AA0A6] mt-1.5">
-                  새 파일을 첨부하지 않으면 기존에 첨부된 파일이 그대로 유지됩니다.
-                </p>
-              )
-            )}
-          </Field>
-        </Section>
+        {activeTab === 'attachment' && (
+          <Section num={5} title="첨부">
+            <Field label="운영계획서 첨부 (선택)">
+              <FileUpload
+                accept=".pdf"
+                onFiles={(files) => {
+                  if (files.length > 0) uploadMutation.mutate(files[0]);
+                }}
+              />
+              {uploadMutation.isPending ? (
+                <p className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
+              ) : (
+                isEdit && (
+                  <p className="text-[10px] text-[#9AA0A6] mt-1.5">
+                    새 파일을 첨부하지 않으면 기존에 첨부된 파일이 그대로 유지됩니다.
+                  </p>
+                )
+              )}
+            </Field>
+          </Section>
+        )}
       </div>
+
+      <Modal
+        open={sessionRequiredModalOpen}
+        onClose={() => setSessionRequiredModalOpen(false)}
+        title="회차 등록이 필요합니다"
+        size="sm"
+        footer={
+          <Button size="sm" onClick={() => setSessionRequiredModalOpen(false)}>
+            확인
+          </Button>
+        }
+      >
+        <p className="text-[13px] text-[#1F2328]">회차는 최소 1개 이상 등록해야 합니다.</p>
+      </Modal>
 
       {/* ── Fixed bottom action bar ── */}
       {/* PortalShell 사이드바(240px)를 가리지 않도록 left-[240px]로 오프셋 (DiagnosisHistory의 고정 바와 동일한 처리) */}
