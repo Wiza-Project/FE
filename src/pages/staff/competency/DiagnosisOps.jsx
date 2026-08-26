@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   BarChart,
@@ -6,7 +6,10 @@ import {
   CommonCodeSelect,
   DonutChart,
   Drawer,
+  EmptyState,
   Modal,
+  Pagination,
+  SkeletonLoader,
   StatTile,
   StatusBadge,
   Tabs,
@@ -14,6 +17,8 @@ import {
 } from '@/components/common';
 import {
   fetchAssessmentAttendance,
+  fetchAssessmentNonParticipants,
+  notifyAssessmentNonParticipants,
   registerAssessmentRound,
   updateAssessmentRound,
 } from '@/api/competency';
@@ -24,74 +29,7 @@ const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
-// 미응시자 개인정보 목록 조회 API가 아직 없어 목업으로 유지한다. 응시율 집계(위 도넛)는
-// 실제 API로 교체됐지만 이 표의 인원수와는 별도 데이터라 서로 맞지 않을 수 있다.
-const NON_RESPONDENTS = [
-  {
-    studentId: '20231500',
-    name: '강다은',
-    dept: '경영학과',
-    grade: 3,
-    lastLogin: '2026-06-05',
-    notified: false,
-  },
-  {
-    studentId: '20240102',
-    name: '임채원',
-    dept: '컴퓨터공학과',
-    grade: 1,
-    lastLogin: '2026-06-08',
-    notified: true,
-  },
-  {
-    studentId: '20232201',
-    name: '송민준',
-    dept: '산업공학과',
-    grade: 2,
-    lastLogin: '2026-05-30',
-    notified: false,
-  },
-  {
-    studentId: '20241300',
-    name: '한소율',
-    dept: '심리학과',
-    grade: 1,
-    lastLogin: '2026-06-09',
-    notified: false,
-  },
-  {
-    studentId: '20230912',
-    name: '임수아',
-    dept: '사회복지학과',
-    grade: 4,
-    lastLogin: '2026-05-28',
-    notified: false,
-  },
-  {
-    studentId: '20231654',
-    name: '윤준호',
-    dept: '경영학과',
-    grade: 3,
-    lastLogin: '2026-06-01',
-    notified: true,
-  },
-  {
-    studentId: '20232900',
-    name: '배지수',
-    dept: '컴퓨터공학과',
-    grade: 2,
-    lastLogin: '2026-06-07',
-    notified: false,
-  },
-  {
-    studentId: '20241122',
-    name: '조민재',
-    dept: '글로벌통상학과',
-    grade: 1,
-    lastLogin: '2026-06-09',
-    notified: false,
-  },
-];
+const NON_PARTICIPANT_PAGE_SIZE = 10;
 
 const COLLEGE_DATA = [
   {
@@ -625,21 +563,55 @@ function ResponseManage({ rounds }) {
   const rateLabel = attendance ? `${Number(attendance.attendanceRate).toFixed(1)}%` : '-';
 
   const [notifOpen, setNotifOpen] = useState(false);
-  const [channels, setChannels] = useState(['앱']);
-  const [notifRows, setNotifRows] = useState(NON_RESPONDENTS);
+  // 발송 완료 여부는 서버가 확정해 준 sentUserIds만 신뢰한다 — 클라이언트가 페이지별로
+  // 추정하면 페이지를 넘나들 때나 "전체 발송"(userIds: null) 이후 실제와 어긋날 수 있다.
+  const [notified, setNotified] = useState(new Set());
   const [selected, setSelected] = useState(new Set());
   const [downloadInfo, setDownloadInfo] = useState(false);
 
-  const CHANNEL_LIST = ['앱', 'SMS', '메일'];
+  const [page, setPage] = useState(1);
+  // 회차를 바꾸면 이전 회차에서 선택·발송 처리한 userId가 새 회차 명단과 무관해지므로 같이 비운다.
+  useEffect(() => {
+    setPage(1);
+    setSelected(new Set());
+    setNotified(new Set());
+  }, [roundId]);
+  // 페이지를 넘기면 화면에 없는 userId가 선택 상태로 남을 수 있어(체크박스는 안 보이지만
+  // "선택 N명" 카운트엔 남음) 비운다. notifyTarget 자체는 selected가 비면 전체 발송으로
+  // 처리되므로 이 초기화와 무관하게 항상 정확하다.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [page]);
 
-  const toggleChannel = (c) =>
-    setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
-  const notifyTarget =
-    selected.size > 0 ? selected.size : notifRows.filter((r) => !r.notified).length;
+  const {
+    data: nonParticipants,
+    isLoading: nonParticipantsLoading,
+    isError: nonParticipantsError,
+    error: nonParticipantsErrorObj,
+  } = useQuery({
+    queryKey: ['assessmentNonParticipants', roundId, page],
+    queryFn: () =>
+      fetchAssessmentNonParticipants(Number(roundId), {
+        page: page - 1,
+        size: NON_PARTICIPANT_PAGE_SIZE,
+      }),
+    enabled: !!roundId,
+  });
 
-  const allChecked = notifRows.length > 0 && notifRows.every((r) => selected.has(r.studentId));
+  const nonParticipantRows = nonParticipants?.content ?? [];
+  const nonParticipantTotal = nonParticipants?.totalElements ?? 0;
+
+  // 선택 없이 발송하면 이 회차의 전체 미응시자(nonParticipantTotal)가 대상이다 — 현재
+  // 페이지(최대 10명)만 대상으로 착각하지 않도록, 선택이 없을 때는 페이지 카운트가 아니라
+  // 전체 미응시자 수를 보여준다.
+  const notifyTarget = selected.size > 0 ? selected.size : nonParticipantTotal;
+
+  const allChecked =
+    nonParticipantRows.length > 0 && nonParticipantRows.every((r) => selected.has(r.userId));
   const toggleAll = () =>
-    allChecked ? setSelected(new Set()) : setSelected(new Set(notifRows.map((r) => r.studentId)));
+    allChecked
+      ? setSelected(new Set())
+      : setSelected(new Set(nonParticipantRows.map((r) => r.userId)));
   const toggle = (id) =>
     setSelected((prev) => {
       const n = new Set(prev);
@@ -647,14 +619,20 @@ function ResponseManage({ rounds }) {
       return n;
     });
 
-  const sendNotification = () => {
-    setNotifRows((prev) =>
-      prev.map((r) => (!selected.size || selected.has(r.studentId) ? { ...r, notified: true } : r)),
-    );
-    setSelected(new Set());
-    setNotifOpen(false);
-    toast(`${notifyTarget}명에게 알림을 발송했습니다.`, 'success');
-  };
+  const notifyMutation = useMutation({
+    mutationFn: () =>
+      notifyAssessmentNonParticipants(Number(roundId), selected.size ? Array.from(selected) : null),
+    onSuccess: (result) => {
+      setNotified((prev) => new Set([...prev, ...result.sentUserIds]));
+      setSelected(new Set());
+      setNotifOpen(false);
+      const failMessage = result.failedCount > 0 ? ` (실패 ${result.failedCount}건)` : '';
+      toast(`${result.sentUserIds.length}명에게 알림을 발송했습니다.${failMessage}`, 'success');
+    },
+    onError: (e) => {
+      toast(e instanceof ApiError ? e.message : '알림 발송에 실패했습니다.', 'error');
+    },
+  });
 
   const donutData = [
     { label: '응시', value: completedCount, color: ACCENT },
@@ -745,9 +723,11 @@ function ResponseManage({ rounds }) {
         <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-3 flex-wrap">
           <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
           <span className="text-[13px] font-bold text-[#1F2328]">미응시자 목록</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
-            {notifRows.length}명
-          </span>
+          {roundId && !nonParticipantsLoading && !nonParticipantsError && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
+              {nonParticipantTotal.toLocaleString()}명
+            </span>
+          )}
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => setDownloadInfo(true)}
@@ -757,7 +737,8 @@ function ResponseManage({ rounds }) {
             </button>
             <button
               onClick={() => setNotifOpen(true)}
-              className="h-7 px-3 text-[11px] font-bold rounded-[6px] text-white transition-opacity hover:opacity-90"
+              disabled={nonParticipantTotal === 0}
+              className="h-7 px-3 text-[11px] font-bold rounded-[6px] text-white transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ background: ACCENT }}
             >
               미응시자 알림 발송
@@ -765,110 +746,141 @@ function ResponseManage({ rounds }) {
           </div>
         </div>
 
-        <table className="w-full border-collapse text-[12px]">
-          <thead>
-            <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-              <th className="w-10 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={allChecked}
-                  onChange={toggleAll}
-                  className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
-                />
-              </th>
-              {['학번', '성명', '학과', '학년', '최근 로그인', '알림 발송'].map((h, i) => (
-                <th
-                  key={h}
-                  className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 4 ? 'text-center' : 'text-left'}`}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {notifRows.map((r) => (
-              <tr
-                key={r.studentId}
-                className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(r.studentId) ? 'bg-[#F3F4F6]' : ''}`}
-              >
-                <td className="px-4 py-3 text-center">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(r.studentId)}
-                    onChange={() => toggle(r.studentId)}
-                    className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
-                  />
-                </td>
-                <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">{r.studentId}</td>
-                <td className="px-4 py-3 font-bold text-[#1F2328]">{r.name}</td>
-                <td className="px-4 py-3 text-[#656D76]">{r.dept}</td>
-                <td className="px-4 py-3 text-center text-[#656D76]">{r.grade}학년</td>
-                <td className="px-4 py-3 text-center font-mono text-[11px] text-[#9AA0A6]">
-                  {r.lastLogin}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {r.notified ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">
-                      발송완료
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#9AA0A6]">
-                      미발송
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {!roundId ? (
+          <EmptyState message="조회할 진단 회차를 선택해 주세요." />
+        ) : nonParticipantsLoading ? (
+          <SkeletonLoader rows={NON_PARTICIPANT_PAGE_SIZE} cols={6} />
+        ) : nonParticipantsError ? (
+          <div className="p-5 text-[12px] text-[#CF222E] font-semibold">
+            {nonParticipantsErrorObj instanceof ApiError
+              ? nonParticipantsErrorObj.message
+              : '미응시자 목록을 조회하지 못했습니다.'}
+          </div>
+        ) : nonParticipantRows.length === 0 ? (
+          <EmptyState message="미응시자가 없습니다." sub="모든 대상자가 응시를 완료했습니다." />
+        ) : (
+          <>
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      onChange={toggleAll}
+                      aria-label="현재 페이지 미응시자 전체 선택"
+                      className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
+                    />
+                  </th>
+                  {['학번', '성명', '학과', '학년', '연락처', '알림 발송'].map((h, i) => (
+                    <th
+                      key={h}
+                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 4 ? 'text-center' : 'text-left'}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {nonParticipantRows.map((r) => (
+                  <tr
+                    key={r.userId}
+                    className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(r.userId) ? 'bg-[#F3F4F6]' : ''}`}
+                  >
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.userId)}
+                        onChange={() => toggle(r.userId)}
+                        aria-label={`${r.name} (${r.studentId}) 선택`}
+                        className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
+                      {r.studentId}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-[#1F2328]">{r.name}</td>
+                    <td className="px-4 py-3 text-[#656D76]">{r.majorName ?? '-'}</td>
+                    <td className="px-4 py-3 text-center text-[#656D76]">
+                      {r.grade != null ? `${r.grade}학년` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono text-[11px] text-[#9AA0A6]">
+                      {r.phone ?? '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {notified.has(r.userId) ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">
+                          발송완료
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#9AA0A6]">
+                          미발송
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="px-5 py-3 border-t border-[#E5E7EB]">
+              <Pagination
+                page={page}
+                totalPages={nonParticipants.totalPages}
+                onChange={setPage}
+                totalItems={nonParticipantTotal}
+                pageSize={NON_PARTICIPANT_PAGE_SIZE}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Notify modal */}
       <Modal
         open={notifOpen}
-        onClose={() => setNotifOpen(false)}
+        onClose={() => {
+          if (!notifyMutation.isPending) setNotifOpen(false);
+        }}
         title="미응시자 알림 발송"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setNotifOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setNotifOpen(false)}
+              disabled={notifyMutation.isPending}
+            >
               취소
             </Button>
-            <Button style={{ background: ACCENT }} onClick={sendNotification}>
+            <Button
+              style={{ background: ACCENT }}
+              onClick={() => notifyMutation.mutate()}
+              loading={notifyMutation.isPending}
+            >
               발송
             </Button>
           </div>
         }
       >
         <div className="flex flex-col gap-4">
-          <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-2">
-              발송 채널 (다중 선택)
-            </label>
-            <div className="flex gap-2">
-              {CHANNEL_LIST.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => toggleChannel(c)}
-                  className={`h-8 px-4 text-[12px] font-bold rounded-[6px] border-2 transition-colors ${channels.includes(c) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
-                  style={channels.includes(c) ? { background: ACCENT } : {}}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
+          <div className="p-2.5 rounded-[6px] bg-[#F3F4F6] text-[11px] text-[#656D76]">
+            현재는 인앱(앱) 알림만 발송됩니다. SMS·메일 연동은 아직 준비되지 않았습니다.
           </div>
 
           <div>
             <label className="block text-[11px] font-semibold text-[#656D76] mb-2">
-              문구 미리보기
+              문구 미리보기 <span className="text-[#9AA0A6] font-normal">(실제 발송 문구와 다를 수 있음)</span>
             </label>
             <div className="p-4 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[12px] text-[#444D56] leading-relaxed">
               <p className="font-bold text-[#1F2328] mb-1">[학생지원팀] 핵심역량진단 참여 안내</p>
               <p>
-                안녕하세요. 2026-1 핵심역량 사후진단 응시 기간입니다.
+                안녕하세요. {selectedRound?.assessmentName ?? '핵심역량 진단'} 응시 기간입니다.
                 <br />
-                아직 응시하지 않으셨습니다. <strong>2026-06-23까지</strong> 접속해 주세요.
+                아직 응시하지 않으셨습니다.{' '}
+                {selectedRound?.endsAt && (
+                  <strong>{toDateInputValue(selectedRound.endsAt)}까지</strong>
+                )}{' '}
+                접속해 주세요.
                 <br />
                 포털 로그인 → 핵심역량진단 메뉴에서 바로 응시 가능합니다.
               </p>
@@ -879,9 +891,9 @@ function ResponseManage({ rounds }) {
             className="p-3 rounded-[8px] bg-[#F3F4F6] border border-[#E5E7EB] text-[12px]"
             style={{ color: ACCENT }}
           >
-            발송 대상: <span className="font-black">{notifyTarget}명</span>
-            {selected.size > 0 && (
-              <span className="text-[#9AA0A6] ml-1">(선택 {selected.size}명)</span>
+            발송 대상: <span className="font-black">{notifyTarget.toLocaleString()}명</span>
+            {selected.size === 0 && (
+              <span className="text-[#9AA0A6] ml-1">(선택 없음 — 전체 미응시자)</span>
             )}
           </div>
         </div>
