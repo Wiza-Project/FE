@@ -154,6 +154,17 @@ export default function SessionRecord() {
   // 서버에서 처음 받아온 초안으로 textarea를 한 번만 채운다. 이후 재조회(예: 충돌 재검증)에서
   // 값이 갱신돼도 사용자가 입력 중인 텍스트를 덮어쓰지 않기 위한 플래그다.
   const privateContentSeededRef = useRef(false);
+  // useMutation({ onSuccess })에 준 콜백은 이 컴포넌트가 언마운트된 뒤에도 실행된다(TanStack
+  // Query가 컴포넌트 생명주기와 무관하게 mutation을 완주시키기 때문). 이미 언마운트된 뒤 늦게
+  // 도착한 응답이 setQueryData로 캐시를 새로 만들면, 그 새 엔트리는 이 화면이 useQuery에 준
+  // gcTime: 0을 못 받고(setQueryData 인자에 안 실림) 기본 gcTime(5분)으로 생성돼 비공개
+  // 원문이 그만큼 남는다. 이 플래그로 그 시점을 판별해 캐시 쓰기만 건너뛴다.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const {
     data: sessionPage,
@@ -359,7 +370,11 @@ export default function SessionRecord() {
     // detailSessionId를 쓰면 늦은 응답이 지금 열린 다른 회기 캐시를 덮어쓸 수 있다.
     onSuccess: (data, { sessionId }) => {
       // 회기 목록·상세 캐시는 건드리지 않는다(원문이 섞이지 않아야 한다). 비공개 query만 갱신한다.
-      queryClient.setQueryData(counselingPrivateRecordQueryKey(sessionId), data);
+      // 언마운트 후에는 쓰지 않는다 — isMountedRef 선언부 주석 참고(gcTime: 0을 못 받는 새
+      // 엔트리가 생겨 원문이 기본 gcTime(5분)만큼 캐시에 남는 것을 막는다).
+      if (isMountedRef.current) {
+        queryClient.setQueryData(counselingPrivateRecordQueryKey(sessionId), data);
+      }
       // 화면에 보이는 로컬 입력·토스트는 isPrivateRecordScreenFor를 거친 뒤에만 갱신한다.
       if (isPrivateRecordScreenFor(sessionId)) {
         setPrivateContentInput(data.privateContent ?? '');
@@ -374,7 +389,10 @@ export default function SessionRecord() {
     // 확정 요청 변수는 sessionId 스칼라 하나다(저장과 시그니처가 다르다).
     mutationFn: (sessionId) => confirmCounselingPrivateRecord(sessionId),
     onSuccess: (data, sessionId) => {
-      queryClient.setQueryData(counselingPrivateRecordQueryKey(sessionId), data);
+      // 언마운트 후에는 쓰지 않는다 — savePrivateRecordMutation.onSuccess와 같은 이유.
+      if (isMountedRef.current) {
+        queryClient.setQueryData(counselingPrivateRecordQueryKey(sessionId), data);
+      }
       if (isPrivateRecordScreenFor(sessionId)) {
         setConfirmPrivateRecordOpen(false);
         toast('비공개 기록을 확정했습니다.', 'success');
