@@ -986,7 +986,14 @@ export default function SessionRecord() {
                         </Button>
                         <Button
                           size="sm"
-                          disabled={!privateRecord.canConfirm}
+                          // 저장 요청이 도는 동안 확정을 막는다. 확정은 원문을 받지 않고
+                          // "지금 서버에 저장된 초안"을 그대로 확정하므로, 저장 완료 전에
+                          // 확정이 먼저 처리되면 방금 입력한 내용이 아니라 그 이전 초안이
+                          // 영구 확정되고(정정 기능 없음) 뒤이은 저장은 충돌로 실패한다.
+                          // 반대 방향(확정 다이얼로그가 떠 있는 동안 저장 클릭)은 Modal의
+                          // 풀스크린 backdrop이 저장 버튼을 가려 이미 막혀 있어 별도 처리가
+                          // 필요 없다.
+                          disabled={!privateRecord.canConfirm || savePrivateRecordMutation.isPending}
                           loading={confirmPrivateRecordMutation.isPending}
                           onClick={() => setConfirmPrivateRecordOpen(true)}
                         >
