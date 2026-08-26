@@ -264,6 +264,52 @@ export const fetchAssessmentAttendance = async (roundId) => {
 };
 
 /**
+ * @typedef {Object} AssessmentNonParticipant
+ * @property {number} userId
+ * @property {string} studentId
+ * @property {string} name
+ * @property {string|null} email
+ * @property {string|null} phone
+ * @property {string|null} majorName
+ * @property {number|null} grade
+ */
+
+/**
+ * 미응시자 목록 조회. 회차의 응시 대상자 중 아직 제출을 완료하지 않은 학생 명단을
+ * 페이지 단위로 조회한다. target_condition이 없는 회차는 전체 학생을 대상자로 본다.
+ * 개인정보(학번·이름·연락처)가 포함돼 있지만, 담당 교직원이 미응시자를 확인해야 하는
+ * 기능이라 응시율 조회와 동일하게 hasRole STAFF 전반에게 열려 있다.
+ *
+ * @param {number} roundId
+ * @param {Object} [params]
+ * @param {number} [params.page] 0-base 페이지 번호.
+ * @param {number} [params.size] 페이지당 건수.
+ * @returns {Promise<{content: AssessmentNonParticipant[], page: number, size: number,
+ *   totalElements: number, totalPages: number, first: boolean, last: boolean}>}
+ */
+export const fetchAssessmentNonParticipants = async (roundId, params) => {
+  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/non-participants`, {
+    params,
+  });
+  return data;
+};
+
+/**
+ * 미응시자 알림 발송. 제목·내용은 서버가 회차 정보로 만들어 보내므로 클라이언트가
+ * 전송할 필요가 없다. MVP1 기준 인앱(APP) 채널만 실제로 발송되고 SMS·메일은 연동돼 있지 않다.
+ *
+ * @param {number} roundId
+ * @param {number[]|null} userIds null이면 회차의 전체 미응시자에게, 배열이면 해당 userId에게만 발송.
+ * @returns {Promise<{sentUserIds: number[], failedCount: number}>}
+ */
+export const notifyAssessmentNonParticipants = async (roundId, userIds) => {
+  const { data } = await apiClient.post(`/admin/assessment-rounds/${roundId}/non-participants/notify`, {
+    userIds,
+  });
+  return data;
+};
+
+/**
  * @typedef {Object} AssessmentResumeItem
  * @property {number} questionId
  * @property {number} competencyId
