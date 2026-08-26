@@ -219,6 +219,10 @@ export default function CounselingApply({ onComplete, onBack }) {
   const agreeMutation = useMutation({
     mutationFn: () => agreeToConsentPolicy(currentPolicy.consentPolicyId),
   });
+  const returnToConsentStep = () => {
+    setConsentChecked(false);
+    setStep(0);
+  };
 
   // "동의하고 다음" 버튼 핸들러. 이미 유효한 동의가 있으면 바로 다음 단계로 넘어가고,
   // 없으면 서버에 동의를 기록한 뒤 성공 응답을 받고 나서만 다음 단계로 넘어간다.
@@ -226,6 +230,7 @@ export default function CounselingApply({ onComplete, onBack }) {
     if (activeConsentId) {
       // 유효한 동의가 확인됐으므로, 이전에 남아 있을 수 있는 낡은 동의 오류 문구를 지운다.
       setConsentError('');
+      setConsentChecked(false);
       setStep(1);
       return;
     }
@@ -235,8 +240,11 @@ export default function CounselingApply({ onComplete, onBack }) {
     setConsentError('');
     try {
       await agreeMutation.mutateAsync();
-      queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] });
-      queryClient.invalidateQueries({ queryKey: ['myConsents'] });
+      setConsentChecked(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] }),
+        queryClient.invalidateQueries({ queryKey: ['myConsents'] }),
+      ]);
       setStep(1);
     } catch (error) {
       if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.CONSENT_CONFLICT) {
@@ -249,6 +257,7 @@ export default function CounselingApply({ onComplete, onBack }) {
             (c) => c.consentPolicyId === currentPolicy.consentPolicyId && c.withdrawnAt == null,
           );
           if (stillActive) {
+            setConsentChecked(false);
             setStep(1);
             return;
           }
@@ -302,17 +311,19 @@ export default function CounselingApply({ onComplete, onBack }) {
       queryClient.invalidateQueries({ queryKey: ['availableSchedules'] });
       setStep(3);
     },
-    onError: (error) => {
+    onError: async (error) => {
       // A004: 제출에 쓴 동의가 무효·철회되었거나 본인 것이 아니라는 뜻이다.
       // 서버가 최종 판정한 결과이므로 자동으로 다시 동의 처리하지 않고, 동의 단계로 되돌려
       // 최신 이력을 다시 조회해서 사용자가 직접 재확인하게 한다.
       if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
-        queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] });
-        queryClient.invalidateQueries({ queryKey: ['myConsents'] });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] }),
+          queryClient.invalidateQueries({ queryKey: ['myConsents'] }),
+        ]);
         // submitError는 2단계 알림 영역에서만 렌더되므로, 되돌아갈 0단계에서 보이도록
         // 동일한 내용을 consentError로도 남긴다.
         setConsentError('동의가 만료되었거나 철회되어 신청할 수 없습니다. 동의 내용을 다시 확인해 주세요.');
-        setStep(0);
+        returnToConsentStep();
         return;
       }
       setSubmitError(getSubmitErrorMessage(error));
@@ -369,7 +380,7 @@ export default function CounselingApply({ onComplete, onBack }) {
       // 이유 없이 0단계로 되돌리면 사용자가 혼란스러우므로, 기존 동의 오류 영역에 사유를 남긴다.
       setConsentError('동의가 유효하지 않아 신청을 진행할 수 없습니다. 동의 내용을 다시 확인해 주세요.');
       setSubmitConfirm(false);
-      setStep(0);
+      returnToConsentStep();
       return;
     }
 
@@ -655,7 +666,7 @@ export default function CounselingApply({ onComplete, onBack }) {
           </div>
 
           <div className="flex gap-2 justify-between">
-            <Button size="sm" variant="secondary" onClick={() => setStep(0)}>
+            <Button size="sm" variant="secondary" onClick={returnToConsentStep}>
               ← 이전
             </Button>
             <Button
