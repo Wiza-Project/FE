@@ -1,5 +1,24 @@
-import { useState } from 'react';
-import { Tabs, Button, RadarChart, toast } from '@/components/common';
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Tabs,
+  Button,
+  RadarChart,
+  EmptyState,
+  SkeletonLoader,
+  ConfirmDialog,
+  toast,
+} from '@/components/common';
+import {
+  fetchCoverLetters,
+  fetchCoverLetter,
+  createCoverLetter,
+  updateCoverLetter,
+  createCoverLetterVersion,
+  deleteCoverLetter,
+} from '@/api/careerDocuments';
+import { ApiError } from '@/api/client';
+import { formatDateTime } from '@/utils/date';
 
 const ACCENT = '#059669';
 
@@ -58,27 +77,6 @@ const EXTRACURR = [
 
 const COMP_LABELS = ['자기관리', '의사소통', '글로벌', '대인관계', '종합사고', '자원정보'];
 const COMP_VALUES = [78, 65, 52, 80, 71, 68];
-
-const CBI_QUESTIONS = [
-  {
-    id: 'Q1',
-    label: '지원 동기와 포부',
-    hint: '해당 직무·기업을 지원하게 된 동기와 입사 후 이루고 싶은 목표를 서술하세요.',
-    limit: 800,
-  },
-  {
-    id: 'Q2',
-    label: '성장 과정',
-    hint: '본인의 성장 과정에서 중요한 경험이나 가치관 형성에 영향을 준 사건을 서술하세요.',
-    limit: 800,
-  },
-  {
-    id: 'Q3',
-    label: '직무 역량',
-    hint: '지원 직무와 관련된 경험·프로젝트를 바탕으로 본인의 역량을 서술하세요.',
-    limit: 800,
-  },
-];
 
 // ─── Lock icon ────────────────────────────────────────────────────────────────
 
@@ -300,116 +298,417 @@ function ResumeTab({ onSave }) {
 
 // ─── Cover Letter Tab ─────────────────────────────────────────────────────────
 
-function CoverLetterTab() {
-  const [answers, setAnswers] = useState({
-    Q1: '저는 어릴 때부터 소프트웨어가 사람들의 삶을 변화시키는 모습에 매료되어 개발자의 꿈을 키워왔습니다. 특히 (주)테크노바가 추구하는 "기술로 사회 문제를 해결한다"는 비전이 제 가치관과 깊이 일치하여 지원하게 되었습니다.',
-    Q2: '',
-    Q3: '',
-  });
-  const [aiUsed, setAiUsed] = useState({ Q1: false, Q2: false, Q3: false });
-  const [aiLoading, setAiLoading] = useState({ Q1: false, Q2: false, Q3: false });
+/** ApiError면 서버 메시지를, 아니면 네트워크 오류 문구를 돌려준다(403/404 등도 서버 메시지 우선). */
+function getCoverLetterErrorMessage(error, fallback) {
+  if (!(error instanceof ApiError)) {
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  return error.message || fallback;
+}
 
-  const handleAI = async (id, type) => {
-    setAiLoading((prev) => ({ ...prev, [id]: true }));
-    await new Promise((r) => setTimeout(r, 1200));
-    setAiLoading((prev) => ({ ...prev, [id]: false }));
-    setAiUsed((prev) => ({ ...prev, [id]: true }));
-    if (type === '초안') {
-      setAnswers((prev) => ({
-        ...prev,
-        [id]: `[AI 초안] 저는 ${id === 'Q2' ? '어린 시절 다양한 도전을 통해' : '직무 관련 프로젝트 경험을 통해'} 성장해왔습니다. 이 내용은 AI가 생성한 초안입니다. 본인의 경험과 언어로 수정해 주세요.`,
-      }));
+function CoverLetterTab() {
+  const queryClient = useQueryClient();
+
+  const listQuery = useQuery({
+    queryKey: ['career', 'coverLetters'],
+    queryFn: () => fetchCoverLetters(),
+  });
+  const versions = listQuery.data?.content ?? [];
+  const hasAny = versions.length > 0;
+
+  const [selectedId, setSelectedId] = useState(null);
+  const [loadedId, setLoadedId] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState('');
+  const [questions, setQuestions] = useState([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  // 문항 questionId 채번용 — 배열 길이 기반으로 만들면 삭제 후 추가 시 기존 문항과 충돌할
+  // 수 있어, 지금까지 나온 최대 번호보다 항상 큰 값을 내도록 별도로 관리한다.
+  const nextQuestionSeqRef = useRef(1);
+  const parseQuestionSeq = (id) => {
+    const m = /^Q(\d+)$/.exec(id ?? '');
+    return m ? Number(m[1]) : 0;
+  };
+  const makeQuestionId = () => {
+    const id = `Q${nextQuestionSeqRef.current}`;
+    nextQuestionSeqRef.current += 1;
+    return id;
+  };
+
+  // 목록이 로드되면 최신 버전(서버가 최신순으로 내려주는 첫 항목)을 기본 선택한다.
+  useEffect(() => {
+    const list = listQuery.data?.content;
+    if (!list) return;
+    if (list.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    setSelectedId((prev) =>
+      prev && list.some((v) => v.careerDocumentId === prev) ? prev : list[0].careerDocumentId,
+    );
+  }, [listQuery.data]);
+
+  const detailQuery = useQuery({
+    queryKey: ['career', 'coverLetter', selectedId],
+    queryFn: () => fetchCoverLetter(selectedId),
+    enabled: !!selectedId,
+  });
+
+  // 선택한 문서가 바뀌었을 때만 폼에 서버 데이터를 채운다 — 같은 문서의 백그라운드
+  // 재조회(저장 후 invalidate 등)로 입력 중인 내용이 덮어써지지 않도록 한다.
+  useEffect(() => {
+    const doc = detailQuery.data;
+    if (!doc || doc.careerDocumentId === loadedId) return;
+    setTitle(doc.documentTitle ?? '');
+    // 누락된 questionId는 서버가 이미 내려준 값들과 겹치지 않는 다음 번호로 채운다.
+    const existingIds = new Set((doc.questions ?? []).map((q) => q.questionId).filter(Boolean));
+    let fallbackSeq = 1;
+    const nextFallbackId = () => {
+      while (existingIds.has(`Q${fallbackSeq}`)) fallbackSeq += 1;
+      const id = `Q${fallbackSeq}`;
+      existingIds.add(id);
+      return id;
+    };
+    const loadedQuestions = (doc.questions ?? []).map((q) => ({
+      questionId: q.questionId ?? nextFallbackId(),
+      question: q.question ?? '',
+      answer: q.answer ?? '',
+    }));
+    setQuestions(loadedQuestions);
+    nextQuestionSeqRef.current =
+      Math.max(0, ...loadedQuestions.map((q) => parseQuestionSeq(q.questionId))) + 1;
+    setLoadedId(doc.careerDocumentId);
+    setCreating(false);
+  }, [detailQuery.data, loadedId]);
+
+  const startCreate = () => {
+    setSelectedId(null);
+    setLoadedId(null);
+    setTitle('');
+    setQuestions([{ questionId: 'Q1', question: '', answer: '' }]);
+    nextQuestionSeqRef.current = 2;
+    setCreating(true);
+  };
+
+  const addQuestion = () => {
+    setQuestions((prev) => [...prev, { questionId: makeQuestionId(), question: '', answer: '' }]);
+  };
+
+  const removeQuestion = (idx) => {
+    if (questions.length <= 1) {
+      toast('문항은 최소 1개 이상이어야 합니다.', 'error');
+      return;
+    }
+    setQuestions((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateQuestion = (idx, field, value) => {
+    setQuestions((prev) => prev.map((q, i) => (i === idx ? { ...q, [field]: value } : q)));
+  };
+
+  const buildPayload = () => ({
+    documentTitle: title.trim(),
+    questions: questions.map(({ questionId, question, answer }) => ({
+      questionId,
+      question: question.trim(),
+      answer: answer.trim(),
+    })),
+    aiAssistanceUsed: false,
+  });
+
+  const validate = () => {
+    if (!title.trim()) {
+      toast('제목을 입력해 주세요.', 'error');
+      return false;
+    }
+    if (questions.length === 0) {
+      toast('문항을 1개 이상 추가해 주세요.', 'error');
+      return false;
+    }
+    for (const q of questions) {
+      if (!q.question.trim()) {
+        toast('빈 질문이 있습니다. 모든 문항의 질문을 입력해 주세요.', 'error');
+        return false;
+      }
+      if (!q.answer.trim()) {
+        toast('빈 답변이 있습니다. 모든 문항의 답변을 입력해 주세요.', 'error');
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const createMutation = useMutation({
+    mutationFn: createCoverLetter,
+    onSuccess: (doc) => {
+      queryClient.setQueryData(['career', 'coverLetter', doc.careerDocumentId], doc);
+      queryClient.invalidateQueries({ queryKey: ['career', 'coverLetters'] });
+      setSelectedId(doc.careerDocumentId);
+      setCreating(false);
+      toast('자기소개서가 저장되었습니다.', 'success');
+    },
+    onError: (err) => toast(getCoverLetterErrorMessage(err, '저장에 실패했습니다.'), 'error'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (payload) => updateCoverLetter(selectedId, payload),
+    onSuccess: (doc) => {
+      queryClient.setQueryData(['career', 'coverLetter', doc.careerDocumentId], doc);
+      queryClient.invalidateQueries({ queryKey: ['career', 'coverLetters'] });
+      toast('자기소개서가 저장되었습니다.', 'success');
+    },
+    onError: (err) => toast(getCoverLetterErrorMessage(err, '저장에 실패했습니다.'), 'error'),
+  });
+
+  const versionMutation = useMutation({
+    mutationFn: () => createCoverLetterVersion(selectedId),
+    onSuccess: (doc) => {
+      queryClient.setQueryData(['career', 'coverLetter', doc.careerDocumentId], doc);
+      queryClient.invalidateQueries({ queryKey: ['career', 'coverLetters'] });
+      setSelectedId(doc.careerDocumentId);
+      toast('새 버전이 생성되었습니다.', 'success');
+    },
+    onError: (err) =>
+      toast(getCoverLetterErrorMessage(err, '새 버전 생성에 실패했습니다.'), 'error'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteCoverLetter(selectedId),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ['career', 'coverLetter', selectedId] });
+      queryClient.invalidateQueries({ queryKey: ['career', 'coverLetters'] });
+      setSelectedId(null);
+      setLoadedId(null);
+      setDeleteConfirmOpen(false);
+      toast('자기소개서가 삭제되었습니다.', 'success');
+    },
+    onError: (err) => {
+      toast(getCoverLetterErrorMessage(err, '삭제에 실패했습니다.'), 'error');
+      setDeleteConfirmOpen(false);
+    },
+  });
+
+  const saving =
+    createMutation.isPending || updateMutation.isPending || versionMutation.isPending;
+
+  const handleSave = () => {
+    if (saving || !validate()) return;
+    if (creating || !selectedId) {
+      createMutation.mutate(buildPayload());
     } else {
-      toast('AI 첨삭이 완료되었습니다. 아래 수정안을 검토하세요.', 'success');
+      updateMutation.mutate(buildPayload());
     }
   };
 
-  return (
-    <div className="flex flex-col gap-4 max-w-[800px]">
-      {CBI_QUESTIONS.map((q) => {
-        const chars = answers[q.id]?.length ?? 0;
-        const isOver = chars > q.limit;
-        const used = aiUsed[q.id];
-        const loading = aiLoading[q.id];
-        return (
-          <div
-            key={q.id}
-            className={`bg-white rounded-[8px] border shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden ${isOver ? 'border-[#FECACA]' : 'border-[#E5E7EB]'}`}
-          >
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2 flex-wrap">
-              <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-              <h2 className="text-[13px] font-bold text-[#1F2328] flex-1">{q.label}</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleAI(q.id, '초안')}
-                  disabled={loading}
-                  className="h-7 px-3 text-[11px] font-bold rounded-[5px] border border-[#E5E7EB] text-[#656D76] hover:border-[#059669] hover:text-[#059669] transition-colors disabled:opacity-50"
-                >
-                  {loading ? '생성 중…' : '✦ AI 초안 생성'}
-                </button>
-                <button
-                  onClick={() => handleAI(q.id, '첨삭')}
-                  disabled={loading || !answers[q.id]}
-                  className="h-7 px-3 text-[11px] font-bold rounded-[5px] border border-[#E5E7EB] text-[#656D76] hover:border-[#059669] hover:text-[#059669] transition-colors disabled:opacity-50"
-                >
-                  ✦ AI 첨삭
-                </button>
-              </div>
-            </div>
-            <div className="px-5 py-4">
-              <p className="text-[11px] text-[#9AA0A6] mb-2">{q.hint}</p>
-              <textarea
-                value={answers[q.id] ?? ''}
-                onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                rows={6}
-                placeholder="내용을 입력해 주세요."
-                className={`w-full px-3 py-2.5 text-[13px] border rounded-[6px] resize-none focus:outline-none placeholder:text-[#C8D0D9] ${isOver ? 'border-[#FECACA] focus:border-[#CF222E]' : 'border-[#E5E7EB] focus:border-[#059669]'}`}
-              />
-              <div className="flex items-center justify-between mt-1.5">
-                <div className="flex items-center gap-2">
-                  {used && (
-                    <>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#9AA0A6]">
-                        AI 보조 사용
-                      </span>
-                      <span className="text-[10px] text-[#C8D0D9]">
-                        AI 생성 결과는 참고안이며 최종 확정은 본인이 합니다.
-                      </span>
-                    </>
-                  )}
-                </div>
-                <span
-                  className={`text-[12px] font-bold ${isOver ? 'text-[#CF222E]' : chars > q.limit * 0.8 ? 'text-[#D97706]' : 'text-[#9AA0A6]'}`}
-                >
-                  {chars.toLocaleString()} / {q.limit.toLocaleString()}자
-                </span>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-      <div className="flex justify-end gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => toast('임시 저장되었습니다.', 'success')}
-        >
-          임시 저장
-        </Button>
-        <Button
-          size="sm"
-          style={{ background: ACCENT }}
-          onClick={() => toast('자기소개서가 저장되었습니다.', 'success')}
-        >
-          저장
+  // ── 로딩 / 오류 / 빈 상태 ──
+  if (listQuery.isLoading) {
+    return <SkeletonLoader rows={4} cols={3} />;
+  }
+
+  if (listQuery.isError) {
+    return (
+      <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center">
+        <p className="text-[14px] font-bold text-[#1F2328] mb-3">
+          {getCoverLetterErrorMessage(listQuery.error, '자기소개서 목록을 불러오지 못했습니다.')}
+        </p>
+        <Button size="sm" variant="outline" onClick={() => listQuery.refetch()}>
+          다시 시도
         </Button>
       </div>
+    );
+  }
+
+  if (!hasAny && !creating) {
+    return (
+      <EmptyState
+        message="아직 작성한 자기소개서가 없습니다."
+        sub="첫 자기소개서를 작성하고 버전으로 관리해 보세요."
+        action={
+          <Button size="sm" style={{ background: ACCENT }} onClick={startCreate}>
+            첫 자기소개서 작성
+          </Button>
+        }
+      />
+    );
+  }
+
+  const showForm = creating || (!!selectedId && !!detailQuery.data);
+  const detailLoading = !creating && !!selectedId && detailQuery.isLoading;
+  const detailErrored = !creating && !!selectedId && detailQuery.isError;
+
+  return (
+    <div className="flex flex-col gap-4 max-w-[800px]">
+      {/* 버전 선택 · 새 버전 생성 */}
+      {hasAny && (
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-4 flex items-center gap-3 flex-wrap">
+          <label
+            htmlFor="coverLetterVersion"
+            className="text-[12px] font-semibold text-[#656D76]"
+          >
+            버전
+          </label>
+          <select
+            id="coverLetterVersion"
+            value={creating ? '' : (selectedId ?? '')}
+            onChange={(e) => {
+              setCreating(false);
+              setSelectedId(Number(e.target.value));
+            }}
+            className="h-8 px-3 pr-7 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669] appearance-none"
+          >
+            {versions.map((v, i) => (
+              <option key={v.careerDocumentId} value={v.careerDocumentId}>
+                {v.documentTitle} · v{v.versionNo}
+                {i === 0 ? ' (최신)' : ''} · {formatDateTime(v.updatedAt)}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!selectedId || saving}
+            loading={versionMutation.isPending}
+            onClick={() => versionMutation.mutate()}
+            style={{ borderColor: ACCENT, color: ACCENT }}
+          >
+            새 버전 생성
+          </Button>
+        </div>
+      )}
+
+      {detailLoading && <SkeletonLoader rows={3} cols={2} />}
+
+      {detailErrored && (
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center">
+          <p className="text-[14px] font-bold text-[#1F2328]">
+            {getCoverLetterErrorMessage(
+              detailQuery.error,
+              '문서를 찾을 수 없거나 접근할 수 없습니다.',
+            )}
+          </p>
+        </div>
+      )}
+
+      {showForm && !detailLoading && !detailErrored && (
+        <>
+          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
+            <label
+              htmlFor="coverLetterTitle"
+              className="block text-[12px] font-semibold text-[#656D76] mb-1.5"
+            >
+              제목
+            </label>
+            <input
+              id="coverLetterTitle"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="예) 2026 하반기 공채 자기소개서"
+              className="w-full h-9 px-3 text-[13px] border border-[#E5E7EB] rounded-[6px] focus:outline-none focus:border-[#059669]"
+            />
+          </div>
+
+          {questions.map((q, idx) => {
+            const chars = q.answer.length;
+            return (
+              <div
+                key={q.questionId}
+                className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden"
+              >
+                <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
+                  <div className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: ACCENT }} />
+                  <label
+                    htmlFor={`question-${idx}`}
+                    className="text-[11px] font-semibold text-[#656D76] flex-shrink-0"
+                  >
+                    문항 {idx + 1}
+                  </label>
+                  <input
+                    id={`question-${idx}`}
+                    value={q.question}
+                    onChange={(e) => updateQuestion(idx, 'question', e.target.value)}
+                    placeholder="질문을 입력하세요 (예: 지원 동기)"
+                    className="flex-1 h-8 px-3 text-[13px] border border-[#E5E7EB] rounded-[6px] focus:outline-none focus:border-[#059669]"
+                  />
+                  <button
+                    onClick={() => removeQuestion(idx)}
+                    className="text-[#C8D0D9] hover:text-[#CF222E] transition-colors text-[14px] flex-shrink-0"
+                    aria-label={`문항 ${idx + 1} 삭제`}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="px-5 py-4">
+                  <label htmlFor={`answer-${idx}`} className="sr-only">
+                    문항 {idx + 1} 답변
+                  </label>
+                  <textarea
+                    id={`answer-${idx}`}
+                    value={q.answer}
+                    onChange={(e) => updateQuestion(idx, 'answer', e.target.value)}
+                    rows={6}
+                    placeholder="내용을 입력해 주세요."
+                    className="w-full px-3 py-2.5 text-[13px] border border-[#E5E7EB] rounded-[6px] resize-none focus:outline-none focus:border-[#059669] placeholder:text-[#C8D0D9]"
+                  />
+                  <div className="flex items-center justify-end mt-1.5">
+                    <span className="text-[12px] font-bold text-[#9AA0A6]">
+                      {chars.toLocaleString()}자
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          <div>
+            <button
+              onClick={addQuestion}
+              className="h-8 px-3 text-[12px] font-bold rounded-[6px] border border-dashed border-[#D1D5DB] text-[#656D76] hover:border-[#059669] hover:text-[#059669] transition-colors"
+            >
+              + 문항 추가
+            </button>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            {!creating && selectedId && (
+              <Button
+                size="sm"
+                variant="outline"
+                style={{ color: '#CF222E', borderColor: '#FECACA' }}
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={saving || deleteMutation.isPending}
+              >
+                삭제
+              </Button>
+            )}
+            <Button size="sm" style={{ background: ACCENT }} loading={saving} onClick={handleSave}>
+              저장
+            </Button>
+          </div>
+        </>
+      )}
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="자기소개서 삭제"
+        message="이 버전을 삭제하면 되돌릴 수 없습니다. 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutate()}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
     </div>
   );
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
+/**
+ * 이력서·자기소개서 화면. 이력서 탭은 아직 API 연동 대상이 아니라 기존 목업을 그대로 유지하고,
+ * 자기소개서 탭만 실제 API(자기소개서 버전 CRUD)로 동작한다. 상단 "버전" 공용 컨트롤은 이력서
+ * 탭 전용 목업이라 자기소개서 탭에서는 숨기고, 자기소개서 자체 버전 선택 UI를 탭 내부에 둔다.
+ */
 export default function ResumeEditor() {
   const [tab, setTab] = useState('resume');
   const [version, setVersion] = useState('v3 (최신)');
@@ -420,29 +719,30 @@ export default function ResumeEditor() {
 
   return (
     <div>
-      {/* Version controls */}
-      <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[#E5E7EB]">
-        <div className="flex items-center gap-2 ml-auto">
-          <label className="text-[12px] font-semibold text-[#656D76]">버전</label>
-          <select
-            value={version}
-            onChange={(e) => setVersion(e.target.value)}
-            className="h-8 px-3 pr-7 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669] appearance-none"
-          >
-            <option>v3 (최신)</option>
-            <option>v2</option>
-            <option>v1</option>
-          </select>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleSave}
-            style={{ borderColor: ACCENT, color: ACCENT }}
-          >
-            새 버전으로 저장
-          </Button>
+      {tab === 'resume' && (
+        <div className="flex items-center gap-3 mb-5 pb-4 border-b border-[#E5E7EB]">
+          <div className="flex items-center gap-2 ml-auto">
+            <label className="text-[12px] font-semibold text-[#656D76]">버전</label>
+            <select
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+              className="h-8 px-3 pr-7 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669] appearance-none"
+            >
+              <option>v3 (최신)</option>
+              <option>v2</option>
+              <option>v1</option>
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSave}
+              style={{ borderColor: ACCENT, color: ACCENT }}
+            >
+              새 버전으로 저장
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       <Tabs
         tabs={[
