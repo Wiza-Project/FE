@@ -161,6 +161,7 @@ export default function SessionRecord() {
   // 원문이 그만큼 남는다. 이 플래그로 그 시점을 판별해 캐시 쓰기만 건너뛴다.
   const isMountedRef = useRef(true);
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
@@ -186,6 +187,7 @@ export default function SessionRecord() {
     queryKey: counselingSessionDetailQueryKey(detailSessionId),
     queryFn: () => fetchCounselingSessionDetail(detailSessionId),
     enabled: detailSessionId !== null,
+    gcTime: 0,
   });
 
   // 사용자가 명시적으로 연 회기(detailSessionId)에 한해서만 전용 GET을 호출한다.
@@ -202,6 +204,7 @@ export default function SessionRecord() {
     queryFn: () => fetchCounselingPrivateRecord(detailSessionId),
     enabled: privateRecordOpen && detailSessionId !== null,
     gcTime: 0,
+    retry: false,
   });
 
   // 서버 초안을 최초 1회만 textarea에 반영한다(위 privateContentSeededRef 설명 참고).
@@ -330,7 +333,8 @@ export default function SessionRecord() {
   // 코드를 읽어 확인하면 이 불변식이 지켜지는지 정적으로 검증할 수 있다.
   // (Query 캐시 쓰기는 요청의 sessionId로 직접 하므로 이 판정 대상이 아니다 — 어느 회기가
   // 열려 있든 항상 안전하다.)
-  const isPrivateRecordScreenFor = (requestSessionId) => requestSessionId === detailSessionId;
+  const isPrivateRecordScreenFor = (requestSessionId) =>
+    isMountedRef.current && requestSessionId === detailSessionId;
 
   // 비공개 기록 저장·확정 오류를 공통 분기한다. requestSessionId는 이 오류를 낸 요청이 대상으로
   // 삼은 회기다(최신 detailSessionId가 아니라 요청 변수에서 받는다).
