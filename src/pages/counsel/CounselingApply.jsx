@@ -55,6 +55,19 @@ const formatScheduleLabel = (iso) => {
   return `${dateLabel} (${dayLabel}) ${timeLabel}`;
 };
 
+// 동의 시각은 지난 해에 기록됐을 수 있어 연도까지 표시해야 모호하지 않다.
+// 상담 일정 라벨(formatScheduleLabel)은 임박한 미래라 연도 없이도 명확하므로 그대로 둔다.
+const formatConsentTimestamp = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 // 상담사 필터 옵션과 필터링에서 같은 키 형식을 공유하도록 한 곳에서 조합한다.
 // 두 곳의 키 형식이 어긋나면 필터가 아무 일정도 못 찾는 버그로 이어진다.
 const counselorKeyOf = (schedule) =>
@@ -211,6 +224,8 @@ export default function CounselingApply({ onComplete, onBack }) {
   // 없으면 서버에 동의를 기록한 뒤 성공 응답을 받고 나서만 다음 단계로 넘어간다.
   const handleAgreeAndNext = async () => {
     if (activeConsentId) {
+      // 유효한 동의가 확인됐으므로, 이전에 남아 있을 수 있는 낡은 동의 오류 문구를 지운다.
+      setConsentError('');
       setStep(1);
       return;
     }
@@ -351,6 +366,8 @@ export default function CounselingApply({ onComplete, onBack }) {
     // 제출 직전에 유효한 동의가 없으면 요청 자체를 보내지 않고 동의 단계로 되돌린다.
     // 이 화면 안에서는 있었지만(예: 뒤로가기 중 서버에서 철회된 경우) 사라졌을 수 있기 때문이다.
     if (!activeConsentId) {
+      // 이유 없이 0단계로 되돌리면 사용자가 혼란스러우므로, 기존 동의 오류 영역에 사유를 남긴다.
+      setConsentError('동의가 유효하지 않아 신청을 진행할 수 없습니다. 동의 내용을 다시 확인해 주세요.');
       setSubmitConfirm(false);
       setStep(0);
       return;
@@ -447,7 +464,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                       <span>
                         이미 동의했습니다.
                         {activeConsent?.consentedAt &&
-                          ` (동의일시: ${formatScheduleLabel(activeConsent.consentedAt)})`}
+                          ` (동의일시: ${formatConsentTimestamp(activeConsent.consentedAt)})`}
                       </span>
                     </div>
                   ) : (
