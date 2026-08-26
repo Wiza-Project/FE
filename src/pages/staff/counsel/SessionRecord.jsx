@@ -23,6 +23,11 @@ import {
   COUNSELING_SESSION_STATUS,
   COUNSELING_SESSION_STATUS_LABEL,
 } from '@/constants/domain';
+import {
+  getPrivateRecordSeed,
+  shouldApplyPrivateRecordMutationSuccess,
+  updatePrivateRecordQueryIfPresent,
+} from './privateRecordMutation';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 const PAGE_SIZE = 20;
@@ -154,6 +159,12 @@ export default function SessionRecord() {
   // 서버에서 처음 받아온 초안으로 textarea를 한 번만 채운다. 이후 재조회(예: 충돌 재검증)에서
   // 값이 갱신돼도 사용자가 입력 중인 텍스트를 덮어쓰지 않기 위한 플래그다.
   const privateContentSeededRef = useRef(false);
+  // mutation 성공 콜백은 요청 당시 렌더의 클로저를 사용할 수 있으므로, 회기 전환·영역 닫힘
+  // 이후에도 콜백이 현재 화면 상태를 읽도록 최신 값을 ref에 보관한다.
+  const privateRecordViewRef = useRef({ detailSessionId: null, privateRecordOpen: false });
+  privateRecordViewRef.current.detailSessionId = detailSessionId;
+  privateRecordViewRef.current.privateRecordOpen = privateRecordOpen;
+  const previousDetailSessionIdRef = useRef(null);
   // useMutation({ onSuccess })에 준 콜백은 이 컴포넌트가 언마운트된 뒤에도 실행된다(TanStack
   // Query가 컴포넌트 생명주기와 무관하게 mutation을 완주시키기 때문). 이미 언마운트된 뒤 늦게
   // 도착한 응답이 setQueryData로 캐시를 새로 만들면, 그 새 엔트리는 이 화면이 useQuery에 준
@@ -208,12 +219,38 @@ export default function SessionRecord() {
   });
 
   // 서버 초안을 최초 1회만 textarea에 반영한다(위 privateContentSeededRef 설명 참고).
+  // 이 effect는 seed effect보다 먼저 실행되어야 한다. B query data가 이미 준비돼도 A의
+  // seeded 상태를 먼저 비워 B 원문을 textarea에 넣고, 이전 회기의 민감한 query를 제거한다.
   useEffect(() => {
-    if (privateRecordOpen && privateRecord && !privateContentSeededRef.current) {
-      setPrivateContentInput(privateRecord.privateContent ?? '');
+    const previousSessionId = previousDetailSessionIdRef.current;
+
+    if (previousSessionId !== null && previousSessionId !== detailSessionId) {
+      queryClient.removeQueries({ queryKey: counselingPrivateRecordQueryKey(previousSessionId) });
+    }
+
+    if (previousSessionId !== detailSessionId) {
+      setPrivateContentInput('');
+      setPrivateRecordFormError('');
+      setConfirmPrivateRecordOpen(false);
+      privateContentSeededRef.current = false;
+    }
+
+    previousDetailSessionIdRef.current = detailSessionId;
+  }, [detailSessionId, queryClient]);
+
+  useEffect(() => {
+    const privateRecordSeed = getPrivateRecordSeed({
+      privateRecordOpen,
+      privateRecord,
+      detailSessionId,
+      seeded: privateContentSeededRef.current,
+    });
+
+    if (privateRecordSeed !== undefined) {
+      setPrivateContentInput(privateRecordSeed);
       privateContentSeededRef.current = true;
     }
-  }, [privateRecordOpen, privateRecord]);
+  }, [detailSessionId, privateRecordOpen, privateRecord]);
 
   // 페이지·필터별로 나뉜 회기 목록 캐시를 접두사만으로 한 번에 무효화한다(TanStack Query는
   // queryKey가 이 배열로 시작하는 모든 캐시를 대상으로 삼는다).
@@ -331,10 +368,13 @@ export default function SessionRecord() {
   // A의 응답은 B의 화면(입력값·토스트·모달)을 절대 건드리면 안 된다. 이 함수 하나가 그 판정을
   // 전담하므로, 아래 두 mutation의 어떤 콜백이든 "화면을 바꾸기 전에 반드시 이 함수를 거쳤는가"만
   // 코드를 읽어 확인하면 이 불변식이 지켜지는지 정적으로 검증할 수 있다.
-  // (Query 캐시 쓰기는 요청의 sessionId로 직접 하므로 이 판정 대상이 아니다 — 어느 회기가
-  // 열려 있든 항상 안전하다.)
+  // Query 캐시도 현재 열린 회기와 비공개 영역이 유효한 경우에만 갱신한다.
   const isPrivateRecordScreenFor = (requestSessionId) =>
-    isMountedRef.current && requestSessionId === detailSessionId;
+    shouldApplyPrivateRecordMutationSuccess({
+      isMounted: isMountedRef.current,
+      requestSessionId,
+      ...privateRecordViewRef.current,
+    });
 
   // 비공개 기록 저장·확정 오류를 공통 분기한다. requestSessionId는 이 오류를 낸 요청이 대상으로
   // 삼은 회기다(최신 detailSessionId가 아니라 요청 변수에서 받는다).
@@ -376,14 +416,17 @@ export default function SessionRecord() {
       // 회기 목록·상세 캐시는 건드리지 않는다(원문이 섞이지 않아야 한다). 비공개 query만 갱신한다.
       // 언마운트 후에는 쓰지 않는다 — isMountedRef 선언부 주석 참고(gcTime: 0을 못 받는 새
       // 엔트리가 생겨 원문이 기본 gcTime(5분)만큼 캐시에 남는 것을 막는다).
-      if (isMountedRef.current) {
-        queryClient.setQueryData(counselingPrivateRecordQueryKey(sessionId), data);
-      }
-      // 화면에 보이는 로컬 입력·토스트는 isPrivateRecordScreenFor를 거친 뒤에만 갱신한다.
-      if (isPrivateRecordScreenFor(sessionId)) {
-        setPrivateContentInput(data.privateContent ?? '');
-        toast('비공개 기록을 임시저장했습니다.', 'success');
-      }
+      if (!isPrivateRecordScreenFor(sessionId)) return;
+
+      const queryUpdated = updatePrivateRecordQueryIfPresent(
+        queryClient,
+        counselingPrivateRecordQueryKey(sessionId),
+        data,
+      );
+
+      if (!queryUpdated) return;
+      setPrivateContentInput(data.privateContent ?? '');
+      toast('비공개 기록을 임시저장했습니다.', 'success');
     },
     onError: (mutationError, { sessionId }) =>
       onPrivateRecordMutationError(mutationError, sessionId),
@@ -394,13 +437,17 @@ export default function SessionRecord() {
     mutationFn: (sessionId) => confirmCounselingPrivateRecord(sessionId),
     onSuccess: (data, sessionId) => {
       // 언마운트 후에는 쓰지 않는다 — savePrivateRecordMutation.onSuccess와 같은 이유.
-      if (isMountedRef.current) {
-        queryClient.setQueryData(counselingPrivateRecordQueryKey(sessionId), data);
-      }
-      if (isPrivateRecordScreenFor(sessionId)) {
-        setConfirmPrivateRecordOpen(false);
-        toast('비공개 기록을 확정했습니다.', 'success');
-      }
+      if (!isPrivateRecordScreenFor(sessionId)) return;
+
+      const queryUpdated = updatePrivateRecordQueryIfPresent(
+        queryClient,
+        counselingPrivateRecordQueryKey(sessionId),
+        data,
+      );
+
+      if (!queryUpdated) return;
+      setConfirmPrivateRecordOpen(false);
+      toast('비공개 기록을 확정했습니다.', 'success');
     },
     onError: (mutationError, sessionId) => {
       if (isPrivateRecordScreenFor(sessionId)) {
