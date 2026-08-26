@@ -37,6 +37,14 @@ const getSubmitErrorMessage = (error) => {
   return '상담 신청에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 };
 
+const isValidActiveConsent = (consent, consentPolicyId) =>
+  Number.isInteger(consentPolicyId) &&
+  consentPolicyId > 0 &&
+  consent?.consentPolicyId === consentPolicyId &&
+  consent.withdrawnAt === null &&
+  Number.isInteger(consent.userConsentId) &&
+  consent.userConsentId > 0;
+
 const ACCENT = '#0891B2';
 
 // UTC ISO 문자열을 사용자 로컬 기준 날짜/요일/시간으로 변환한다.
@@ -203,11 +211,11 @@ export default function CounselingApply({ onComplete, onBack }) {
   const hasConsentConfigError =
     !isConsentLoading && !hasConsentQueryError && requiredPersonalInfoPolicies.length !== 1;
 
-  // 내 동의 이력 중, 현재 정책에 대해 철회되지 않은(withdrawnAt == null) 이력만 "유효"로 본다.
+  // 내 동의 이력 중, 현재 정책에 대해 철회되지 않은(withdrawnAt === null) 이력만 "유효"로 본다.
   const activeConsent = useMemo(
     () =>
       myConsents.find(
-        (c) => c.consentPolicyId === currentPolicy?.consentPolicyId && c.withdrawnAt == null,
+        (c) => isValidActiveConsent(c, currentPolicy?.consentPolicyId),
       ),
     [myConsents, currentPolicy],
   );
@@ -242,13 +250,20 @@ export default function CounselingApply({ onComplete, onBack }) {
     try {
       await agreeMutation.mutateAsync();
       setConsentChecked(false);
-      await Promise.all([
+      const [, refreshedMyConsentsResult] = await Promise.all([
         queryClient.invalidateQueries(
           { queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] },
           { throwOnError: true },
         ),
-        queryClient.invalidateQueries({ queryKey: ['myConsents'] }, { throwOnError: true }),
+        refetchMyConsents({ throwOnError: true }),
       ]);
+      const hasValidRefreshedConsent = refreshedMyConsentsResult.data?.some((consent) =>
+        isValidActiveConsent(consent, currentPolicy.consentPolicyId),
+      );
+      if (!hasValidRefreshedConsent) {
+        setConsentError('동의 처리 후 유효한 동의 기록을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
       setStep(1);
     } catch (error) {
       if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.CONSENT_CONFLICT) {
@@ -258,7 +273,7 @@ export default function CounselingApply({ onComplete, onBack }) {
           const consents = await fetchMyConsents();
           queryClient.setQueryData(['myConsents'], consents);
           const stillActive = consents.some(
-            (c) => c.consentPolicyId === currentPolicy.consentPolicyId && c.withdrawnAt == null,
+            (c) => isValidActiveConsent(c, currentPolicy.consentPolicyId),
           );
           if (stillActive) {
             setConsentChecked(false);
