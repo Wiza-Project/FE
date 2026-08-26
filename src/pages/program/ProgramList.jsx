@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { fetchPrograms } from '@/api/programs';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchPrograms, fetchCompetencyOptions } from '@/api/programs';
 import { applyToProgram } from '@/api/programApplications';
 import { PageHeader, StatusBadge, Pagination, Button, Modal, toast } from '@/components/common';
 import { formatDate } from '@/utils/date';
-import { fetchAllPages } from '@/utils/pagination';
 
 const ACCENT = '#2563EB';
 
@@ -25,30 +25,16 @@ const toRow = (dto) => ({
   myApplicationStatusLabel: dto.myApplicationStatusLabel ?? null,
 });
 
-// 백엔드 상태 라벨(programStatusLabel)은 화면마다 매핑이 달라 신뢰하기 어려워,
-// 모집 기간(recruitmentStartsAt~recruitmentEndsAt)을 직접 비교해 "모집중" 여부를 판단한다.
-const isRecruiting = (p) => {
-  if (!p.recruitStart || !p.recruitEnd) return false;
-  const now = Date.now();
-  return new Date(p.recruitStart).getTime() <= now && now <= new Date(p.recruitEnd).getTime();
-};
-
-// value는 백엔드 Competency.competencyName과 정확히 일치해야 필터가 걸린다(DB 조회로 확인한 실제 값).
-const COMP_OPTIONS = [
-  { value: '', label: '핵심역량 전체' },
-  { value: '자기관리 역량', label: '자기관리' },
-  { value: '의사소통 역량', label: '의사소통' },
-  { value: '글로벌 역량', label: '글로벌' },
-  { value: '대인관계 역량', label: '대인관계' },
-  { value: '종합적 사고역량', label: '종합적 사고력' },
-  { value: '자원·정보·기술 활용 역량', label: '자원·정보·기술 활용' },
-];
-
 const SORT_OPTIONS = [
   { value: 'new', label: '신규순' },
   { value: 'deadline', label: '마감임박순' },
-  { value: 'recommend', label: '추천순' },
 ];
+
+// 백엔드 정렬 화이트리스트(createdAt/recruitmentEndsAt/programName)에 맞춘 매핑.
+const SORT_PARAM = {
+  new: 'createdAt,desc',
+  deadline: 'recruitmentEndsAt,asc',
+};
 
 const COMP_COLORS = {
   자기관리: '#2563EB',
@@ -88,43 +74,51 @@ export default function ProgramList({ onDetail, onMyApplications }) {
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
-  const [allPrograms, setAllPrograms] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [reloadKey, setReloadKey] = useState(0);
   const [applyTarget, setApplyTarget] = useState(null);
   const [agreed, setAgreed] = useState(false);
   const [applying, setApplying] = useState(false);
   const PAGE_SIZE = 10;
 
-  // 핵심역량/모집중 칩 필터가 백엔드 쿼리 파라미터로 지원되지 않아,
-  // 검색어(keyword)에 해당하는 전체 목록을 한 번에 받아와 필터링·페이지네이션을 프론트에서 처리한다.
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetchAllPages((p) =>
+  const queryClient = useQueryClient();
+
+  const status = chip === '모집중' ? 'DRAFT' : undefined;
+  const competencyId = comp || undefined;
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['studentPrograms', { status, competencyId, keyword: submittedKeyword, sort, page }],
+    queryFn: () =>
       fetchPrograms({
+        status,
+        competencyId,
         keyword: submittedKeyword || undefined,
-        sort: 'createdAt,desc',
-        ...p,
+        sort: SORT_PARAM[sort],
+        page: page - 1,
+        size: PAGE_SIZE,
       }),
-    )
-      .then((content) => {
-        if (cancelled) return;
-        setAllPrograms(content.map(toRow));
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err.message ?? '프로그램 목록을 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [submittedKeyword, reloadKey]);
+  });
+
+  const { data: competencyOptionsData } = useQuery({
+    queryKey: ['competencyOptions'],
+    queryFn: fetchCompetencyOptions,
+  });
+
+  const COMP_OPTIONS = [
+    { value: '', label: '핵심역량 전체' },
+    ...(competencyOptionsData ?? []).map((c) => ({
+      value: String(c.competencyId),
+      label: c.competencyName,
+    })),
+  ];
+
+  useEffect(() => {
+    if (!data) return;
+    const lastPage = Math.max(1, data.totalPages || 1);
+    if (page > lastPage) setPage(lastPage);
+  }, [data, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [comp, chip, sort]);
 
   const openApply = (p) => {
     setAgreed(false);
@@ -147,7 +141,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
         toast('신청이 완료되었습니다.', 'success');
       }
       setApplyTarget(null);
-      setReloadKey((k) => k + 1);
+      queryClient.invalidateQueries({ queryKey: ['studentPrograms'] });
     } catch (err) {
       toast(err.message ?? '신청에 실패했습니다.', 'danger');
     } finally {
@@ -155,27 +149,12 @@ export default function ProgramList({ onDetail, onMyApplications }) {
     }
   };
 
-  const CHIPS = [
-    { label: '전체', count: allPrograms.length },
-    { label: '모집중', count: allPrograms.filter(isRecruiting).length },
-  ];
+  const CHIPS = ['전체', '모집중'];
 
-  const filtered = allPrograms.filter(
-    (p) => (!comp || p.competency === comp) && (chip !== '모집중' || isRecruiting(p)),
-  );
-  if (sort === 'deadline') {
-    filtered.sort((a, b) => new Date(a.recruitEnd) - new Date(b.recruitEnd));
-  } else if (sort === 'recommend') {
-    const fillRate = (p) => (p.capacity > 0 ? p.applied / p.capacity : -1);
-    filtered.sort((a, b) => fillRate(b) - fillRate(a));
-  }
-  const totalItems = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  useEffect(() => {
-    setPage(1);
-  }, [comp, chip, sort]);
+  const paged = (data?.content ?? []).map(toRow);
+  const totalItems = data?.totalElements ?? 0;
+  const totalPages = Math.max(1, data?.totalPages || 1);
+  const currentPage = Math.min(page, totalPages);
 
   const runSearch = () => {
     setPage(1);
@@ -251,17 +230,14 @@ export default function ProgramList({ onDetail, onMyApplications }) {
       {/* Chip filters + sort + view toggle */}
       <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
         <div className="flex gap-1.5 flex-wrap">
-          {CHIPS.map((c) => (
+          {CHIPS.map((label) => (
             <button
-              key={c.label}
-              onClick={() => setChip(c.label)}
-              className={`px-3 py-1.5 rounded-[999px] text-[12px] font-bold transition-all border ${chip === c.label ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'}`}
-              style={chip === c.label ? { background: ACCENT } : {}}
+              key={label}
+              onClick={() => setChip(label)}
+              className={`px-3 py-1.5 rounded-[999px] text-[12px] font-bold transition-all border ${chip === label ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'}`}
+              style={chip === label ? { background: ACCENT } : {}}
             >
-              {c.label}{' '}
-              <span className={chip === c.label ? 'text-[#BFDBFE]' : 'text-[#9AA0A6]'}>
-                {c.count}
-              </span>
+              {label}
             </button>
           ))}
         </div>
@@ -304,19 +280,19 @@ export default function ProgramList({ onDetail, onMyApplications }) {
         </div>
       </div>
 
-      {error && (
+      {isError && (
         <div className="bg-white rounded-[8px] border border-[#FEE2E2] px-4 py-8 mb-4 text-center text-[13px] text-[#CF222E]">
-          {error}
+          {error?.message ?? '프로그램 목록을 불러오지 못했습니다.'}
         </div>
       )}
-      {loading && !error && (
+      {isLoading && !isError && (
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-8 mb-4 text-center text-[13px] text-[#656D76]">
           불러오는 중...
         </div>
       )}
 
       {/* TABLE VIEW */}
-      {!loading && !error && viewMode === 'table' && (
+      {!isLoading && !isError && viewMode === 'table' && (
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
@@ -427,7 +403,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
           <div className="px-4 py-3 border-t border-[#E5E7EB] flex items-center justify-between">
             <span className="text-[12px] text-[#656D76]">총 {totalItems}건</span>
             <Pagination
-              page={page}
+              page={currentPage}
               totalPages={totalPages}
               onChange={setPage}
               totalItems={totalItems}
@@ -438,7 +414,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
       )}
 
       {/* CARD VIEW */}
-      {!loading && !error && viewMode === 'card' && (
+      {!isLoading && !isError && viewMode === 'card' && (
         <>
           <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-2">
             {paged.map((p) => {
@@ -518,7 +494,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
           </div>
           <div className="mt-4">
             <Pagination
-              page={page}
+              page={currentPage}
               totalPages={totalPages}
               onChange={setPage}
               totalItems={totalItems}
