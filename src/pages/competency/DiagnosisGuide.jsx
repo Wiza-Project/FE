@@ -56,8 +56,9 @@ export default function DiagnosisGuide({ roundId, onStart, onViewResult }) {
 
   const startMutation = useMutation({
     mutationFn: async () => {
-      // 필수 동의 항목을 서버에 먼저 기록한다 — 이미 유효 동의가 있으면 멱등이라 재호출해도 안전하다.
-      for (const policy of requiredPolicies) {
+      // 체크한 항목(선택 포함)을 모두 서버에 기록한다 — 이미 유효 동의가 있으면 멱등이라 재호출해도 안전하다.
+      const checkedPolicies = policies.filter((p) => agreedIds.has(p.consentPolicyId));
+      for (const policy of checkedPolicies) {
         await agreeToConsentPolicy(policy.consentPolicyId);
       }
       return startAssessmentAttempt(roundId);
