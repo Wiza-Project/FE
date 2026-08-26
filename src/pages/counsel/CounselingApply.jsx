@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   PageHeader,
@@ -13,9 +13,12 @@ import {
   fetchAvailableSchedules,
   createCounselingReservation,
 } from '@/api/counsel';
+import { fetchConsentPolicies, fetchMyConsents, agreeToConsentPolicy } from '@/api/consent';
 import {
   APPLICATION_ROUTE,
   APPLICATION_ROUTE_LABEL,
+  CONSENT_MODULE_CODE,
+  CONSENT_TYPE,
   COUNSELING_RESERVATION_ERROR_CODE,
   COUNSELING_RESERVATION_STATUS_LABEL,
 } from '@/constants/domain';
@@ -29,11 +32,18 @@ const getSubmitErrorMessage = (error) => {
   if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
     return '신청 내용을 확인해 주세요.';
   }
-  if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
-    return '상담을 신청할 권한이 없습니다.';
-  }
+  // FORBIDDEN(A004)은 동의가 무효화된 경우로, 별도 분기에서 동의 단계로 되돌리며
+  // 전용 안내문을 보여주므로 여기서는 처리하지 않는다.
   return '상담 신청에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 };
+
+const isValidActiveConsent = (consent, consentPolicyId) =>
+  Number.isInteger(consentPolicyId) &&
+  consentPolicyId > 0 &&
+  consent?.consentPolicyId === consentPolicyId &&
+  consent.withdrawnAt === null &&
+  Number.isInteger(consent.userConsentId) &&
+  consent.userConsentId > 0;
 
 const ACCENT = '#0891B2';
 
@@ -51,6 +61,19 @@ const formatDateTime = (iso) => {
 const formatScheduleLabel = (iso) => {
   const { dateLabel, dayLabel, timeLabel } = formatDateTime(iso);
   return `${dateLabel} (${dayLabel}) ${timeLabel}`;
+};
+
+// 동의 시각은 지난 해에 기록됐을 수 있어 연도까지 표시해야 모호하지 않다.
+// 상담 일정 라벨(formatScheduleLabel)은 임박한 미래라 연도 없이도 명확하므로 그대로 둔다.
+const formatConsentTimestamp = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 // 상담사 필터 옵션과 필터링에서 같은 키 형식을 공유하도록 한 곳에서 조합한다.
@@ -148,8 +171,169 @@ export default function CounselingApply({ onComplete, onBack }) {
     select: (types) => types.filter((type) => type.applicationRoute === APPLICATION_ROUTE.DIRECT),
   });
 
-  // Step 0 — consent
-  const [agreed, setAgreed] = useState(false);
+  // Step 0 — consent. 정책 본문과 내 동의 이력을 모두 서버에서 조회한다(로컬 저장 금지).
+  const {
+    data: consentPolicies = [],
+    isLoading: isConsentPoliciesLoading,
+    isError: hasConsentPoliciesError,
+    isFetching: isConsentPoliciesFetching,
+    refetch: refetchConsentPolicies,
+  } = useQuery({
+    queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING],
+    queryFn: () => fetchConsentPolicies(CONSENT_MODULE_CODE.COUNSELING),
+  });
+  const {
+    data: myConsents = [],
+    isLoading: isMyConsentsLoading,
+    isError: hasMyConsentsError,
+    isFetching: isMyConsentsFetching,
+    refetch: refetchMyConsents,
+  } = useQuery({
+    queryKey: ['myConsents'],
+    queryFn: fetchMyConsents,
+  });
+  const isConsentLoading = isConsentPoliciesLoading || isMyConsentsLoading;
+  const isConsentFetching = isConsentPoliciesFetching || isMyConsentsFetching;
+  const hasConsentQueryError = hasConsentPoliciesError || hasMyConsentsError;
+  const refetchConsent = () => {
+    refetchConsentPolicies();
+    refetchMyConsents();
+  };
+
+  // 상담 신청에 필요한 정책은 "개인정보 처리 필수 동의" 정확히 1건이어야 한다.
+  // 0건 또는 2건 이상이면 정책 설정 오류이므로, 임의로 하나를 골라 진행하지 않고 신청 자체를 막는다.
+  const requiredPersonalInfoPolicies = useMemo(
+    () => consentPolicies.filter((p) => p.consentType === CONSENT_TYPE.PERSONAL_INFO && p.required === true),
+    [consentPolicies],
+  );
+  const currentPolicy =
+    requiredPersonalInfoPolicies.length === 1 ? requiredPersonalInfoPolicies[0] : null;
+  const hasConsentConfigError =
+    !isConsentLoading && !hasConsentQueryError && requiredPersonalInfoPolicies.length !== 1;
+
+  // 내 동의 이력 중, 현재 정책에 대해 철회되지 않은(withdrawnAt === null) 이력만 "유효"로 본다.
+  const activeConsent = useMemo(
+    () =>
+      myConsents.find(
+        (c) => isValidActiveConsent(c, currentPolicy?.consentPolicyId),
+      ),
+    [myConsents, currentPolicy],
+  );
+  const activeConsentId = activeConsent?.userConsentId ?? null;
+
+  // 체크박스는 서버 동의 기록 없이는 아무 의미가 없는 일시 UI 상태일 뿐이다.
+  const [consentChecked, setConsentChecked] = useState({
+    checked: false,
+    consentPolicyId: null,
+    version: null,
+  });
+  const [consentError, setConsentError] = useState('');
+  const [isConsentRefreshing, setIsConsentRefreshing] = useState(false);
+  useEffect(() => {
+    setConsentChecked({ checked: false, consentPolicyId: null, version: null });
+  }, [currentPolicy?.consentPolicyId, currentPolicy?.version]);
+  const agreeMutation = useMutation({
+    mutationFn: (consentPolicyId) => agreeToConsentPolicy(consentPolicyId),
+  });
+  const returnToConsentStep = () => {
+    setConsentChecked({ checked: false, consentPolicyId: null, version: null });
+    setSubmitError('');
+    setStep(0);
+  };
+
+  // 정책 변경이나 동의 철회가 오래된 Query 캐시에 남지 않도록 서버의 최신 상태를 확인한다.
+  const refreshConsentState = async () => {
+    const [policiesResult, consentsResult] = await Promise.all([
+      refetchConsentPolicies({ throwOnError: true }),
+      refetchMyConsents({ throwOnError: true }),
+    ]);
+    const refreshedRequiredPolicies = (policiesResult.data ?? []).filter(
+      (policy) => policy.consentType === CONSENT_TYPE.PERSONAL_INFO && policy.required === true,
+    );
+
+    if (refreshedRequiredPolicies.length !== 1) {
+      return { policy: null, consent: null };
+    }
+
+    const policy = refreshedRequiredPolicies[0];
+    const consent = (consentsResult.data ?? []).find((item) =>
+      isValidActiveConsent(item, policy.consentPolicyId),
+    );
+    return { policy, consent: consent ?? null };
+  };
+
+  // "동의하고 다음" 버튼 핸들러. 최신 정책과 동의 이력을 재확인한 뒤,
+  // 유효한 동의가 있으면 다음 단계로 넘어가고, 없으면 최신 정책에 동의한 뒤 진행한다.
+  const handleAgreeAndNext = async () => {
+    if (agreeMutation.isPending || isConsentRefreshing || !currentPolicy) {
+      return;
+    }
+    setConsentError('');
+    setIsConsentRefreshing(true);
+    try {
+      const initialConsentState = await refreshConsentState();
+      if (!initialConsentState.policy) {
+        setConsentError('동의 처리 후 유효한 동의 정책을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+
+      if (initialConsentState.consent) {
+        setConsentChecked({ checked: false, consentPolicyId: null, version: null });
+        setStep(1);
+        return;
+      }
+
+      if (
+        initialConsentState.policy.consentPolicyId !== currentPolicy.consentPolicyId ||
+        initialConsentState.policy.version !== currentPolicy.version
+      ) {
+        setConsentChecked({ checked: false, consentPolicyId: null, version: null });
+        setConsentError('동의 정책이 변경되었습니다. 최신 내용을 확인한 뒤 다시 동의해 주세요.');
+        return;
+      }
+
+      if (
+        !consentChecked.checked ||
+        consentChecked.consentPolicyId !== currentPolicy.consentPolicyId ||
+        consentChecked.version !== currentPolicy.version
+      ) {
+        setConsentError('기존 동의가 더 이상 유효하지 않습니다. 동의 내용을 확인한 뒤 동의에 체크해 주세요.');
+        return;
+      }
+
+      await agreeMutation.mutateAsync(initialConsentState.policy.consentPolicyId);
+      setConsentChecked({ checked: false, consentPolicyId: null, version: null });
+
+      const consentStateAfterAgree = await refreshConsentState();
+      if (!consentStateAfterAgree.policy) {
+        setConsentError('동의 처리 후 유효한 동의 정책을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+      if (!consentStateAfterAgree.consent) {
+        setConsentError('동의 처리 후 유효한 동의 기록을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+      setStep(1);
+    } catch (error) {
+      if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.CONSENT_CONFLICT) {
+        // 동시에 들어온 다른 요청이 먼저 동의를 기록했을 수 있다. 이력을 한 번만 재조회해
+        // 이미 유효한 동의가 생겼는지 확인하고, 없으면 조용히 넘어가지 않고 오류로 멈춘다.
+        try {
+          const consentStateAfterConflict = await refreshConsentState();
+          if (consentStateAfterConflict.policy && consentStateAfterConflict.consent) {
+            setConsentChecked({ checked: false, consentPolicyId: null, version: null });
+            setStep(1);
+            return;
+          }
+        } catch {
+          // 재조회 자체가 실패하면 아래 공통 오류 메시지로 떨어진다.
+        }
+      }
+      setConsentError('동의 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setIsConsentRefreshing(false);
+    }
+  };
 
   // Step 1 — type
   const [selectedType, setSelectedType] = useState(null);
@@ -193,7 +377,21 @@ export default function CounselingApply({ onComplete, onBack }) {
       queryClient.invalidateQueries({ queryKey: ['availableSchedules'] });
       setStep(3);
     },
-    onError: (error) => {
+    onError: async (error) => {
+      // A004: 제출에 쓴 동의가 무효·철회되었거나 본인 것이 아니라는 뜻이다.
+      // 서버가 최종 판정한 결과이므로 자동으로 다시 동의 처리하지 않고, 동의 단계로 되돌려
+      // 최신 이력을 다시 조회해서 사용자가 직접 재확인하게 한다.
+      if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] }),
+          queryClient.invalidateQueries({ queryKey: ['myConsents'] }),
+        ]);
+        // submitError는 2단계 알림 영역에서만 렌더되므로, 되돌아갈 0단계에서 보이도록
+        // 동일한 내용을 consentError로도 남긴다.
+        setConsentError('동의가 만료되었거나 철회되어 신청할 수 없습니다. 동의 내용을 다시 확인해 주세요.');
+        returnToConsentStep();
+        return;
+      }
       setSubmitError(getSubmitErrorMessage(error));
       if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
         setSelectedSlot(null);
@@ -227,9 +425,9 @@ export default function CounselingApply({ onComplete, onBack }) {
 
   const chosenSlot = schedules.find((s) => s.scheduleId === selectedSlot);
 
-  const handleFinalSubmit = () => {
+  const handleFinalSubmit = async () => {
     // 이미 요청이 진행 중이면 중복 제출을 막는다.
-    if (createReservationMutation.isPending) {
+    if (createReservationMutation.isPending || isConsentRefreshing) {
       return;
     }
     // 다이얼로그가 열린 사이 일정이 갱신돼 선택 슬롯이 사라졌을 수 있다.
@@ -242,20 +440,40 @@ export default function CounselingApply({ onComplete, onBack }) {
       }
       return;
     }
-
-    setCompletionInfo({
-      typeName: chosenType.typeName,
-      counselorName: chosenSlot.counselorName,
-      startsAt: chosenSlot.startsAt,
-      location: chosenSlot.location,
-    });
     setSubmitConfirm(false);
-    createReservationMutation.mutate({
-      counselingTypeId: chosenType.counselingTypeId,
-      scheduleId: chosenSlot.scheduleId,
-      requestContent: memo.trim(),
-      // TODO(consent): 공통 동의 API와 정책 확정 후 consentId를 연동한다.
-    });
+    setIsConsentRefreshing(true);
+    try {
+      // 예약 요청 직전에도 최신 동의 ID를 확인해 오래된 Query 캐시를 사용하지 않는다.
+      const currentConsentState = await refreshConsentState();
+      if (!currentConsentState.policy) {
+        setConsentError('동의 정보를 확인하지 못해 신청할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+        returnToConsentStep();
+        return;
+      }
+      if (!currentConsentState.consent) {
+        setConsentError('동의가 유효하지 않아 신청을 진행할 수 없습니다. 동의 내용을 다시 확인해 주세요.');
+        returnToConsentStep();
+        return;
+      }
+
+      setCompletionInfo({
+        typeName: chosenType.typeName,
+        counselorName: chosenSlot.counselorName,
+        startsAt: chosenSlot.startsAt,
+        location: chosenSlot.location,
+      });
+      createReservationMutation.mutate({
+        counselingTypeId: chosenType.counselingTypeId,
+        scheduleId: chosenSlot.scheduleId,
+        requestContent: memo.trim(),
+        consentId: currentConsentState.consent.userConsentId,
+      });
+    } catch {
+      setConsentError('동의 정보를 확인하지 못해 신청할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+      returnToConsentStep();
+    } finally {
+      setIsConsentRefreshing(false);
+    }
   };
 
   return (
@@ -284,94 +502,105 @@ export default function CounselingApply({ onComplete, onBack }) {
       {/* ══════════════════════════════════════════════════════════════ */}
       {step === 0 && (
         <div className="max-w-[640px] flex flex-col gap-4">
-          {/* Consent card */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
-              <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-              <h2 className="text-[14px] font-bold text-[#1F2328]">상담 정보 처리 동의</h2>
-              <span className="ml-auto text-[10px] font-black px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
-                필수
-              </span>
-            </div>
-            <div className="px-5 py-5 text-[13px] leading-relaxed text-[#444D56]">
-              <p className="font-bold text-[#1F2328] mb-3">한국대학교 학생상담 정보 처리 방침</p>
-              <p className="mb-3">
-                한국대학교(이하 &quot;학교&quot;)는 학생의 심리적 건강 증진과 성장 지원을 목적으로
-                상담 서비스를 운영하며, 이 과정에서 수집되는 개인정보를 다음과 같이 처리합니다.
-              </p>
-              <ol className="list-decimal list-inside space-y-2 text-[12px] text-[#656D76] mb-4">
-                <li>
-                  <strong className="text-[#1F2328]">수집 항목:</strong> 이름, 학번, 학과, 연락처,
-                  상담 내용 및 기록
-                </li>
-                <li>
-                  <strong className="text-[#1F2328]">이용 목적:</strong> 상담 서비스 제공, 사례
-                  관리, 위기 개입, 교육통계 분석(비식별화)
-                </li>
-                <li>
-                  <strong className="text-[#1F2328]">보유 기간:</strong> 졸업 후 5년간 보관 후 파기
-                </li>
-                <li>
-                  <strong className="text-[#1F2328]">비밀보장 예외:</strong> 자해·타해 위험, 아동
-                  학대 신고 의무, 법원 명령이 있는 경우
-                </li>
-                <li>
-                  <strong className="text-[#1F2328]">제3자 제공:</strong> 원칙적으로 외부 제공 불가.
-                  위기 상황 시 보호자·응급기관 연락 가능
-                </li>
-              </ol>
-              <div className="bg-[#F0FDFE] border border-[#A5F3FC] rounded-[6px] px-4 py-3 text-[12px] text-[#164E63]">
-                위 내용을 충분히 읽고 이해하였으며, 상담 정보 수집 및 처리에 동의합니다. 동의를
-                거부할 권리가 있으나, 거부 시 상담 서비스 이용이 제한됩니다.
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t border-[#E5E7EB] bg-[#F9FAFB]">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  className="w-5 h-5 rounded-[4px] flex-shrink-0"
-                  style={{ accentColor: ACCENT }}
-                />
-                <span className="text-[13px] font-semibold text-[#1F2328]">
-                  위 상담 정보 처리 방침을 읽었으며 이에 동의합니다.
-                </span>
-              </label>
-            </div>
-          </div>
+          {/* 정책·이력 로딩 중 */}
+          {isConsentLoading && <SkeletonLoader rows={4} cols={1} />}
 
-          {/* Consent history */}
-          <div className="px-4 py-3 bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB]">
-            <p className="text-[11px] font-semibold text-[#9AA0A6] mb-1.5 uppercase tracking-wide">
-              동의 이력
-            </p>
-            <div className="flex flex-col gap-1">
-              {[
-                { ver: 'v2.1', date: '2026-03-01 09:22', note: '현재 버전' },
-                { ver: 'v2.0', date: '2025-09-01 10:05', note: '이전 동의' },
-              ].map((h) => (
-                <div key={h.ver} className="flex items-center gap-3 text-[11px] text-[#9AA0A6]">
-                  <span className="font-mono font-bold">{h.ver}</span>
-                  <span>{h.date}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-[4px] bg-[#E5E7EB] text-[#656D76]">
-                    {h.note}
+          {/* 정책 또는 이력 조회 자체가 실패한 경우. "동의 없음"으로 단정하지 않고 재시도를 안내한다. */}
+          {!isConsentLoading && hasConsentQueryError && (
+            <div role="alert" className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-5 py-4">
+              <p className="text-[13px] font-bold text-[#7F1D1D]">동의 정보를 불러오지 못했습니다.</p>
+              <p className="text-[12px] text-[#CF222E] mt-1 mb-3">잠시 후 다시 시도해 주세요.</p>
+              <Button size="sm" variant="outline" loading={isConsentFetching} onClick={refetchConsent}>
+                다시 시도
+              </Button>
+            </div>
+          )}
+
+          {/* 필수 개인정보 동의 정책이 정확히 1건이 아닌 설정 오류. 임의로 하나를 골라 진행하지 않는다. */}
+          {!isConsentLoading && !hasConsentQueryError && hasConsentConfigError && (
+            <div role="alert" className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-5 py-4">
+              <p className="text-[13px] font-bold text-[#7F1D1D]">
+                상담 신청을 위한 동의 항목 설정에 문제가 있어 신청을 진행할 수 없습니다.
+              </p>
+              <p className="text-[12px] text-[#CF222E] mt-1">상담센터에 문의해 주세요.</p>
+            </div>
+          )}
+
+          {!isConsentLoading && !hasConsentQueryError && !hasConsentConfigError && currentPolicy && (
+            <>
+              {/* Consent card */}
+              <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+                <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
+                  <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
+                  <h2 className="text-[14px] font-bold text-[#1F2328]">{currentPolicy.title}</h2>
+                  <span className="text-[10px] font-mono text-[#9AA0A6]">v{currentPolicy.version}</span>
+                  <span className="ml-auto text-[10px] font-black px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
+                    필수
                   </span>
                 </div>
-              ))}
-            </div>
-          </div>
+                {/* content는 서버가 내려주는 plain text다. HTML로 신뢰하지 않으므로 그대로 escape되어 렌더된다. */}
+                <div className="px-5 py-5 text-[13px] leading-relaxed text-[#444D56] whitespace-pre-wrap">
+                  {currentPolicy.content}
+                </div>
+                <div className="px-5 py-4 border-t border-[#E5E7EB] bg-[#F9FAFB]">
+                  {activeConsentId ? (
+                    <div className="flex items-center gap-2 text-[13px] font-semibold text-[#1A7F37]">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1A7F37" strokeWidth="1.8" strokeLinecap="round">
+                        <circle cx="8" cy="8" r="7" fill="#DCFCE7" />
+                        <path d="M5 8l2 2 4-4" />
+                      </svg>
+                      <span>
+                        이미 동의했습니다.
+                        {activeConsent?.consentedAt &&
+                          ` (동의일시: ${formatConsentTimestamp(activeConsent.consentedAt)})`}
+                      </span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={consentChecked.checked}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setConsentChecked({
+                            checked,
+                            consentPolicyId: checked ? currentPolicy.consentPolicyId : null,
+                            version: checked ? currentPolicy.version : null,
+                          });
+                        }}
+                        className="w-5 h-5 rounded-[4px] flex-shrink-0"
+                        style={{ accentColor: ACCENT }}
+                      />
+                      <span className="text-[13px] font-semibold text-[#1F2328]">
+                        위 상담 정보 처리 방침을 읽었으며 이에 동의합니다.
+                      </span>
+                    </label>
+                  )}
+                </div>
+              </div>
 
-          <div className="flex justify-end">
-            <Button
-              size="md"
-              disabled={!agreed}
-              style={agreed ? { background: ACCENT } : {}}
-              onClick={() => setStep(1)}
-            >
-              동의하고 다음 →
-            </Button>
-          </div>
+              {consentError && (
+                <div role="alert" className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-4 py-3 text-[13px] font-semibold text-[#CF222E]">
+                  {consentError}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  size="md"
+                  disabled={
+                    ((!activeConsentId && !consentChecked.checked) || agreeMutation.isPending) ||
+                    isConsentRefreshing
+                  }
+                  loading={agreeMutation.isPending || isConsentRefreshing}
+                  style={activeConsentId || consentChecked.checked ? { background: ACCENT } : {}}
+                  onClick={handleAgreeAndNext}
+                >
+                  동의하고 다음 →
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -524,7 +753,7 @@ export default function CounselingApply({ onComplete, onBack }) {
           </div>
 
           <div className="flex gap-2 justify-between">
-            <Button size="sm" variant="secondary" onClick={() => setStep(0)}>
+            <Button size="sm" variant="secondary" onClick={returnToConsentStep}>
               ← 이전
             </Button>
             <Button
@@ -704,8 +933,8 @@ export default function CounselingApply({ onComplete, onBack }) {
             </Button>
             <Button
               size="md"
-              disabled={!chosenSlot || createReservationMutation.isPending}
-              loading={createReservationMutation.isPending}
+              disabled={!chosenSlot || createReservationMutation.isPending || isConsentRefreshing}
+              loading={createReservationMutation.isPending || isConsentRefreshing}
               style={chosenSlot ? { background: ACCENT } : {}}
               onClick={() => {
                 if (!chosenSlot) {
@@ -820,6 +1049,7 @@ export default function CounselingApply({ onComplete, onBack }) {
         title="상담 신청 확인"
         message={`${chosenSlot ? formatScheduleLabel(chosenSlot.startsAt) : ''} · ${chosenSlot?.counselorName ?? ''}\n\n위 일정으로 상담을 신청하시겠습니까?`}
         confirmLabel="신청하기"
+        loading={createReservationMutation.isPending || isConsentRefreshing}
         onConfirm={handleFinalSubmit}
         onCancel={() => setSubmitConfirm(false)}
       />

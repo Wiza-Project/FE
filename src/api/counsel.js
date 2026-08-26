@@ -100,6 +100,7 @@ export const fetchCounselingReservations = async ({ page = 0, size = 20 } = {}) 
  * @property {number} counselingTypeId 0보다 큰 상담 유형 ID
  * @property {number} scheduleId 0보다 큰 상담 일정 ID
  * @property {string} requestContent 공백만으로 구성될 수 없다.
+ * @property {number} consentId 0보다 큰 본인 소유 COUNSELING+PERSONAL_INFO 동의 ID
  */
 
 /**
