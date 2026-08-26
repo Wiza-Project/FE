@@ -234,6 +234,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
             <button
               key={label}
               onClick={() => setChip(label)}
+              aria-pressed={chip === label}
               className={`px-3 py-1.5 rounded-[999px] text-[12px] font-bold transition-all border ${chip === label ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'}`}
               style={chip === label ? { background: ACCENT } : {}}
             >
