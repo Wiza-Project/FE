@@ -141,6 +141,8 @@ export default function SessionRecord() {
     enabled: detailSessionId !== null,
   });
 
+  // 페이지·필터별로 나뉜 회기 목록 캐시를 접두사만으로 한 번에 무효화한다(TanStack Query는
+  // queryKey가 이 배열로 시작하는 모든 캐시를 대상으로 삼는다).
   const invalidateList = () => queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
   const invalidateDetail = () => {
     if (detailSessionId !== null) {
@@ -225,6 +227,7 @@ export default function SessionRecord() {
     onError: onActionError,
   });
 
+  // 요청 진행 중에는 모달을 닫지 못하게 해 처리 결과(성공 토스트·오류 메시지)를 놓치지 않게 한다.
   const isMutating =
     followUpMutation.isPending || completeMutation.isPending || cancelMutation.isPending;
 
@@ -258,8 +261,12 @@ export default function SessionRecord() {
       setFormError('종료 시각은 시작 시각보다 이후여야 합니다.');
       return;
     }
+    // 서버 계약(startsAt <= now)과 동일한 조건을 미리 걸러 불필요한 요청과 INVALID_STATE
+    // 왕복을 줄인다. 후속 회기는 미래 예약이 아니라 지난 상담의 사후 등록만 허용한다.
     if (new Date(startsAt) > new Date()) {
-      setFormError('시작 시각은 현재 이전이어야 합니다. 후속 회기는 지난 상담의 사후 등록만 가능합니다.');
+      setFormError(
+        '시작 시각은 현재 이전이어야 합니다. 후속 회기는 지난 상담의 사후 등록만 가능합니다.',
+      );
       return;
     }
     setFormError('');
@@ -555,6 +562,8 @@ export default function SessionRecord() {
                     key={v}
                     className={`flex items-center gap-2 px-3 py-2 rounded-[8px] border-2 cursor-pointer transition-all text-[12px] font-bold ${attendanceInput === v ? 'border-[#374151] bg-[#F3F4F6]' : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'}`}
                   >
+                    {/* 실제 radio는 sr-only로 숨기고 감싸는 label이 시각 스타일을 대신한다.
+                        키보드·스크린리더 조작은 이 input이 그대로 담당한다. */}
                     <input
                       type="radio"
                       name="attendanceInput"
