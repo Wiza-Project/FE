@@ -1,179 +1,61 @@
-import { useState } from 'react';
-import { PageHeader, StatTile, Button, BarChart, Pagination, toast } from '@/components/common';
+import { useEffect, useState } from 'react';
+import { apiClient } from '@/api/client';
+import {
+  PageHeader,
+  StatTile,
+  Button,
+  BarChart,
+  Pagination,
+  Drawer,
+  toast,
+} from '@/components/common';
 
 const ACCENT = '#D97706';
+const DASHBOARD_PERIOD = { academicYear: 2026, semesterCode: '1' };
 
-// ── Semester trend data ──
-const TREND_DATA = [
-  { label: '2024-2', value: 180 },
-  { label: '2025-1', value: 240 },
-  { label: '2025-2', value: 320 },
-  { label: '2026-1', value: 430 },
-];
+const PAGE_SIZE = 10;
+const SOURCE_LABELS = {
+  EXTRACURRICULAR_PROGRAM: '비교과',
+  EXTERNAL_ACTIVITY: '외부활동',
+  OTHER: '기타',
+};
+const TRANSACTION_TYPE_LABELS = {
+  EARN: '적립',
+  CANCEL: '취소',
+  ADJUST: '정정',
+};
+const TRANSACTION_STATUS_LABELS = {
+  POSTED: '확정',
+  REQUESTED: '처리중',
+  REJECTED: '반려',
+};
+const BENEFIT_STATUS_LABELS = {
+  ELIGIBLE: '가능',
+  APPLIED: '신청완료',
+  INSUFFICIENT_POINTS: '점수 부족',
+  APPLICATION_NOT_OPEN: '신청 전',
+  APPLICATION_CLOSED: '신청 마감',
+};
 
-// ── Competency distribution ──
-const COMP_DATA = [
-  { label: '자기관리', value: 85 },
-  { label: '의사소통', value: 60 },
-  { label: '글로벌', value: 45 },
-  { label: '대인관계', value: 92 },
-  { label: '종합사고', value: 70 },
-  { label: '자원정보', value: 55 },
-];
-
-// ── Ledger records ──
-const LEDGER = [
-  {
-    id: '1050',
-    date: '2026-08-12',
-    source: '비교과',
-    name: '해외문화체험 워크숍',
-    type: '문화·글로벌',
-    competency: '글로벌',
-    score: 200,
-    policy: 'v2.1',
-    processor: '김담당',
-    txType: '적립',
-  },
-  {
-    id: '1049',
-    date: '2026-08-01',
-    source: '비교과',
-    name: '독서인증제',
-    type: '자기개발',
-    competency: '자기관리',
-    score: 20,
-    policy: 'v2.1',
-    processor: '이담당',
-    txType: '적립',
-  },
-  {
-    id: '1048',
-    date: '2026-07-25',
-    source: '외부활동',
-    name: 'TOEIC 860점',
-    type: '어학',
-    competency: '글로벌',
-    score: 80,
-    policy: 'v2.0',
-    processor: '시스템',
-    txType: '적립',
-  },
-  {
-    id: '1047',
-    date: '2026-07-20',
-    source: '비교과',
-    name: '진로탐색 워크숍',
-    type: '진로',
-    competency: '자기관리',
-    score: 100,
-    policy: 'v2.1',
-    processor: '박담당',
-    txType: '적립',
-  },
-  {
-    id: '1046',
-    date: '2026-07-15',
-    source: '비교과',
-    name: '리더십 캠프',
-    type: '리더십',
-    competency: '대인관계',
-    score: 150,
-    policy: 'v2.1',
-    processor: '최담당',
-    txType: '적립',
-  },
-  {
-    id: '1045',
-    date: '2026-06-30',
-    source: '비교과',
-    name: 'NCS 직업기초능력 특강',
-    type: '역량',
-    competency: '종합사고',
-    score: 60,
-    policy: 'v2.0',
-    processor: '한담당',
-    txType: '적립',
-  },
-  {
-    id: '1044',
-    date: '2026-05-20',
-    source: '비교과',
-    name: '캡스톤디자인 경진대회',
-    type: '공모전',
-    competency: '종합사고',
-    score: 200,
-    policy: 'v2.0',
-    processor: '김담당',
-    txType: '적립',
-  },
-  {
-    id: '1043',
-    date: '2026-04-10',
-    source: '외부활동',
-    name: '봉사활동 20시간',
-    type: '봉사',
-    competency: '대인관계',
-    score: 60,
-    policy: 'v2.0',
-    processor: '시스템',
-    txType: '적립',
-  },
-  {
-    id: '1042',
-    date: '2026-03-05',
-    source: '비교과',
-    name: '자기개발 세미나',
-    type: '자기개발',
-    competency: '자기관리',
-    score: 80,
-    policy: 'v2.0',
-    processor: '이담당',
-    txType: '적립',
-  },
-  {
-    id: 'C1042',
-    date: '2026-02-15',
-    source: '비교과',
-    name: '자기개발 세미나',
-    type: '자기개발',
-    competency: '자기관리',
-    score: -80,
-    policy: 'v2.0',
-    processor: '박담당',
-    txType: '취소',
-    linkedId: '1042',
-  },
-  {
-    id: '1041',
-    date: '2026-02-10',
-    source: '외부활동',
-    name: 'OPIc IH 취득',
-    type: '어학',
-    competency: '글로벌',
-    score: 70,
-    policy: 'v1.9',
-    processor: '시스템',
-    txType: '적립',
-  },
-  {
-    id: '1040',
-    date: '2026-01-20',
-    source: '외부활동',
-    name: '정보처리기사 취득',
-    type: '자격증',
-    competency: '자원정보',
-    score: 150,
-    policy: 'v1.9',
-    processor: '시스템',
-    txType: '적립',
-  },
-];
-
-// Ledger summary
-const totalEarned = LEDGER.filter((r) => r.score > 0).reduce((s, r) => s + r.score, 0);
-const totalCancelled = LEDGER.filter((r) => r.score < 0).reduce((s, r) => s + r.score, 0);
-const balance = totalEarned + totalCancelled;
+const formatPoints = (value) => Number(value ?? 0).toLocaleString('ko-KR');
+const parseDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+const formatDate = (value) => {
+  const date = parseDate(value);
+  if (!date) return '-';
+  return new Intl.DateTimeFormat('ko-KR').format(date);
+};
+const formatDateTime = (value) => {
+  const date = parseDate(value);
+  if (!date) return '-';
+  return new Intl.DateTimeFormat('ko-KR', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+};
 
 // Simulation recommendations
 const SIM_RECS = [
@@ -183,15 +65,25 @@ const SIM_RECS = [
 ];
 
 // ── Inline Trend Line Chart (SVG) ──
-function TrendChart() {
+function TrendChart({ data = [] }) {
   const W = 480;
   const H = 120;
   const PAD = { l: 36, r: 20, t: 16, b: 28 };
   const cW = W - PAD.l - PAD.r;
   const cH = H - PAD.t - PAD.b;
-  const max = Math.max(...TREND_DATA.map((d) => d.value));
-  const pts = TREND_DATA.map((d, i) => ({
-    x: PAD.l + (i / (TREND_DATA.length - 1)) * cW,
+  const chartData = Array.isArray(data) ? data : [];
+  if (chartData.length === 0) {
+    return (
+      <div className="flex h-[120px] items-center justify-center text-[12px] text-[#9AA0A6]">
+        학기별 적립 내역이 없습니다.
+      </div>
+    );
+  }
+
+  const max = Math.max(...chartData.map((d) => d.value), 1);
+  const pointDenominator = Math.max(chartData.length - 1, 1);
+  const pts = chartData.map((d, i) => ({
+    x: PAD.l + (i / pointDenominator) * cW,
     y: PAD.t + cH - (d.value / max) * cH * 0.88,
     d,
   }));
@@ -199,7 +91,13 @@ function TrendChart() {
   const areaD = `${pathD} L${pts[pts.length - 1].x},${PAD.t + cH} L${pts[0].x},${PAD.t + cH} Z`;
 
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+    <svg
+      width="100%"
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label="학기별 적립 추이 그래프"
+    >
       <defs>
         <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={ACCENT} stopOpacity="0.25" />
@@ -283,11 +181,162 @@ export default function MileageDashboard({ onExternal }) {
   const [tab, setTab] = useState('dashboard');
   const [simTarget, setSimTarget] = useState(1500);
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 8;
+  const [dashboardData, setDashboardData] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState('');
+  const [gradeData, setGradeData] = useState(null);
+  const [gradeLoading, setGradeLoading] = useState(true);
+  const [gradeError, setGradeError] = useState('');
+  const [ledgerData, setLedgerData] = useState(null);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState('');
+  const [selectedTransactionId, setSelectedTransactionId] = useState(null);
+  const [transactionDetail, setTransactionDetail] = useState(null);
+  const [transactionDetailLoading, setTransactionDetailLoading] = useState(false);
+  const [transactionDetailError, setTransactionDetailError] = useState('');
 
-  const currentScore = 1250;
+  useEffect(() => {
+    let mounted = true;
+
+    apiClient
+      .get('/students/mileage/dashboard', { params: DASHBOARD_PERIOD })
+      .then(({ data }) => {
+        if (mounted) {
+          setDashboardData(data);
+          setDashboardError('');
+        }
+      })
+      .catch((error) => {
+        if (mounted) setDashboardError(error.message);
+      })
+      .finally(() => {
+        if (mounted) setDashboardLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    apiClient
+      .get('/students/mileage/grade', { params: DASHBOARD_PERIOD })
+      .then(({ data }) => {
+        if (mounted) {
+          setGradeData(data);
+          setGradeError('');
+        }
+      })
+      .catch((error) => {
+        if (mounted) setGradeError(error.message);
+      })
+      .finally(() => {
+        if (mounted) setGradeLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (tab !== 'ledger') return undefined;
+
+    let mounted = true;
+    setLedgerLoading(true);
+    setLedgerError('');
+
+    apiClient
+      .get('/students/mileage/transactions', {
+        params: { page: page - 1, size: PAGE_SIZE },
+      })
+      .then(({ data }) => {
+        if (mounted) {
+          setLedgerData(data);
+          setLedgerError('');
+        }
+      })
+      .catch((error) => {
+        if (mounted) setLedgerError(error.message);
+      })
+      .finally(() => {
+        if (mounted) setLedgerLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [page, tab]);
+
+  const openTransactionDetail = async (transactionId) => {
+    setSelectedTransactionId(transactionId);
+    setTransactionDetail(null);
+    setTransactionDetailError('');
+    setTransactionDetailLoading(true);
+
+    try {
+      const { data } = await apiClient.get(`/students/mileage/transactions/${transactionId}`);
+      setTransactionDetail(data);
+    } catch (error) {
+      setTransactionDetailError(error.message);
+    } finally {
+      setTransactionDetailLoading(false);
+    }
+  };
+
+  const closeTransactionDetail = () => {
+    setSelectedTransactionId(null);
+    setTransactionDetail(null);
+    setTransactionDetailError('');
+  };
+
+  const hasDashboardData = Boolean(dashboardData);
+  const currentScore = hasDashboardData
+    ? Number(dashboardData.summary?.cumulativePoints ?? 0)
+    : 0;
+  const currentSemesterScore = hasDashboardData
+    ? Number(dashboardData.summary?.currentSemesterPoints ?? 0)
+    : 0;
+  const semesterLabel = dashboardData?.period
+    ? `${dashboardData.period.academicYear}-${dashboardData.period.semesterCode}학기`
+    : '-';
+  const competencyData = (dashboardData?.competencyBreakdown ?? []).map((item) => ({
+    label: item.competencyName,
+    value: Number(item.points ?? 0),
+  }));
+  const trendData = (dashboardData?.semesterTrend ?? []).map((item) => ({
+    label: `${item.academicYear}-${item.semesterCode}`,
+    value: Number(item.points ?? 0),
+  }));
+  const benefitProgress = dashboardData?.benefitProgress ?? [];
+  const scholarshipBenefit = benefitProgress.find(
+    (item) =>
+      item.benefitName?.includes('우수') || item.benefitType?.toUpperCase().includes('SCHOLARSHIP'),
+  );
+  const scholarshipNeeded = scholarshipBenefit
+    ? Number(scholarshipBenefit.shortagePoints ?? 0)
+    : null;
+  const scholarshipTarget = scholarshipBenefit ? Number(scholarshipBenefit.targetPoints ?? 0) : null;
+  const currentGradeName = gradeData?.currentGrade?.gradeName;
+  const nextGradeName = gradeData?.nextGrade?.gradeName;
+  const pointsToNextGrade = Number(gradeData?.pointsToNextGrade ?? 0);
+  const gradeSub = gradeLoading
+    ? '등급을 불러오는 중'
+    : gradeError
+      ? '등급 조회 실패'
+      : currentGradeName
+        ? nextGradeName && pointsToNextGrade > 0
+          ? `${currentGradeName} · ${nextGradeName}까지 ${formatPoints(pointsToNextGrade)}점`
+          : `${currentGradeName} · 최고 등급`
+        : nextGradeName
+          ? `${nextGradeName}까지 ${formatPoints(pointsToNextGrade)}점`
+          : '등급 기준 없음';
   const needed = Math.max(0, simTarget - currentScore);
-  const paged = LEDGER.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const ledgerRows = ledgerData?.content ?? [];
+  const ledgerTotalItems = ledgerData?.totalElements ?? 0;
+  const ledgerTotalPages = Math.max(1, ledgerData?.totalPages ?? 1);
 
   return (
     <div>
@@ -312,6 +361,17 @@ export default function MileageDashboard({ onExternal }) {
         }
       />
 
+      {dashboardLoading && (
+        <div className="mb-4 rounded-[8px] border border-[#E5E7EB] bg-white px-4 py-3 text-[12px] text-[#656D76]">
+          마일리지 정보를 불러오는 중입니다.
+        </div>
+      )}
+      {dashboardError && !dashboardLoading && (
+        <div className="mb-4 rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[12px] text-[#92400E]">
+          실제 마일리지 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex bg-[#F3F4F6] rounded-[8px] p-1 mb-5 w-fit">
         {[
@@ -335,36 +395,64 @@ export default function MileageDashboard({ onExternal }) {
       {tab === 'dashboard' && (
         <div className="flex flex-col gap-5">
           {/* Stat tiles */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="relative">
               <StatTile
                 label="누적 마일리지"
-                value="1,250점"
-                sub="골드 등급"
+                value={
+                  dashboardLoading ? '불러오는 중' : hasDashboardData ? `${formatPoints(currentScore)}점` : '-'
+                }
+                sub={gradeSub}
                 accentColor={ACCENT}
               />
-              <span className="absolute top-4 right-4 text-[10px] font-black px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                🥇 GOLD
-              </span>
+              {currentGradeName && !gradeLoading && !gradeError && (
+                <span className="absolute right-4 top-4 rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-black text-[#D97706]">
+                  {currentGradeName}
+                </span>
+              )}
             </div>
-            <StatTile label="이번 학기 적립" value="430점" sub="2026-1학기" accentColor={ACCENT} />
             <StatTile
-              label="우수장학 인증까지"
-              value="250점 부족"
-              sub="목표 1,500점"
+              label="이번 학기 적립"
+              value={
+                dashboardLoading
+                  ? '불러오는 중'
+                  : hasDashboardData
+                    ? `${formatPoints(currentSemesterScore)}점`
+                    : '-'
+              }
+              sub={semesterLabel}
+              accentColor={ACCENT}
+            />
+            <StatTile
+              label={scholarshipBenefit?.benefitName ?? '장학·인증 기준'}
+              value={
+                !hasDashboardData
+                  ? '-'
+                  : scholarshipBenefit == null
+                    ? '기준 없음'
+                    : scholarshipNeeded === 0
+                      ? '달성'
+                      : `${formatPoints(scholarshipNeeded)}점 부족`
+              }
+              sub={
+                scholarshipTarget == null
+                  ? '백엔드 기준 없음'
+                  : `목표 ${formatPoints(scholarshipTarget)}점`
+              }
               accentColor="#CF222E"
             />
           </div>
 
           {/* Mid row: criteria table + bar chart */}
-          <div className="grid gap-4" style={{ gridTemplateColumns: '1.1fr 1fr' }}>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_1fr]">
             {/* Criteria table */}
-            <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+            <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
               <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
                 <div className="w-1 h-4 rounded-full bg-[#D97706]" />
                 <h2 className="text-[14px] font-bold text-[#1F2328]">마일리지 인증·장학 기준</h2>
               </div>
-              <table className="w-full text-[12px] border-collapse">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px] border-collapse text-[12px]">
                 <thead>
                   <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
                     {['구분', '기준 점수', '혜택', '현재 상태'].map((h) => (
@@ -378,64 +466,87 @@ export default function MileageDashboard({ onExternal }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    { name: '장학금 신청', threshold: 1000, benefit: '200,000원', ok: true },
-                    {
-                      name: '우수 마일리지 장학',
-                      threshold: 1500,
-                      benefit: '500,000원',
-                      ok: false,
-                    },
-                    { name: '핵심역량 인증', threshold: 1500, benefit: '인증서 발급', ok: false },
-                  ].map((row, i) => (
-                    <tr
-                      key={i}
-                      className={`border-b border-[#F3F4F6] last:border-0 ${row.ok ? 'bg-[#F0FDF4]' : ''}`}
-                    >
-                      <td className="px-4 py-3 font-semibold text-[#1F2328]">{row.name}</td>
-                      <td className="px-4 py-3 font-mono text-[#1F2328]">
-                        {row.threshold.toLocaleString()}점
-                      </td>
-                      <td className="px-4 py-3 text-[#656D76]">{row.benefit}</td>
-                      <td className="px-4 py-3">
-                        {row.ok ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#1A7F37]">
-                            가능
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                            250점 부족
-                          </span>
-                        )}
+                  {benefitProgress.length > 0 ? (
+                    benefitProgress.map((row) => {
+                      const rowNeeded = Number(row.shortagePoints ?? 0);
+                      const attainable = Boolean(row.canApply) || row.progressStatus === 'ELIGIBLE';
+                      const statusLabel = attainable
+                        ? '가능'
+                        : BENEFIT_STATUS_LABELS[row.progressStatus] ??
+                          `${formatPoints(rowNeeded)}점 부족`;
+
+                      return (
+                        <tr
+                          key={row.benefitPolicyId}
+                          className={`border-b border-[#F3F4F6] last:border-0 ${attainable ? 'bg-[#F0FDF4]' : ''}`}
+                        >
+                          <td className="px-4 py-3 font-semibold text-[#1F2328]">
+                            {row.benefitName}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-[#1F2328]">
+                            {formatPoints(row.targetPoints)}점
+                          </td>
+                          <td className="px-4 py-3 text-[#656D76]">
+                            {row.benefitAmount == null ? '-' : `${formatPoints(row.benefitAmount)}원`}
+                          </td>
+                          <td className="px-4 py-3">
+                            {attainable ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#1A7F37]">
+                                {statusLabel}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
+                                {statusLabel}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-[12px] text-[#9AA0A6]">
+                        {dashboardLoading
+                          ? '기준을 불러오는 중입니다.'
+                          : '등록된 인증·장학 기준이 없습니다.'}
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
 
             {/* Bar chart: competency distribution */}
-            <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+            <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
               <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
                 <div className="w-1 h-4 rounded-full bg-[#D97706]" />
                 <h2 className="text-[14px] font-bold text-[#1F2328]">역량별 적립 분포</h2>
                 <span className="ml-auto text-[11px] text-[#9AA0A6]">단위: 점</span>
               </div>
-              <div className="px-4 py-4 flex justify-center overflow-x-auto">
-                <BarChart data={COMP_DATA} color={ACCENT} height={140} unit="점" />
+              <div className="flex min-h-[188px] justify-center overflow-x-auto px-4 py-4">
+                {competencyData.length > 0 ? (
+                  <BarChart data={competencyData} color={ACCENT} height={140} unit="점" />
+                ) : (
+                  <div className="flex items-center text-[12px] text-[#9AA0A6]">
+                    역량별 적립 내역이 없습니다.
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Semester trend */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+          <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
             <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
               <div className="w-1 h-4 rounded-full bg-[#D97706]" />
               <h2 className="text-[14px] font-bold text-[#1F2328]">학기별 적립 추이</h2>
               <span className="ml-auto text-[11px] text-[#9AA0A6]">단위: 점</span>
             </div>
-            <div className="px-6 py-4">
-              <TrendChart />
+            <div className="overflow-x-auto px-6 py-4">
+              <div className="min-w-[560px]">
+                <TrendChart data={trendData} />
+              </div>
             </div>
           </div>
         </div>
@@ -446,168 +557,123 @@ export default function MileageDashboard({ onExternal }) {
       {/* ═══════════════════════════════════════════════════════ */}
       {tab === 'ledger' && (
         <div className="flex flex-col gap-4">
-          {/* FilterBar */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-3 flex items-end flex-wrap gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-            {[
-              { label: '학기', opts: ['전체', '2026-1', '2025-2', '2025-1', '2024-2'] },
-              { label: '원천', opts: ['전체', '비교과', '외부활동'] },
-              {
-                label: '활동유형',
-                opts: ['전체', '자기개발', '어학', '자격증', '봉사', '공모전', '역량'],
-              },
-            ].map((f) => (
-              <div key={f.label} className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-[#656D76] uppercase">
-                  {f.label}
-                </label>
-                <select className="h-9 px-3 pr-7 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#D97706] appearance-none">
-                  {f.opts.map((o) => (
-                    <option key={o}>{o}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold text-[#656D76] uppercase">기간</label>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="date"
-                  className="h-9 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#D97706]"
-                  defaultValue="2026-01-01"
-                />
-                <span className="text-[#9AA0A6]">~</span>
-                <input
-                  type="date"
-                  className="h-9 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#D97706]"
-                  defaultValue="2026-08-13"
-                />
-              </div>
+          <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-3 flex items-center gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <div>
+              <p className="text-[13px] font-bold text-[#1F2328]">확정 적립 원장</p>
+              <p className="text-[11px] text-[#9AA0A6] mt-0.5">
+                백엔드에 저장된 POSTED 적립 거래를 최신순으로 조회합니다.
+              </p>
             </div>
-            <Button size="sm">조회</Button>
-            <Button size="sm" variant="secondary">
-              초기화
-            </Button>
-            <Button size="sm" variant="outline" className="ml-auto">
-              엑셀 다운로드
-            </Button>
+            <span className="ml-auto text-[12px] text-[#656D76]">
+              총 {ledgerTotalItems.toLocaleString()}건
+            </span>
           </div>
 
           {/* Ledger table */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-            <table className="w-full border-collapse text-[12px]">
-              <thead>
-                <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                  {[
-                    '적립일',
-                    '원천',
-                    '활동명',
-                    '활동유형',
-                    '연계역량',
-                    '점수',
-                    '정책',
-                    '처리자',
-                    '구분',
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className={`px-3 py-3 text-[11px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${h === '활동명' ? 'text-left' : 'text-center'}`}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paged.map((row, i) => {
-                  const isCancelled = row.txType === '취소';
-                  return (
-                    <tr
-                      key={row.id}
-                      className={`border-b border-[#F3F4F6] last:border-0 ${isCancelled ? 'bg-[#FFF5F5]' : i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}
-                    >
-                      <td className="px-3 py-2.5 text-center text-[#9AA0A6] font-mono whitespace-nowrap">
-                        {row.date}
-                        {isCancelled && row.linkedId && (
-                          <div className="text-[10px] text-[#CF222E] mt-0.5">
-                            ↳ 원거래 #{row.linkedId}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${row.source === '비교과' ? 'bg-[#DBEAFE] text-[#0969DA]' : 'bg-[#F3E8FF] text-[#7C3AED]'}`}
-                        >
-                          {row.source}
-                        </span>
-                      </td>
-                      <td
-                        className={`px-3 py-2.5 font-semibold ${isCancelled ? 'text-[#CF222E] line-through' : 'text-[#1F2328]'}`}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-[12px]">
+                <thead>
+                  <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
+                    {['적립일', '원천', '활동명', '거래 유형', '점수', '상태', '상세'].map((h) => (
+                      <th
+                        key={h}
+                        className={`px-3 py-3 text-[11px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${h === '활동명' ? 'text-left' : 'text-center'}`}
                       >
-                        {row.name}
-                      </td>
-                      <td className="px-3 py-2.5 text-center text-[#656D76]">{row.type}</td>
-                      <td className="px-3 py-2.5 text-center">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                          {row.competency}
-                        </span>
-                      </td>
-                      <td
-                        className={`px-3 py-2.5 text-center font-black ${row.score < 0 ? 'text-[#CF222E]' : 'text-[#1A7F37]'}`}
-                      >
-                        {row.score > 0 ? `+${row.score}` : row.score}
-                      </td>
-                      <td className="px-3 py-2.5 text-center text-[11px] text-[#9AA0A6] font-mono">
-                        {row.policy}
-                      </td>
-                      <td className="px-3 py-2.5 text-center text-[#656D76]">{row.processor}</td>
-                      <td className="px-3 py-2.5 text-center">
-                        <span
-                          className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
-                            isCancelled
-                              ? 'bg-[#FEE2E2] text-[#CF222E]'
-                              : row.txType === '정정'
-                                ? 'bg-[#FEF3C7] text-[#D97706]'
-                                : 'bg-[#DCFCE7] text-[#1A7F37]'
-                          }`}
-                        >
-                          {row.txType}
-                        </span>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledgerLoading ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-[12px] text-[#656D76]">
+                        적립 원장을 불러오는 중입니다.
                       </td>
                     </tr>
-                  );
-                })}
-                {/* Summary row */}
-                <tr className="bg-[#F6F8FA] border-t-2 border-[#E5E7EB]">
-                  <td
-                    colSpan={5}
-                    className="px-3 py-3 text-right text-[12px] font-bold text-[#1F2328]"
-                  >
-                    합계
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    <div className="text-[11px] text-[#1A7F37] font-bold">+{totalEarned}</div>
-                    <div className="text-[11px] text-[#CF222E] font-bold">{totalCancelled}</div>
-                    <div className="text-[13px] font-black text-[#D97706] border-t border-[#E5E7EB] pt-1 mt-1">
-                      ={balance}
-                    </div>
-                  </td>
-                  <td colSpan={3} />
-                </tr>
-              </tbody>
-            </table>
+                  ) : ledgerError ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-[12px] text-[#CF222E]">
+                        적립 원장을 불러오지 못했습니다.
+                      </td>
+                    </tr>
+                  ) : ledgerRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-[12px] text-[#9AA0A6]">
+                        확정된 적립 내역이 없습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    ledgerRows.map((row, i) => {
+                      const points = Number(row.points ?? 0);
+                      const sourceLabel = SOURCE_LABELS[row.sourceType] ?? row.sourceType ?? '-';
+                      const transactionType =
+                        TRANSACTION_TYPE_LABELS[row.transactionType] ?? row.transactionType ?? '-';
+                      const statusLabel =
+                        TRANSACTION_STATUS_LABELS[row.transactionStatus] ?? row.transactionStatus ?? '-';
+
+                      return (
+                        <tr
+                          key={row.transactionId}
+                          onClick={() => openTransactionDetail(row.transactionId)}
+                          className={`cursor-pointer border-b border-[#F3F4F6] last:border-0 hover:bg-[#FFFBEB] ${i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}
+                        >
+                          <td className="px-3 py-2.5 text-center text-[#9AA0A6] font-mono whitespace-nowrap">
+                            {formatDate(row.occurredAt)}
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${row.sourceType === 'EXTRACURRICULAR_PROGRAM' ? 'bg-[#DBEAFE] text-[#0969DA]' : 'bg-[#F3E8FF] text-[#7C3AED]'}`}
+                            >
+                              {sourceLabel}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-left font-semibold text-[#1F2328]">
+                            {row.activityName ?? '-'}
+                          </td>
+                          <td className="px-3 py-2.5 text-center text-[#656D76]">{transactionType}</td>
+                          <td className="px-3 py-2.5 text-center font-black text-[#1A7F37]">
+                            {points > 0 ? '+' : ''}
+                            {formatPoints(points)}
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#DCFCE7] text-[#1A7F37]">
+                              {statusLabel}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openTransactionDetail(row.transactionId);
+                              }}
+                            >
+                              상세
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
             <div className="px-4 py-3 border-t border-[#E5E7EB] flex items-center gap-3">
               <p className="text-[11px] text-[#9AA0A6]">
-                ※ 취소·정정 건은 삭제되지 않고 별도 거래로 표시됩니다.
+                ※ 백엔드의 확정(EARN·POSTED) 적립 거래 기준입니다. 행을 클릭하면 상세 정보를 확인할 수 있습니다.
               </p>
-              <div className="ml-auto">
+              {ledgerTotalItems > 0 && (
                 <Pagination
                   page={page}
-                  totalPages={Math.ceil(LEDGER.length / PAGE_SIZE)}
+                  totalPages={ledgerTotalPages}
                   onChange={setPage}
-                  totalItems={LEDGER.length}
+                  totalItems={ledgerTotalItems}
                   pageSize={PAGE_SIZE}
                 />
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -762,6 +828,165 @@ export default function MileageDashboard({ onExternal }) {
           </div>
         </div>
       )}
+
+      <Drawer
+        open={selectedTransactionId != null}
+        onClose={closeTransactionDetail}
+        title="적립 내역 상세"
+      >
+        {transactionDetailLoading && (
+          <div className="py-10 text-center text-[12px] text-[#656D76]">
+            상세 정보를 불러오는 중입니다.
+          </div>
+        )}
+        {!transactionDetailLoading && transactionDetailError && (
+          <div className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
+            적립 내역 상세를 불러오지 못했습니다.
+          </div>
+        )}
+        {!transactionDetailLoading && !transactionDetailError && transactionDetail && (
+          <div className="flex flex-col gap-5">
+            <div className="grid grid-cols-2 gap-3 rounded-[8px] bg-[#F9FAFB] p-4 text-[12px]">
+              <div>
+                <p className="text-[#9AA0A6]">거래 번호</p>
+                <p className="mt-1 font-bold text-[#1F2328]">#{transactionDetail.transactionId}</p>
+              </div>
+              <div>
+                <p className="text-[#9AA0A6]">원천</p>
+                <p className="mt-1 font-bold text-[#1F2328]">
+                  {SOURCE_LABELS[transactionDetail.sourceType] ?? transactionDetail.sourceType ?? '-'}
+                </p>
+              </div>
+              <div>
+                <p className="text-[#9AA0A6]">적립 점수</p>
+                <p className="mt-1 font-black text-[#D97706]">
+                  +{formatPoints(transactionDetail.points)}점
+                </p>
+              </div>
+              <div>
+                <p className="text-[#9AA0A6]">처리일</p>
+                <p className="mt-1 font-bold text-[#1F2328]">
+                  {formatDateTime(transactionDetail.occurredAt)}
+                </p>
+              </div>
+            </div>
+
+            <section>
+              <h3 className="mb-2 text-[13px] font-bold text-[#1F2328]">적립 정보</h3>
+              <div className="flex flex-col gap-2 rounded-[8px] border border-[#E5E7EB] p-4 text-[12px]">
+                <div className="flex justify-between gap-3">
+                  <span className="text-[#9AA0A6]">활동명</span>
+                  <span className="text-right font-semibold text-[#1F2328]">
+                    {transactionDetail.policy?.activityName ?? '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-[#9AA0A6]">거래 상태</span>
+                  <span className="font-semibold text-[#1F2328]">
+                    {TRANSACTION_STATUS_LABELS[transactionDetail.transactionStatus] ??
+                      transactionDetail.transactionStatus ??
+                      '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-[#9AA0A6]">적립 사유</span>
+                  <span className="text-right font-semibold text-[#1F2328]">
+                    {transactionDetail.transactionReason ?? '-'}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            {transactionDetail.policy && (
+              <section>
+                <h3 className="mb-2 text-[13px] font-bold text-[#1F2328]">적용 정책</h3>
+                <div className="flex flex-col gap-2 rounded-[8px] border border-[#E5E7EB] p-4 text-[12px]">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">활동 코드</span>
+                    <span className="font-mono text-[#1F2328]">{transactionDetail.policy.activityCode ?? '-'}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">분류</span>
+                    <span className="text-[#1F2328]">{transactionDetail.policy.categoryCode ?? '-'}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">적용 학기</span>
+                    <span className="text-[#1F2328]">
+                      {transactionDetail.policy.academicYear ?? '-'}-{transactionDetail.policy.semesterCode ?? '-'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">정책 점수</span>
+                    <span className="font-semibold text-[#D97706]">
+                      {formatPoints(transactionDetail.policy.policyPoints)}점
+                    </span>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {transactionDetail.extracurricularProgram && (
+              <section>
+                <h3 className="mb-2 text-[13px] font-bold text-[#1F2328]">비교과 출처</h3>
+                <div className="flex flex-col gap-2 rounded-[8px] border border-[#E5E7EB] p-4 text-[12px]">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">프로그램명</span>
+                    <span className="text-right font-semibold text-[#1F2328]">
+                      {transactionDetail.extracurricularProgram.programName ?? '-'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">이수 상태</span>
+                    <span className="font-semibold text-[#1F2328]">
+                      {transactionDetail.extracurricularProgram.completionStatus ?? '-'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">수료증 번호</span>
+                    <span className="font-mono text-[#1F2328]">
+                      {transactionDetail.extracurricularProgram.certificateNo ?? '-'}
+                    </span>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {transactionDetail.externalActivity && (
+              <section>
+                <h3 className="mb-2 text-[13px] font-bold text-[#1F2328]">외부활동 출처</h3>
+                <div className="flex flex-col gap-2 rounded-[8px] border border-[#E5E7EB] p-4 text-[12px]">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">활동명</span>
+                    <span className="text-right font-semibold text-[#1F2328]">
+                      {transactionDetail.externalActivity.activityName ?? '-'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">활동일</span>
+                    <span className="text-[#1F2328]">
+                      {formatDate(transactionDetail.externalActivity.activityDate)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#9AA0A6]">신청 상태</span>
+                    <span className="font-semibold text-[#1F2328]">
+                      {transactionDetail.externalActivity.claimStatus ?? '-'}
+                    </span>
+                  </div>
+                  {transactionDetail.externalActivity.reviewReason && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-[#9AA0A6]">심사 의견</span>
+                      <span className="text-right text-[#1F2328]">
+                        {transactionDetail.externalActivity.reviewReason}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 }
