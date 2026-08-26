@@ -242,8 +242,11 @@ export default function CounselingApply({ onComplete, onBack }) {
       await agreeMutation.mutateAsync();
       setConsentChecked(false);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] }),
-        queryClient.invalidateQueries({ queryKey: ['myConsents'] }),
+        queryClient.invalidateQueries(
+          { queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] },
+          { throwOnError: true },
+        ),
+        queryClient.invalidateQueries({ queryKey: ['myConsents'] }, { throwOnError: true }),
       ]);
       setStep(1);
     } catch (error) {
