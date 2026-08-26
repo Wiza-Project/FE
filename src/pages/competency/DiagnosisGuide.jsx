@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { fetchAssessmentIntro, startAssessmentAttempt } from '@/api/competency';
-import { fetchConsentPolicies, agreeConsent } from '@/api/consent';
+import { fetchConsentPolicies, agreeToConsentPolicy } from '@/api/consent';
 import { ApiError } from '@/api/client';
 import { CONSENT_MODULE_CODE, ASSESSMENT_ATTEMPT_STATUS } from '@/constants/domain';
 import { formatDate } from '@/utils/date';
@@ -58,7 +58,7 @@ export default function DiagnosisGuide({ roundId, onStart, onViewResult }) {
     mutationFn: async () => {
       // 필수 동의 항목을 서버에 먼저 기록한다 — 이미 유효 동의가 있으면 멱등이라 재호출해도 안전하다.
       for (const policy of requiredPolicies) {
-        await agreeConsent(policy.consentPolicyId);
+        await agreeToConsentPolicy(policy.consentPolicyId);
       }
       return startAssessmentAttempt(roundId);
     },

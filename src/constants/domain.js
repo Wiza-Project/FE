@@ -124,6 +124,20 @@ export const COUNSELING_RESERVATION_STATUS_LABEL = {
   [COUNSELING_RESERVATION_STATUS.CANCELED]: '취소',
 };
 
+/** 동의 정책 모듈 코드 — 백엔드 ConsentModuleCode enum 기준. 코드 분기용 상수. */
+export const CONSENT_MODULE_CODE = {
+  COMMON: 'COMMON',
+  ASSESSMENT: 'ASSESSMENT',
+  COUNSELING: 'COUNSELING',
+  CAREER: 'CAREER',
+  PROGRAM: 'PROGRAM',
+};
+
+/** 동의 정책 유형 — 백엔드 ConsentType enum 기준. 코드 분기용 상수. */
+export const CONSENT_TYPE = {
+  PERSONAL_INFO: 'PERSONAL_INFO',
+};
+
 /** 학생 예약 취소 화면에서 쓰는 사유 선택값. 서버에는 표시명과 상세 사유를 합친 문자열만 전송한다. */
 export const COUNSELING_CANCELLATION_REASON = {
   PERSONAL: 'PERSONAL',
@@ -146,6 +160,8 @@ export const COUNSELING_RESERVATION_ERROR_CODE = {
   FORBIDDEN: 'A004',
   /** 이미 처리(승인/반려)된 예약을 다시 승인·반려하려 할 때. 상담사 승인·반려 API 전용. */
   ALREADY_PROCESSED: 'S005',
+  /** 동일 정책에 동시에 동의 요청이 들어와 충돌한 경우. 동의(POST /consents) API 전용. */
+  CONSENT_CONFLICT: 'U012',
 };
 
 /** 상담 회기의 출석 상태 — CounselingSessionResponse.attendanceStatus. */
@@ -190,15 +206,6 @@ export const COUNSELING_SESSION_ERROR_CODE = {
   TIME_CONFLICT: 'S002',
   /** 종료된 배정, PLANNED가 아닌 회기의 완료·취소, 미래 후속 회기 생성 등 상태 위반 */
   INVALID_STATE: 'S008',
-};
-
-/** 동의 정책의 모듈 분류 — ConsentPolicy.moduleCode. */
-export const CONSENT_MODULE_CODE = {
-  COMMON: 'COMMON',
-  ASSESSMENT: 'ASSESSMENT',
-  COUNSELING: 'COUNSELING',
-  CAREER: 'CAREER',
-  PROGRAM: 'PROGRAM',
 };
 
 /** 학생 진단 응시(attempt)의 서버 상태 — AssessmentAttempt.attemptStatus. */
