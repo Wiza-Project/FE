@@ -221,6 +221,7 @@ export default function CounselingApply({ onComplete, onBack }) {
   });
   const returnToConsentStep = () => {
     setConsentChecked(false);
+    setSubmitError('');
     setStep(0);
   };
 
