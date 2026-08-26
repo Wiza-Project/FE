@@ -250,15 +250,20 @@ export default function CounselingApply({ onComplete, onBack }) {
     try {
       await agreeMutation.mutateAsync();
       setConsentChecked(false);
-      const [, refreshedMyConsentsResult] = await Promise.all([
-        queryClient.invalidateQueries(
-          { queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] },
-          { throwOnError: true },
-        ),
+      const [refreshedPoliciesResult, refreshedMyConsentsResult] = await Promise.all([
+        refetchConsentPolicies({ throwOnError: true }),
         refetchMyConsents({ throwOnError: true }),
       ]);
+      const refreshedRequiredPolicies = refreshedPoliciesResult.data?.filter(
+        (policy) => policy.consentType === CONSENT_TYPE.PERSONAL_INFO && policy.required === true,
+      );
+      if (refreshedRequiredPolicies?.length !== 1) {
+        setConsentError('동의 처리 후 유효한 동의 정책을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+      const refreshedPolicy = refreshedRequiredPolicies[0];
       const hasValidRefreshedConsent = refreshedMyConsentsResult.data?.some((consent) =>
-        isValidActiveConsent(consent, currentPolicy.consentPolicyId),
+        isValidActiveConsent(consent, refreshedPolicy.consentPolicyId),
       );
       if (!hasValidRefreshedConsent) {
         setConsentError('동의 처리 후 유효한 동의 기록을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
