@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   PageHeader,
@@ -222,14 +222,21 @@ export default function CounselingApply({ onComplete, onBack }) {
   const activeConsentId = activeConsent?.userConsentId ?? null;
 
   // 체크박스는 서버 동의 기록 없이는 아무 의미가 없는 일시 UI 상태일 뿐이다.
-  const [consentChecked, setConsentChecked] = useState(false);
+  const [consentChecked, setConsentChecked] = useState({
+    checked: false,
+    consentPolicyId: null,
+    version: null,
+  });
   const [consentError, setConsentError] = useState('');
   const [isConsentRefreshing, setIsConsentRefreshing] = useState(false);
+  useEffect(() => {
+    setConsentChecked({ checked: false, consentPolicyId: null, version: null });
+  }, [currentPolicy?.consentPolicyId, currentPolicy?.version]);
   const agreeMutation = useMutation({
     mutationFn: (consentPolicyId) => agreeToConsentPolicy(consentPolicyId),
   });
   const returnToConsentStep = () => {
-    setConsentChecked(false);
+    setConsentChecked({ checked: false, consentPolicyId: null, version: null });
     setSubmitError('');
     setStep(0);
   };
@@ -271,24 +278,31 @@ export default function CounselingApply({ onComplete, onBack }) {
       }
 
       if (initialConsentState.consent) {
-        setConsentChecked(false);
+        setConsentChecked({ checked: false, consentPolicyId: null, version: null });
         setStep(1);
         return;
       }
 
-      if (initialConsentState.policy.consentPolicyId !== currentPolicy.consentPolicyId) {
-        setConsentChecked(false);
+      if (
+        initialConsentState.policy.consentPolicyId !== currentPolicy.consentPolicyId ||
+        initialConsentState.policy.version !== currentPolicy.version
+      ) {
+        setConsentChecked({ checked: false, consentPolicyId: null, version: null });
         setConsentError('동의 정책이 변경되었습니다. 최신 내용을 확인한 뒤 다시 동의해 주세요.');
         return;
       }
 
-      if (!consentChecked) {
+      if (
+        !consentChecked.checked ||
+        consentChecked.consentPolicyId !== currentPolicy.consentPolicyId ||
+        consentChecked.version !== currentPolicy.version
+      ) {
         setConsentError('기존 동의가 더 이상 유효하지 않습니다. 동의 내용을 확인한 뒤 동의에 체크해 주세요.');
         return;
       }
 
       await agreeMutation.mutateAsync(initialConsentState.policy.consentPolicyId);
-      setConsentChecked(false);
+      setConsentChecked({ checked: false, consentPolicyId: null, version: null });
 
       const consentStateAfterAgree = await refreshConsentState();
       if (!consentStateAfterAgree.policy) {
@@ -307,7 +321,7 @@ export default function CounselingApply({ onComplete, onBack }) {
         try {
           const consentStateAfterConflict = await refreshConsentState();
           if (consentStateAfterConflict.policy && consentStateAfterConflict.consent) {
-            setConsentChecked(false);
+            setConsentChecked({ checked: false, consentPolicyId: null, version: null });
             setStep(1);
             return;
           }
@@ -545,8 +559,15 @@ export default function CounselingApply({ onComplete, onBack }) {
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={consentChecked}
-                        onChange={(e) => setConsentChecked(e.target.checked)}
+                        checked={consentChecked.checked}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setConsentChecked({
+                            checked,
+                            consentPolicyId: checked ? currentPolicy.consentPolicyId : null,
+                            version: checked ? currentPolicy.version : null,
+                          });
+                        }}
                         className="w-5 h-5 rounded-[4px] flex-shrink-0"
                         style={{ accentColor: ACCENT }}
                       />
@@ -568,11 +589,11 @@ export default function CounselingApply({ onComplete, onBack }) {
                 <Button
                   size="md"
                   disabled={
-                    ((!activeConsentId && !consentChecked) || agreeMutation.isPending) ||
+                    ((!activeConsentId && !consentChecked.checked) || agreeMutation.isPending) ||
                     isConsentRefreshing
                   }
                   loading={agreeMutation.isPending || isConsentRefreshing}
-                  style={activeConsentId || consentChecked ? { background: ACCENT } : {}}
+                  style={activeConsentId || consentChecked.checked ? { background: ACCENT } : {}}
                   onClick={handleAgreeAndNext}
                 >
                   동의하고 다음 →
