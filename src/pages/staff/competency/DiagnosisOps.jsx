@@ -1,18 +1,27 @@
-import { useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   BarChart,
   Button,
   CommonCodeSelect,
   DonutChart,
   Drawer,
+  EmptyState,
   Modal,
+  Pagination,
+  SkeletonLoader,
   StatTile,
   StatusBadge,
   Tabs,
   toast,
 } from '@/components/common';
-import { registerAssessmentRound, updateAssessmentRound } from '@/api/competency';
+import {
+  fetchAssessmentAttendance,
+  fetchAssessmentNonParticipants,
+  notifyAssessmentNonParticipants,
+  registerAssessmentRound,
+  updateAssessmentRound,
+} from '@/api/competency';
 import { ApiError } from '@/api/client';
 import { useCommonCode } from '@/hooks/useCommonCode';
 
@@ -20,72 +29,7 @@ const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
-const NON_RESPONDENTS = [
-  {
-    studentId: '20231500',
-    name: '강다은',
-    dept: '경영학과',
-    grade: 3,
-    lastLogin: '2026-06-05',
-    notified: false,
-  },
-  {
-    studentId: '20240102',
-    name: '임채원',
-    dept: '컴퓨터공학과',
-    grade: 1,
-    lastLogin: '2026-06-08',
-    notified: true,
-  },
-  {
-    studentId: '20232201',
-    name: '송민준',
-    dept: '산업공학과',
-    grade: 2,
-    lastLogin: '2026-05-30',
-    notified: false,
-  },
-  {
-    studentId: '20241300',
-    name: '한소율',
-    dept: '심리학과',
-    grade: 1,
-    lastLogin: '2026-06-09',
-    notified: false,
-  },
-  {
-    studentId: '20230912',
-    name: '임수아',
-    dept: '사회복지학과',
-    grade: 4,
-    lastLogin: '2026-05-28',
-    notified: false,
-  },
-  {
-    studentId: '20231654',
-    name: '윤준호',
-    dept: '경영학과',
-    grade: 3,
-    lastLogin: '2026-06-01',
-    notified: true,
-  },
-  {
-    studentId: '20232900',
-    name: '배지수',
-    dept: '컴퓨터공학과',
-    grade: 2,
-    lastLogin: '2026-06-07',
-    notified: false,
-  },
-  {
-    studentId: '20241122',
-    name: '조민재',
-    dept: '글로벌통상학과',
-    grade: 1,
-    lastLogin: '2026-06-09',
-    notified: false,
-  },
-];
+const NON_PARTICIPANT_PAGE_SIZE = 10;
 
 const COLLEGE_DATA = [
   {
@@ -160,11 +104,6 @@ const COLLEGE_DATA = [
 
 // 학년은 공통코드가 없어 고정값을 쓴다(GRADE 코드그룹 미도입).
 const GRADES = [1, 2, 3, 4];
-// 단과대·학과는 아직 공통코드/학사 도메인 연동이 없어 목업 옵션을 그대로 쓴다.
-// target_condition은 #12 대상자 해석기가 나오기 전까진 서버가 내용을 검증하지 않는 자유 JSON이라,
-// 여기서 정한 { grades[] | colleges[] | departments[] } 형태가 사실상의 잠정 스키마다.
-const COLLEGES = ['공과대학', '경영대학', '사회과학대학', '인문대학', '자연과학대학', '글로벌대학'];
-const DEPTS = ['컴퓨터공학과', '경영학과', '심리학과', '산업공학과', '사회복지학과', '글로벌통상학과'];
 
 const ASSESSMENT_TYPES = [
   { value: 'PRE', label: '사전진단' },
@@ -184,18 +123,18 @@ const toDateInputValue = (isoStr) => {
   return `${y}-${m}-${day}`;
 };
 
-const describeTarget = (targetCondition) => {
+// majorLabel: majorCodeId → codeName 변환 함수. 모듈 레벨 순수 함수라 useCommonCode를
+// 직접 쓸 수 없어, semesterLabel과 같은 패턴으로 호출하는 쪽에서 만들어 넘겨받는다.
+const describeTarget = (targetCondition, majorLabel) => {
   if (!targetCondition) return '전체 재학생';
   if (targetCondition.grades?.length) return targetCondition.grades.map((g) => `${g}학년`).join(', ');
-  if (targetCondition.colleges?.length) return targetCondition.colleges.join(', ');
-  if (targetCondition.departments?.length) return targetCondition.departments.join(', ');
+  if (targetCondition.majorCodeIds?.length) {
+    return targetCondition.majorCodeIds.map((id) => majorLabel(id)).join(', ');
+  }
   return '전체 재학생';
 };
 
-function RoundManage() {
-  // TODO: GET /api/admin/assessment-rounds 목록 조회 API 나오면 useQuery로 교체.
-  // 그 전까지는 이 세션에서 등록·수정한 회차만 보이고 새로고침하면 사라진다.
-  const [rounds, setRounds] = useState([]);
+function RoundManage({ rounds, setRounds }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
 
@@ -208,12 +147,19 @@ function RoundManage() {
   const [fEnd, setFEnd] = useState('');
   const [fTargetMode, setFTM] = useState('전체');
   const [fGrades, setFGrades] = useState([]);
-  const [fColleges, setFColl] = useState([]);
   const [fDepts, setFDepts] = useState([]);
   const [formError, setFormError] = useState('');
 
   const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
   const semesterLabel = (code) => semesterCodes.find((s) => s.code === code)?.codeName ?? code;
+
+  const {
+    data: majorCodes = [],
+    isLoading: majorLoading,
+    isError: majorError,
+    refetch: refetchMajors,
+  } = useCommonCode('MAJOR');
+  const majorLabel = (codeId) => majorCodes.find((m) => m.codeId === codeId)?.codeName ?? codeId;
 
   const openDrawer = () => {
     setEditTarget(null);
@@ -225,7 +171,6 @@ function RoundManage() {
     setFEnd('');
     setFTM('전체');
     setFGrades([]);
-    setFColl([]);
     setFDepts([]);
     setFormError('');
     setDrawerOpen(true);
@@ -243,22 +188,14 @@ function RoundManage() {
     if (tc?.grades?.length) {
       setFTM('학년');
       setFGrades(tc.grades);
-      setFColl([]);
       setFDepts([]);
-    } else if (tc?.colleges?.length) {
-      setFTM('단과대');
-      setFColl(tc.colleges);
-      setFGrades([]);
-      setFDepts([]);
-    } else if (tc?.departments?.length) {
+    } else if (tc?.majorCodeIds?.length) {
       setFTM('학과');
-      setFDepts(tc.departments);
+      setFDepts(tc.majorCodeIds);
       setFGrades([]);
-      setFColl([]);
     } else {
       setFTM('전체');
       setFGrades([]);
-      setFColl([]);
       setFDepts([]);
     }
     setFormError('');
@@ -271,8 +208,7 @@ function RoundManage() {
 
   const buildTargetCondition = () => {
     if (fTargetMode === '학년' && fGrades.length) return { grades: fGrades };
-    if (fTargetMode === '단과대' && fColleges.length) return { colleges: fColleges };
-    if (fTargetMode === '학과' && fDepts.length) return { departments: fDepts };
+    if (fTargetMode === '학과' && fDepts.length) return { majorCodeIds: fDepts };
     return null;
   };
 
@@ -400,7 +336,7 @@ function RoundManage() {
                       {toDateInputValue(r.startsAt)} ~ {toDateInputValue(r.endsAt)}
                     </td>
                     <td className="px-4 py-3 text-center text-[11px] text-[#656D76] whitespace-nowrap">
-                      {describeTarget(r.targetCondition)}
+                      {describeTarget(r.targetCondition, majorLabel)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <StatusBadge status={r.roundStatus} variant="neutral" label="초안" size="sm" />
@@ -532,7 +468,7 @@ function RoundManage() {
           <div>
             <label className="block text-[11px] font-semibold text-[#656D76] mb-2">대상 지정</label>
             <div className="flex gap-2 mb-3 flex-wrap">
-              {['전체', '학년', '단과대', '학과'].map((m) => (
+              {['전체', '학년', '학과'].map((m) => (
                 <button
                   key={m}
                   onClick={() => setFTM(m)}
@@ -563,32 +499,35 @@ function RoundManage() {
                 ))}
               </div>
             )}
-            {fTargetMode === '단과대' && (
-              <div className="flex gap-2 flex-wrap">
-                {COLLEGES.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => toggleList(fColleges, c, setFColl)}
-                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fColleges.includes(c) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
-                    style={fColleges.includes(c) ? { background: ACCENT } : {}}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            )}
             {fTargetMode === '학과' && (
               <div className="flex gap-2 flex-wrap">
-                {DEPTS.map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => toggleList(fDepts, d, setFDepts)}
-                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fDepts.includes(d) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
-                    style={fDepts.includes(d) ? { background: ACCENT } : {}}
-                  >
-                    {d}
-                  </button>
-                ))}
+                {majorLoading ? (
+                  <p className="text-[11px] text-[#9AA0A6]">학과 목록을 불러오는 중입니다.</p>
+                ) : majorError ? (
+                  <div className="flex items-center gap-2 text-[11px] text-[#CF222E]">
+                    학과 목록을 불러오지 못했습니다.
+                    <button
+                      onClick={() => refetchMajors()}
+                      className="underline font-bold hover:opacity-80"
+                    >
+                      다시 시도
+                    </button>
+                  </div>
+                ) : majorCodes.length === 0 ? (
+                  <p className="text-[11px] text-[#9AA0A6]">등록된 학과가 없습니다.</p>
+                ) : (
+                  majorCodes.map((m) => (
+                    <button
+                      key={m.codeId}
+                      onClick={() => toggleList(fDepts, m.codeId, setFDepts)}
+                      aria-pressed={fDepts.includes(m.codeId)}
+                      className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fDepts.includes(m.codeId) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
+                      style={fDepts.includes(m.codeId) ? { background: ACCENT } : {}}
+                    >
+                      {m.codeName}
+                    </button>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -600,33 +539,79 @@ function RoundManage() {
 
 // ─── Tab 2: 응시 관리 ─────────────────────────────────────────────────────────
 
-function ResponseManage() {
-  const RESPONDENTS = 1106;
-  const CAPACITY = 1537;
-  const RATE = Math.round((RESPONDENTS / CAPACITY) * 100);
+function ResponseManage({ rounds }) {
+  const [roundId, setRoundId] = useState('');
+  const selectedRound = rounds.find((r) => String(r.assessmentRoundId) === roundId) ?? null;
+
+  const { data: majorCodes = [] } = useCommonCode('MAJOR');
+  const majorLabel = (codeId) => majorCodes.find((m) => m.codeId === codeId)?.codeName ?? codeId;
+
+  const {
+    data: attendance,
+    isLoading: attendanceLoading,
+    isError: attendanceError,
+    error: attendanceErrorObj,
+  } = useQuery({
+    queryKey: ['assessmentAttendance', roundId],
+    queryFn: () => fetchAssessmentAttendance(Number(roundId)),
+    enabled: !!roundId,
+  });
+
+  const targetCount = attendance?.targetCount ?? 0;
+  const completedCount = attendance?.completedCount ?? 0;
+  const uncompletedCount = Math.max(targetCount - completedCount, 0);
+  const rateLabel = attendance ? `${Number(attendance.attendanceRate).toFixed(1)}%` : '-';
 
   const [notifOpen, setNotifOpen] = useState(false);
-  const [channels, setChannels] = useState(['앱']);
-  const [notifRows, setNotifRows] = useState(NON_RESPONDENTS);
+  // 발송 완료 여부는 서버가 확정해 준 sentUserIds만 신뢰한다 — 클라이언트가 페이지별로
+  // 추정하면 페이지를 넘나들 때나 "전체 발송"(userIds: null) 이후 실제와 어긋날 수 있다.
+  const [notified, setNotified] = useState(new Set());
   const [selected, setSelected] = useState(new Set());
   const [downloadInfo, setDownloadInfo] = useState(false);
 
-  const CHANNEL_LIST = ['앱', 'SMS', '메일'];
-  const gradeData = [
-    { grade: '1학년', rate: 81, cnt: 310, total: 382 },
-    { grade: '2학년', rate: 76, cnt: 298, total: 392 },
-    { grade: '3학년', rate: 65, cnt: 318, total: 489 },
-    { grade: '4학년', rate: 58, cnt: 180, total: 310 },
-  ];
+  const [page, setPage] = useState(1);
+  // 회차를 바꾸면 이전 회차에서 선택·발송 처리한 userId가 새 회차 명단과 무관해지므로 같이 비운다.
+  useEffect(() => {
+    setPage(1);
+    setSelected(new Set());
+    setNotified(new Set());
+  }, [roundId]);
+  // 페이지를 넘기면 화면에 없는 userId가 선택 상태로 남을 수 있어(체크박스는 안 보이지만
+  // "선택 N명" 카운트엔 남음) 비운다. notifyTarget 자체는 selected가 비면 전체 발송으로
+  // 처리되므로 이 초기화와 무관하게 항상 정확하다.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [page]);
 
-  const toggleChannel = (c) =>
-    setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
-  const notifyTarget =
-    selected.size > 0 ? selected.size : notifRows.filter((r) => !r.notified).length;
+  const {
+    data: nonParticipants,
+    isLoading: nonParticipantsLoading,
+    isError: nonParticipantsError,
+    error: nonParticipantsErrorObj,
+  } = useQuery({
+    queryKey: ['assessmentNonParticipants', roundId, page],
+    queryFn: () =>
+      fetchAssessmentNonParticipants(Number(roundId), {
+        page: page - 1,
+        size: NON_PARTICIPANT_PAGE_SIZE,
+      }),
+    enabled: !!roundId,
+  });
 
-  const allChecked = notifRows.length > 0 && notifRows.every((r) => selected.has(r.studentId));
+  const nonParticipantRows = nonParticipants?.content ?? [];
+  const nonParticipantTotal = nonParticipants?.totalElements ?? 0;
+
+  // 선택 없이 발송하면 이 회차의 전체 미응시자(nonParticipantTotal)가 대상이다 — 현재
+  // 페이지(최대 10명)만 대상으로 착각하지 않도록, 선택이 없을 때는 페이지 카운트가 아니라
+  // 전체 미응시자 수를 보여준다.
+  const notifyTarget = selected.size > 0 ? selected.size : nonParticipantTotal;
+
+  const allChecked =
+    nonParticipantRows.length > 0 && nonParticipantRows.every((r) => selected.has(r.userId));
   const toggleAll = () =>
-    allChecked ? setSelected(new Set()) : setSelected(new Set(notifRows.map((r) => r.studentId)));
+    allChecked
+      ? setSelected(new Set())
+      : setSelected(new Set(nonParticipantRows.map((r) => r.userId)));
   const toggle = (id) =>
     setSelected((prev) => {
       const n = new Set(prev);
@@ -634,92 +619,115 @@ function ResponseManage() {
       return n;
     });
 
-  const sendNotification = () => {
-    setNotifRows((prev) =>
-      prev.map((r) => (!selected.size || selected.has(r.studentId) ? { ...r, notified: true } : r)),
-    );
-    setSelected(new Set());
-    setNotifOpen(false);
-    toast(`${notifyTarget}명에게 알림을 발송했습니다.`, 'success');
-  };
+  const notifyMutation = useMutation({
+    mutationFn: () =>
+      notifyAssessmentNonParticipants(Number(roundId), selected.size ? Array.from(selected) : null),
+    onSuccess: (result) => {
+      setNotified((prev) => new Set([...prev, ...result.sentUserIds]));
+      setSelected(new Set());
+      setNotifOpen(false);
+      const failMessage = result.failedCount > 0 ? ` (실패 ${result.failedCount}건)` : '';
+      toast(`${result.sentUserIds.length}명에게 알림을 발송했습니다.${failMessage}`, 'success');
+    },
+    onError: (e) => {
+      toast(e instanceof ApiError ? e.message : '알림 발송에 실패했습니다.', 'error');
+    },
+  });
 
   const donutData = [
-    { label: '응시', value: RESPONDENTS, color: ACCENT },
-    { label: '미응시', value: CAPACITY - RESPONDENTS, color: '#E5E7EB' },
+    { label: '응시', value: completedCount, color: ACCENT },
+    { label: '미응시', value: uncompletedCount, color: '#E5E7EB' },
   ];
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h2 className="text-[16px] font-black text-[#1F2328]">응시 관리</h2>
-          <p className="text-[12px] text-[#9AA0A6] mt-0.5">진단 회차: 2026-1 핵심역량 사후진단</p>
+          <p className="text-[12px] text-[#9AA0A6] mt-0.5">
+            {selectedRound
+              ? `진단 회차: ${selectedRound.assessmentName} (${describeTarget(selectedRound.targetCondition, majorLabel)})`
+              : '조회할 진단 회차를 선택해 주세요.'}
+          </p>
         </div>
+        <select
+          value={roundId}
+          onChange={(e) => setRoundId(e.target.value)}
+          aria-label="진단 회차 선택"
+          className="h-9 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151] min-w-[220px]"
+        >
+          <option value="">회차 선택</option>
+          {rounds.map((r) => (
+            <option key={r.assessmentRoundId} value={r.assessmentRoundId}>
+              {r.assessmentName}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Top: Donut + Grade bars */}
-      <div className="grid gap-5 mb-5" style={{ gridTemplateColumns: '260px 1fr' }}>
-        {/* Donut */}
-        <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 flex flex-col items-center gap-3">
-          <p className="text-[12px] font-bold text-[#1F2328] self-start">전체 응시율</p>
-          <DonutChart segments={donutData} size={140} centerValue={`${RATE}%`} />
-          <div className="flex gap-6 text-[12px]">
-            <div className="text-center">
-              <div className="text-[20px] font-black" style={{ color: ACCENT }}>
-                {RESPONDENTS.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-[#9AA0A6]">응시</div>
-            </div>
-            <div className="text-center">
-              <div className="text-[20px] font-black text-[#9AA0A6]">
-                {CAPACITY.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-[#9AA0A6]">대상</div>
-            </div>
-          </div>
+      {!roundId && rounds.length === 0 && (
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center text-[12px] text-[#9AA0A6] mb-5">
+          회차 관리 탭에서 진단 회차를 먼저 등록해 주세요.
         </div>
+      )}
 
-        {/* Grade bars */}
-        <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
-          <p className="text-[12px] font-bold text-[#1F2328] mb-4">학년별 응시율</p>
-          <div className="flex flex-col gap-4">
-            {gradeData.map((g) => {
-              const pct = g.rate;
-              const poor = pct < 65;
-              const color = poor ? '#CF222E' : pct < 75 ? '#D97706' : ACCENT;
-              return (
-                <div key={g.grade}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[12px] font-semibold text-[#1F2328] w-14">{g.grade}</span>
-                    <div className="flex-1 mx-3 h-6 bg-[#F3F4F6] rounded-[4px] overflow-hidden relative">
-                      <div
-                        className="h-full rounded-[4px] transition-all flex items-center"
-                        style={{ width: `${pct}%`, background: color, minWidth: '2rem' }}
-                      >
-                        <span className="text-[10px] font-black text-white ml-2 shrink-0">
-                          {pct}%
-                        </span>
-                      </div>
+      {roundId && attendanceError && (
+        <div className="mb-5 p-3 rounded-[8px] bg-[#FEE2E2] border border-[#FECACA] text-[12px] text-[#CF222E] font-semibold">
+          {attendanceErrorObj instanceof ApiError
+            ? attendanceErrorObj.message
+            : '응시율을 조회하지 못했습니다.'}
+        </div>
+      )}
+
+      {roundId && !attendanceError && (
+        <div className="mb-5">
+          {/* Donut */}
+          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 flex flex-col items-center gap-3 max-w-[320px]">
+            <p className="text-[12px] font-bold text-[#1F2328] self-start">전체 응시율</p>
+            {attendanceLoading ? (
+              <p className="py-10 text-[12px] text-[#9AA0A6]">불러오는 중...</p>
+            ) : (
+              <>
+                {targetCount > 0 ? (
+                  <DonutChart segments={donutData} size={140} centerValue={rateLabel} />
+                ) : (
+                  <div
+                    role="status"
+                    className="w-[140px] h-[140px] flex items-center justify-center text-center text-[11px] text-[#9AA0A6] rounded-full border border-dashed border-[#E5E7EB] px-3"
+                  >
+                    대상자가 없어 표시할 데이터가 없습니다.
+                  </div>
+                )}
+                <div className="flex gap-6 text-[12px]">
+                  <div className="text-center">
+                    <div className="text-[20px] font-black" style={{ color: ACCENT }}>
+                      {completedCount.toLocaleString()}
                     </div>
-                    <span className="text-[11px] text-[#9AA0A6] w-24 text-right">
-                      {g.cnt}/{g.total}명
-                    </span>
+                    <div className="text-[10px] text-[#9AA0A6]">응시</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[20px] font-black text-[#9AA0A6]">
+                      {targetCount.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-[#9AA0A6]">대상</div>
                   </div>
                 </div>
-              );
-            })}
+              </>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Non-respondent table */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
         <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-3 flex-wrap">
           <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
           <span className="text-[13px] font-bold text-[#1F2328]">미응시자 목록</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
-            {CAPACITY - RESPONDENTS}명
-          </span>
+          {roundId && !nonParticipantsLoading && !nonParticipantsError && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
+              {nonParticipantTotal.toLocaleString()}명
+            </span>
+          )}
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => setDownloadInfo(true)}
@@ -729,7 +737,8 @@ function ResponseManage() {
             </button>
             <button
               onClick={() => setNotifOpen(true)}
-              className="h-7 px-3 text-[11px] font-bold rounded-[6px] text-white transition-opacity hover:opacity-90"
+              disabled={nonParticipantTotal === 0}
+              className="h-7 px-3 text-[11px] font-bold rounded-[6px] text-white transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ background: ACCENT }}
             >
               미응시자 알림 발송
@@ -737,110 +746,141 @@ function ResponseManage() {
           </div>
         </div>
 
-        <table className="w-full border-collapse text-[12px]">
-          <thead>
-            <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-              <th className="w-10 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={allChecked}
-                  onChange={toggleAll}
-                  className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
-                />
-              </th>
-              {['학번', '성명', '학과', '학년', '최근 로그인', '알림 발송'].map((h, i) => (
-                <th
-                  key={h}
-                  className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 4 ? 'text-center' : 'text-left'}`}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {notifRows.map((r) => (
-              <tr
-                key={r.studentId}
-                className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(r.studentId) ? 'bg-[#F3F4F6]' : ''}`}
-              >
-                <td className="px-4 py-3 text-center">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(r.studentId)}
-                    onChange={() => toggle(r.studentId)}
-                    className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
-                  />
-                </td>
-                <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">{r.studentId}</td>
-                <td className="px-4 py-3 font-bold text-[#1F2328]">{r.name}</td>
-                <td className="px-4 py-3 text-[#656D76]">{r.dept}</td>
-                <td className="px-4 py-3 text-center text-[#656D76]">{r.grade}학년</td>
-                <td className="px-4 py-3 text-center font-mono text-[11px] text-[#9AA0A6]">
-                  {r.lastLogin}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {r.notified ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">
-                      발송완료
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#9AA0A6]">
-                      미발송
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {!roundId ? (
+          <EmptyState message="조회할 진단 회차를 선택해 주세요." />
+        ) : nonParticipantsLoading ? (
+          <SkeletonLoader rows={NON_PARTICIPANT_PAGE_SIZE} cols={6} />
+        ) : nonParticipantsError ? (
+          <div className="p-5 text-[12px] text-[#CF222E] font-semibold">
+            {nonParticipantsErrorObj instanceof ApiError
+              ? nonParticipantsErrorObj.message
+              : '미응시자 목록을 조회하지 못했습니다.'}
+          </div>
+        ) : nonParticipantRows.length === 0 ? (
+          <EmptyState message="미응시자가 없습니다." sub="모든 대상자가 응시를 완료했습니다." />
+        ) : (
+          <>
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      onChange={toggleAll}
+                      aria-label="현재 페이지 미응시자 전체 선택"
+                      className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
+                    />
+                  </th>
+                  {['학번', '성명', '학과', '학년', '연락처', '알림 발송'].map((h, i) => (
+                    <th
+                      key={h}
+                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 4 ? 'text-center' : 'text-left'}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {nonParticipantRows.map((r) => (
+                  <tr
+                    key={r.userId}
+                    className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(r.userId) ? 'bg-[#F3F4F6]' : ''}`}
+                  >
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.userId)}
+                        onChange={() => toggle(r.userId)}
+                        aria-label={`${r.name} (${r.studentId}) 선택`}
+                        className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
+                      {r.studentId}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-[#1F2328]">{r.name}</td>
+                    <td className="px-4 py-3 text-[#656D76]">{r.majorName ?? '-'}</td>
+                    <td className="px-4 py-3 text-center text-[#656D76]">
+                      {r.grade != null ? `${r.grade}학년` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono text-[11px] text-[#9AA0A6]">
+                      {r.phone ?? '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {notified.has(r.userId) ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">
+                          발송완료
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#9AA0A6]">
+                          미발송
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="px-5 py-3 border-t border-[#E5E7EB]">
+              <Pagination
+                page={page}
+                totalPages={nonParticipants.totalPages}
+                onChange={setPage}
+                totalItems={nonParticipantTotal}
+                pageSize={NON_PARTICIPANT_PAGE_SIZE}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Notify modal */}
       <Modal
         open={notifOpen}
-        onClose={() => setNotifOpen(false)}
+        onClose={() => {
+          if (!notifyMutation.isPending) setNotifOpen(false);
+        }}
         title="미응시자 알림 발송"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setNotifOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setNotifOpen(false)}
+              disabled={notifyMutation.isPending}
+            >
               취소
             </Button>
-            <Button style={{ background: ACCENT }} onClick={sendNotification}>
+            <Button
+              style={{ background: ACCENT }}
+              onClick={() => notifyMutation.mutate()}
+              loading={notifyMutation.isPending}
+            >
               발송
             </Button>
           </div>
         }
       >
         <div className="flex flex-col gap-4">
-          <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-2">
-              발송 채널 (다중 선택)
-            </label>
-            <div className="flex gap-2">
-              {CHANNEL_LIST.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => toggleChannel(c)}
-                  className={`h-8 px-4 text-[12px] font-bold rounded-[6px] border-2 transition-colors ${channels.includes(c) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
-                  style={channels.includes(c) ? { background: ACCENT } : {}}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
+          <div className="p-2.5 rounded-[6px] bg-[#F3F4F6] text-[11px] text-[#656D76]">
+            현재는 인앱(앱) 알림만 발송됩니다. SMS·메일 연동은 아직 준비되지 않았습니다.
           </div>
 
           <div>
             <label className="block text-[11px] font-semibold text-[#656D76] mb-2">
-              문구 미리보기
+              문구 미리보기 <span className="text-[#9AA0A6] font-normal">(실제 발송 문구와 다를 수 있음)</span>
             </label>
             <div className="p-4 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[12px] text-[#444D56] leading-relaxed">
               <p className="font-bold text-[#1F2328] mb-1">[학생지원팀] 핵심역량진단 참여 안내</p>
               <p>
-                안녕하세요. 2026-1 핵심역량 사후진단 응시 기간입니다.
+                안녕하세요. {selectedRound?.assessmentName ?? '핵심역량 진단'} 응시 기간입니다.
                 <br />
-                아직 응시하지 않으셨습니다. <strong>2026-06-23까지</strong> 접속해 주세요.
+                아직 응시하지 않으셨습니다.{' '}
+                {selectedRound?.endsAt && (
+                  <strong>{toDateInputValue(selectedRound.endsAt)}까지</strong>
+                )}{' '}
+                접속해 주세요.
                 <br />
                 포털 로그인 → 핵심역량진단 메뉴에서 바로 응시 가능합니다.
               </p>
@@ -851,9 +891,9 @@ function ResponseManage() {
             className="p-3 rounded-[8px] bg-[#F3F4F6] border border-[#E5E7EB] text-[12px]"
             style={{ color: ACCENT }}
           >
-            발송 대상: <span className="font-black">{notifyTarget}명</span>
-            {selected.size > 0 && (
-              <span className="text-[#9AA0A6] ml-1">(선택 {selected.size}명)</span>
+            발송 대상: <span className="font-black">{notifyTarget.toLocaleString()}명</span>
+            {selected.size === 0 && (
+              <span className="text-[#9AA0A6] ml-1">(선택 없음 — 전체 미응시자)</span>
             )}
           </div>
         </div>
@@ -1168,6 +1208,10 @@ function ResultStats() {
 
 export default function DiagnosisOps() {
   const [tab, setTab] = useState('round');
+  // TODO: GET /api/admin/assessment-rounds 목록 조회 API 나오면 useQuery로 교체.
+  // 그 전까지는 이 세션에서 등록·수정한 회차만 보이고 새로고침하면 사라진다. 탭을 넘나들며
+  // 같은 회차를 참조해야 해서(응시 관리 탭의 회차 선택) 여기서 관리한다.
+  const [rounds, setRounds] = useState([]);
 
   const TABS = [
     { key: 'round', label: '① 회차 관리' },
@@ -1181,8 +1225,8 @@ export default function DiagnosisOps() {
         <Tabs tabs={TABS} active={tab} onChange={setTab} accentColor={ACCENT} />
       </div>
 
-      {tab === 'round' && <RoundManage />}
-      {tab === 'response' && <ResponseManage />}
+      {tab === 'round' && <RoundManage rounds={rounds} setRounds={setRounds} />}
+      {tab === 'response' && <ResponseManage rounds={rounds} />}
       {tab === 'stats' && <ResultStats />}
     </div>
   );

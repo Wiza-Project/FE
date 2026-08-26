@@ -18,6 +18,10 @@ const TAB_CONFIG = [
 
 const SUB_VIEWS = ['guide', 'questions', 'result', 'history', 'compare', 'recommend'];
 
+// TODO(WP-118 S00): 진단 안내+동의 화면에서 발급받은 실제 attemptId로 교체.
+// S00 API(동의 시 attempt 생성)가 아직 연동되지 않아 응답·결과 화면을 우선 검증하기 위한 임시값.
+const DEV_ATTEMPT_ID = 1;
+
 /**
  * 핵심역량 진단 화면 허브. 하위 화면들은 별도 라우트가 아니라 탭/버튼으로 전환되는
  * 하나의 화면입니다 (Figma 원본 설계를 그대로 따름 — 진단 흐름이 URL보다 단계 중심이라
@@ -58,11 +62,16 @@ export default function CompetencyPage() {
       )}
 
       {view === 'questions' && (
-        <DiagnosisQuestions onComplete={() => setView('result')} onBack={() => setView('guide')} />
+        <DiagnosisQuestions
+          attemptId={DEV_ATTEMPT_ID}
+          onComplete={() => setView('result')}
+          onBack={() => setView('guide')}
+        />
       )}
 
       {view === 'result' && (
         <DiagnosisResult
+          attemptId={DEV_ATTEMPT_ID}
           onBack={() => setView('history')}
           onCompare={() => setView('compare')}
           onRecommend={() => setView('recommend')}

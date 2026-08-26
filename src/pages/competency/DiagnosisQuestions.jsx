@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { ALL_QUESTIONS, COMP_LABELS, COMP_KEYS } from '@/data/competencyData';
-import { ConfirmDialog, toast } from '@/components/common';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { fetchAssessmentResume, saveAssessmentResponse, submitAssessment } from '@/api/competency';
+import { ApiError } from '@/api/client';
+import { ConfirmDialog, EmptyState, SkeletonLoader, toast } from '@/components/common';
 
 const LIKERT = [
   { value: 1, label: '전혀\n그렇지 않다' },
@@ -11,56 +13,240 @@ const LIKERT = [
 ];
 
 const QUESTIONS_PER_PAGE = 3;
-// Start mid-diagnosis: page 12 shows Q34-36
-const INITIAL_PAGE = 11; // 0-indexed: page 11 = questions 34-36
 
-const COMP_COLORS = {
-  C1: '#2563EB',
-  C2: '#7C3AED',
-  C3: '#0891B2',
-  C4: '#059669',
-  C5: '#D97706',
-  C6: '#6B7280',
-};
+// 역량마다 처음 등장하는 순서대로 순환 배정하는 팔레트
+const COMP_PALETTE = ['#2563EB', '#7C3AED', '#0891B2', '#059669', '#D97706', '#6B7280'];
 
 /**
  * @param {Object} props
+ * @param {number} props.attemptId
  * @param {() => void} props.onComplete
  * @param {() => void} props.onBack
  */
-export default function DiagnosisQuestions({ onComplete, onBack }) {
-  const [page, setPage] = useState(INITIAL_PAGE);
-  const [answers, setAnswers] = useState({});
+export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
+  const [page, setPage] = useState(0);
+  const [answers, setAnswers] = useState({}); // questionId -> selectedValue
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
-  const totalPages = Math.ceil(ALL_QUESTIONS.length / QUESTIONS_PER_PAGE);
-  const currentQs = ALL_QUESTIONS.slice(page * QUESTIONS_PER_PAGE, (page + 1) * QUESTIONS_PER_PAGE);
+  // answers state의 동기 미러. useState functional updater는 setter 호출 시 즉시 실행되지
+  // 않고 다음 render에서 실행되므로, rollback에 쓸 이전 값은 이 ref에서 동기적으로 읽는다.
+  const answersRef = useRef({});
+  const applyAnswers = (updater) => {
+    const next = typeof updater === 'function' ? updater(answersRef.current) : updater;
+    answersRef.current = next;
+    setAnswers(next);
+  };
+
+  const {
+    data: resumeData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['assessmentResume', attemptId],
+    queryFn: () => fetchAssessmentResume(attemptId),
+    enabled: !!attemptId,
+  });
+
+  const items = useMemo(() => resumeData?.items ?? [], [resumeData]);
+
+  // 이어하기: 응답이 도착하면 한 번만 로컬 상태를 서버 값으로 초기화하고
+  // 첫 미응답 문항이 포함된 페이지로 이동한다.
+  useEffect(() => {
+    if (!resumeData || initialized) return;
+    const initialAnswers = {};
+    resumeData.items.forEach((item) => {
+      if (item.selectedValue != null) initialAnswers[item.questionId] = Number(item.selectedValue);
+    });
+    applyAnswers(initialAnswers);
+    const firstUnansweredIdx = resumeData.items.findIndex((item) => item.selectedValue == null);
+    const targetIdx = firstUnansweredIdx === -1 ? resumeData.items.length - 1 : firstUnansweredIdx;
+    setPage(Math.max(0, Math.floor(targetIdx / QUESTIONS_PER_PAGE)));
+    setInitialized(true);
+  }, [resumeData, initialized]);
+
+  const competencyColor = useMemo(() => {
+    const map = {};
+    items.forEach((item) => {
+      if (!(item.competencyId in map)) {
+        map[item.competencyId] = COMP_PALETTE[Object.keys(map).length % COMP_PALETTE.length];
+      }
+    });
+    return map;
+  }, [items]);
+
+  // pendingRef: 클릭 시점에 즉시 판정하는 동기 가드(같은 문항 중복 저장 요청 자체를 차단).
+  // pendingIds: 위 상태를 버튼 disabled 표시에 반영하기 위한 렌더링용 state.
+  const pendingRef = useRef(new Set());
+  const [pendingIds, setPendingIds] = useState(() => new Set());
+
+  const saveMutation = useMutation({
+    mutationFn: saveAssessmentResponse,
+    // 낙관적 갱신 직전 값을 answersRef에서 동기적으로 캡처해 실패 시 정확히 그 값으로 되돌릴 수 있게 한다.
+    onMutate: (variables) => {
+      const previousValue = answersRef.current[variables.questionId];
+      applyAnswers((prev) => ({ ...prev, [variables.questionId]: variables.selectedValue }));
+      setPendingIds((prev) => new Set(prev).add(variables.questionId));
+      return { previousValue };
+    },
+    onError: (e, variables, context) => {
+      // 실패 시 원래 값으로 복구(미응답 아님). 응답이 없던 문항이었다면 previousValue가 undefined이므로 삭제한다.
+      applyAnswers((prev) => {
+        const next = { ...prev };
+        if (context?.previousValue === undefined) {
+          delete next[variables.questionId];
+        } else {
+          next[variables.questionId] = context.previousValue;
+        }
+        return next;
+      });
+      toast(e instanceof ApiError ? e.message : '응답 저장에 실패했습니다.', 'error');
+    },
+    onSettled: (data, error, variables) => {
+      pendingRef.current.delete(variables.questionId);
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(variables.questionId);
+        return next;
+      });
+    },
+  });
+
+  const totalPages = Math.ceil(items.length / QUESTIONS_PER_PAGE);
+  const currentQs = items.slice(page * QUESTIONS_PER_PAGE, (page + 1) * QUESTIONS_PER_PAGE);
   const answeredCount = Object.keys(answers).length;
-  const unanswered = ALL_QUESTIONS.length - answeredCount;
-  const canSubmit = unanswered === 0;
-  const progress = Math.round((answeredCount / ALL_QUESTIONS.length) * 100);
+  const unanswered = items.length - answeredCount;
+  // pendingIds가 비어있어야 함: 마지막 문항 저장이 아직 서버에 도착 전이면(특히 이미 응답된
+  // 문항을 수정하는 경우 answeredCount는 계속 총 문항 수와 같아 이 조건 없이는 걸러지지 않는다)
+  // submitAssessment가 먼저 처리돼 서버가 그 문항을 미응답으로 판단할 수 있다.
+  const canSubmit = items.length > 0 && unanswered === 0 && pendingIds.size === 0;
+  const progress = items.length ? Math.round((answeredCount / items.length) * 100) : 0;
 
   // Competency completion status
-  const compStatus = COMP_KEYS.map((key, ci) => {
-    const qs = ALL_QUESTIONS.filter((q) => q.compKey === key);
-    const done = qs.filter((q) => answers[q.id] !== undefined).length;
-    const started = done > 0;
-    return { key, label: COMP_LABELS[ci], total: qs.length, done, started };
-  });
+  const compStatus = useMemo(() => {
+    const order = [];
+    const byId = new Map();
+    items.forEach((item) => {
+      if (!byId.has(item.competencyId)) {
+        byId.set(item.competencyId, {
+          key: item.competencyId,
+          label: item.competencyName,
+          total: 0,
+          done: 0,
+        });
+        order.push(item.competencyId);
+      }
+      const entry = byId.get(item.competencyId);
+      entry.total += 1;
+      if (answers[item.questionId] !== undefined) entry.done += 1;
+    });
+    return order.map((id) => {
+      const entry = byId.get(id);
+      return { ...entry, started: entry.done > 0 };
+    });
+  }, [items, answers]);
 
   // Current question position label
   const firstQ = currentQs[0];
-  const posLabel = firstQ ? `${firstQ.compKey}. ${firstQ.compLabel} > ${firstQ.subComp}` : '';
+  const posLabel = firstQ ? firstQ.competencyName : '';
 
-  const setAnswer = (qId, val) => setAnswers((prev) => ({ ...prev, [qId]: val }));
+  const setAnswer = (questionId, val) => {
+    if (pendingRef.current.has(questionId)) return; // 저장 중이면 클릭 자체를 무시(state 반영을 기다리지 않음)
+    pendingRef.current.add(questionId);
+    saveMutation.mutate({ attemptId, questionId, selectedValue: val });
+  };
+
+  const submitMutation = useMutation({
+    mutationFn: submitAssessment,
+    onSuccess: () => {
+      toast('진단이 제출되었습니다.', 'success');
+      onComplete();
+    },
+    onError: (e) => {
+      // Q005(미응답 문항 있음): 서버 기준 미응답 문항을 로컬 answers에서도 제거해 화면이
+      // "이미 응답됨"으로 잘못 표시되지 않게 한 뒤, 그 문항으로 자동 이동한다.
+      if (e instanceof ApiError && e.code === 'Q005' && Array.isArray(e.data)) {
+        const missingIds = e.data;
+        applyAnswers((prev) => {
+          const next = { ...prev };
+          missingIds.forEach((questionId) => delete next[questionId]);
+          return next;
+        });
+        const firstMissingIdx = items.findIndex((item) => missingIds.includes(item.questionId));
+        if (firstMissingIdx !== -1) {
+          setPage(Math.floor(firstMissingIdx / QUESTIONS_PER_PAGE));
+        }
+      }
+      toast(e instanceof ApiError ? e.message : '제출에 실패했습니다.', 'error');
+    },
+  });
 
   const handleSubmit = () => {
     setConfirmOpen(false);
-    toast('진단이 제출되었습니다.', 'success');
-    setTimeout(onComplete, 500);
+    // 버튼의 disabled 속성만으로는 다음 렌더 전에 들어오는 중복 클릭(예: 확인 다이얼로그를 빠르게
+    // 두 번 확정)을 못 막는다 — setAnswer의 pendingRef와 같은 이유로 여기서도 동기 가드를 둔다.
+    // canSubmit도 함께 확인: 다이얼로그가 열려 있는 사이 마지막 문항 저장이 아직 안 끝났을 수 있다.
+    if (!canSubmit || submitMutation.isPending) return;
+    submitMutation.mutate(attemptId);
   };
 
-  const handleSave = () => toast('임시 저장되었습니다.', 'success');
+  const handleSave = () =>
+    toast('모든 응답이 자동 저장되었습니다. 나중에 이어서 응시할 수 있습니다.', 'success');
+
+  if (!attemptId) {
+    return (
+      <EmptyState
+        message="진단 응시 정보를 찾을 수 없습니다."
+        action={
+          <button
+            type="button"
+            onClick={onBack}
+            className="h-9 px-5 text-[13px] font-semibold text-[#656D76] border border-[#E5E7EB] rounded-[6px] hover:bg-[#F9FAFB] transition-colors"
+          >
+            ← 진단 안내로 돌아가기
+          </button>
+        }
+      />
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="px-6 py-6">
+        <SkeletonLoader rows={3} cols={3} />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <EmptyState
+        message={error instanceof ApiError ? error.message : '문항을 불러오지 못했습니다.'}
+        sub="잠시 후 다시 시도해 주세요."
+        action={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="h-9 px-5 text-[13px] font-bold text-white rounded-[6px]"
+              style={{ background: '#7C3AED' }}
+            >
+              다시 시도
+            </button>
+            <button
+              type="button"
+              onClick={onBack}
+              className="h-9 px-5 text-[13px] font-semibold text-[#656D76] border border-[#E5E7EB] rounded-[6px] hover:bg-[#F9FAFB] transition-colors"
+            >
+              ← 돌아가기
+            </button>
+          </div>
+        }
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-full">
@@ -71,16 +257,12 @@ export default function DiagnosisQuestions({ onComplete, onBack }) {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-3">
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#EDE9FE] text-[#7C3AED]">
-                사전 진단
+                진단
               </span>
-              <span className="text-[14px] font-bold text-[#1F2328]">
-                2026학년도 1학기 사전 진단
-              </span>
-              <span className="text-[12px] text-[#656D76]">·</span>
               <span className="text-[12px] text-[#656D76]">{posLabel}</span>
             </div>
             <span className="text-[13px] font-bold text-[#7C3AED]">
-              {answeredCount} / {ALL_QUESTIONS.length} 문항 ({progress}%)
+              {answeredCount} / {items.length} 문항 ({progress}%)
             </span>
           </div>
           {/* Progress bar */}
@@ -101,16 +283,16 @@ export default function DiagnosisQuestions({ onComplete, onBack }) {
               style={{
                 background:
                   c.done === c.total
-                    ? COMP_COLORS[c.key] + '15'
+                    ? competencyColor[c.key] + '15'
                     : c.started
                       ? '#FFF7ED'
                       : '#F9FAFB',
                 borderColor:
-                  c.done === c.total ? COMP_COLORS[c.key] : c.started ? '#FDE68A' : '#E5E7EB',
-                color: c.done === c.total ? COMP_COLORS[c.key] : c.started ? '#D97706' : '#9AA0A6',
+                  c.done === c.total ? competencyColor[c.key] : c.started ? '#FDE68A' : '#E5E7EB',
+                color: c.done === c.total ? competencyColor[c.key] : c.started ? '#D97706' : '#9AA0A6',
               }}
             >
-              <span>{c.key}</span>
+              <span>{c.label}</span>
               <span className="font-normal opacity-70">
                 {c.done}/{c.total}
               </span>
@@ -122,45 +304,56 @@ export default function DiagnosisQuestions({ onComplete, onBack }) {
 
       {/* ── Question cards ── */}
       <div className="flex-1 px-6 py-6 flex flex-col gap-4 max-w-[880px] w-full mx-auto">
-        {currentQs.map((q) => {
-          const selected = answers[q.id];
+        {currentQs.map((q, i) => {
+          const selected = answers[q.questionId];
+          const questionNo = page * QUESTIONS_PER_PAGE + i + 1;
           return (
             <div
-              key={q.id}
+              key={q.questionId}
               className="bg-white rounded-[10px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden"
             >
               {/* Question header */}
               <div className="px-6 py-4 border-b border-[#F3F4F6] flex items-start gap-3">
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-black text-white flex-shrink-0"
-                  style={{ background: COMP_COLORS[q.compKey] }}
+                  style={{ background: competencyColor[q.competencyId] }}
                 >
-                  {q.id}
+                  {questionNo}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span
                       className="text-[11px] font-bold px-2 py-0.5 rounded-full text-white"
-                      style={{ background: COMP_COLORS[q.compKey] }}
+                      style={{ background: competencyColor[q.competencyId] }}
                     >
-                      {q.compKey}. {q.compLabel}
+                      {q.competencyName}
                     </span>
-                    <span className="text-[11px] text-[#9AA0A6]">{q.subComp}</span>
                   </div>
-                  <p className="text-[14px] font-semibold text-[#1F2328] leading-snug">{q.text}</p>
+                  <p className="text-[14px] font-semibold text-[#1F2328] leading-snug">
+                    {q.questionText}
+                  </p>
                 </div>
               </div>
 
-              {/* Likert options */}
+              {/* Likert options — 5개 중 하나만 고르는 상호배타적 선택지라 radiogroup/radio 시맨틱을 쓴다 */}
               <div className="px-6 py-5">
-                <div className="flex gap-3">
+                <div
+                  className="flex gap-3"
+                  role="radiogroup"
+                  aria-label={`${q.questionText} 응답`}
+                >
                   {LIKERT.map((opt) => {
                     const isSelected = selected === opt.value;
+                    const isPending = pendingIds.has(q.questionId);
                     return (
                       <button
                         key={opt.value}
-                        onClick={() => setAnswer(q.id, opt.value)}
-                        className={`flex-1 flex flex-col items-center gap-2 py-3 px-2 rounded-[8px] border-2 transition-all cursor-pointer
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        disabled={isPending}
+                        onClick={() => setAnswer(q.questionId, opt.value)}
+                        className={`flex-1 flex flex-col items-center gap-2 py-3 px-2 rounded-[8px] border-2 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed
                           ${isSelected ? 'border-[#7C3AED] bg-[#F5F3FF]' : 'border-[#E5E7EB] hover:border-[#C4B5FD] hover:bg-[#FAFAFA]'}`}
                       >
                         {/* Number circle */}
@@ -200,7 +393,9 @@ export default function DiagnosisQuestions({ onComplete, onBack }) {
               <path d="M8 6v4M8 12h.01" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
             <span className="text-[12px] text-[#D97706] font-semibold">
-              미응답 문항 {unanswered}개가 남아 있어 최종 제출할 수 없습니다.
+              {unanswered > 0
+                ? `미응답 문항 ${unanswered}개가 남아 있어 최종 제출할 수 없습니다.`
+                : '응답 저장 중입니다. 잠시 후 다시 시도해 주세요.'}
             </span>
           </div>
         )}
@@ -237,11 +432,11 @@ export default function DiagnosisQuestions({ onComplete, onBack }) {
             ) : (
               <button
                 onClick={() => canSubmit && setConfirmOpen(true)}
-                disabled={!canSubmit}
+                disabled={!canSubmit || submitMutation.isPending}
                 className="h-9 px-6 text-[13px] font-bold text-white rounded-[6px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: '#7C3AED' }}
               >
-                최종 제출
+                {submitMutation.isPending ? '제출 중...' : '최종 제출'}
               </button>
             )}
           </div>

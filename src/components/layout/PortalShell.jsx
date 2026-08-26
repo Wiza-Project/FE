@@ -1,9 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { USER_TYPE } from '@/constants/domain';
 import { UNIVERSITY_NAME, SEMESTERS } from '@/data/dummy';
 import { toast } from '@/components/common';
+import {
+  useHasUnreadNotifications,
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotifications,
+} from '@/hooks/useNotifications';
+import { formatRelativeTime } from '@/utils/date';
 
 // ─── Icon primitives ─────────────────────────────────────────────────────────
 
@@ -17,6 +24,24 @@ const Icon = {
   Star: () => (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
       <path d="M8 1l1.854 3.756L14 5.522l-3 2.923.708 4.127L8 10.5l-3.708 2.072L5 8.445 2 5.522l4.146-.766z" />
+    </svg>
+  ),
+  Card: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="3" width="14" height="10" rx="1.5" fill="currentColor" opacity=".15" />
+      <rect
+        x="1"
+        y="3"
+        width="14"
+        height="10"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <circle cx="5" cy="7.5" r="1.4" fill="currentColor" />
+      <path d="M3.2 11c.3-1.2 1.1-1.8 1.8-1.8s1.5.6 1.8 1.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="9" y1="6.5" x2="13" y2="6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="9" y1="9" x2="13" y2="9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   ),
   Grid: () => (
@@ -106,6 +131,7 @@ const Icon = {
 
 const NAV_STUDENT = [
   { key: 'mypage', label: '마이페이지', icon: Icon.User, accent: '#6B7280', path: '/my' },
+  { key: 'records', label: '학적 정보', icon: Icon.Card, accent: '#6B7280', path: '/my/records' },
   {
     key: 'competency',
     label: '핵심역량진단',
@@ -149,26 +175,28 @@ const PORTAL_LABELS = { student: '학생 포털', staff: '교직원 포털' };
 // 학생 포털은 브랜드 블루 유지, 교직원 포털은 행정시스템 톤(거의 무채색)의 단일 포인트컬러 사용
 const PORTAL_COLORS = { student: '#2563EB', staff: '#1F2937' };
 
-const NOTIFICATIONS = [
-  {
-    title: '진로탐색 워크숍 마감 임박',
-    sub: '신청 마감 3일 전입니다.',
-    time: '10분 전',
-    dot: '#D97706',
+// 알림의 moduleCode(백엔드 ModuleCode enum: PROGRAM/COUNSEL/MILEAGE/CAREER/COMPETENCY)를
+// 포털별 라우트 경로로 매핑합니다. 알림 응답에 레코드 ID가 없어 특정 항목이 아닌
+// 해당 도메인의 메인 페이지로 이동합니다. 새 ModuleCode가 추가되면 여기도 함께 갱신하세요.
+const MODULE_ROUTES = {
+  student: {
+    PROGRAM: '/programs',
+    COUNSEL: '/counsel',
+    MILEAGE: '/mileage',
+    CAREER: '/career',
+    COMPETENCY: '/competency',
   },
-  {
-    title: '마일리지 적립 완료',
-    sub: '독서인증제 참여 마일리지 20점이 적립되었습니다.',
-    time: '2시간 전',
-    dot: '#1A7F37',
+  staff: {
+    PROGRAM: '/staff/programs',
+    COUNSEL: '/staff/counsel',
+    MILEAGE: '/staff/mileage',
+    CAREER: '/staff/career',
+    COMPETENCY: '/staff/competency',
   },
-  {
-    title: '상담 예약 확정',
-    sub: '2026-03-20 14:00 상담 예약이 확정되었습니다.',
-    time: '1일 전',
-    dot: '#0969DA',
-  },
-];
+};
+
+// 알림 드롭다운에 보여줄 개수. 상세 목록/유형별 필터는 이번 스코프 밖입니다.
+const NOTIFICATION_DROPDOWN_SIZE = 5;
 
 const PROFILE_MENU = [
   { label: '내 정보 수정', icon: '✎' },
@@ -192,6 +220,51 @@ export default function PortalShell() {
   const [semester, setSemester] = useState(SEMESTERS[1] ?? SEMESTERS[0]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const notifRef = useRef(null);
+  const profileRef = useRef(null);
+
+  
+  useEffect(() => {
+    if (!notifOpen && !profileOpen) return;
+
+    const handlePointerDown = (event) => {
+      if (notifOpen && notifRef.current && !notifRef.current.contains(event.target)) {
+        setNotifOpen(false);
+      }
+      if (profileOpen && profileRef.current && !profileRef.current.contains(event.target)) {
+        setProfileOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [notifOpen, profileOpen]);
+
+  // 뱃지(안읽음 존재 여부)는 상시 폴링, 목록은 드롭다운이 열렸을 때만 요청합니다.
+  const { data: hasUnread = false } = useHasUnreadNotifications();
+  const { data: notificationPage, isLoading: notificationsLoading } = useNotifications(
+    { size: NOTIFICATION_DROPDOWN_SIZE },
+    notifOpen,
+  );
+  const notifications = notificationPage?.content ?? [];
+  const markReadMutation = useMarkNotificationRead();
+  const markAllReadMutation = useMarkAllNotificationsRead();
+
+  const handleNotificationClick = (n) => {
+    if (!n.read) {
+      markReadMutation.mutate(n.notificationId);
+    }
+    setNotifOpen(false);
+    const path = MODULE_ROUTES[portal]?.[n.moduleCode];
+    if (path) {
+      navigate(path);
+    }
+  };
+
+  const handleMarkAllRead = () => {
+    if (markAllReadMutation.isPending || !hasUnread) return;
+    markAllReadMutation.mutate();
+  };
 
   const activeItem =
     nav
@@ -313,7 +386,7 @@ export default function PortalShell() {
           </select>
 
           {/* Notification bell */}
-          <div className="relative">
+          <div className="relative" ref={notifRef}>
             <button
               onClick={() => {
                 setNotifOpen((o) => !o);
@@ -322,37 +395,64 @@ export default function PortalShell() {
               className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#656D76] transition-colors relative"
             >
               <Icon.Bell />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#CF222E] rounded-full border-2 border-white" />
+              {hasUnread && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#CF222E] rounded-full border-2 border-white" />
+              )}
             </button>
             {notifOpen && (
               <div className="absolute right-0 top-11 w-80 bg-white rounded-[8px] border border-[#E5E7EB] shadow-xl z-50">
                 <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center justify-between">
                   <span className="text-[13px] font-bold text-[#1F2328]">알림</span>
-                  <button className="text-[11px] text-[#2563EB] font-semibold hover:underline">
+                  <button
+                    onClick={handleMarkAllRead}
+                    disabled={markAllReadMutation.isPending || !hasUnread}
+                    className="text-[11px] text-[#2563EB] font-semibold hover:underline disabled:text-[#9AA0A6] disabled:no-underline disabled:cursor-not-allowed"
+                  >
                     모두 읽음
                   </button>
                 </div>
-                <div className="divide-y divide-[#F3F4F6]">
-                  {NOTIFICATIONS.map((n, i) => (
-                    <div key={i} className="px-4 py-3 hover:bg-[#F9FAFB] cursor-pointer flex gap-3">
-                      <div
-                        className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
-                        style={{ background: n.dot }}
-                      />
-                      <div>
-                        <div className="text-[13px] font-semibold text-[#1F2328]">{n.title}</div>
-                        <div className="text-[12px] text-[#656D76] mt-0.5">{n.sub}</div>
-                        <div className="text-[11px] text-[#9AA0A6] mt-1">{n.time}</div>
-                      </div>
+                <div className="divide-y divide-[#F3F4F6] max-h-96 overflow-y-auto">
+                  {notificationsLoading ? (
+                    <div className="px-4 py-6 text-center text-[12px] text-[#9AA0A6]">
+                      불러오는 중...
                     </div>
-                  ))}
+                  ) : notifications.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-[12px] text-[#9AA0A6]">
+                      새 알림이 없습니다.
+                    </div>
+                  ) : (
+                    notifications.map((n) => {
+                      const unread = !n.read;
+                      return (
+                        <div
+                          key={n.notificationId}
+                          onClick={() => handleNotificationClick(n)}
+                          className="px-4 py-3 hover:bg-[#F9FAFB] cursor-pointer flex gap-3"
+                        >
+                          <div
+                            className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
+                            style={{ background: unread ? '#2563EB' : '#D0D7DE' }}
+                          />
+                          <div>
+                            <div className="text-[13px] font-semibold text-[#1F2328]">
+                              {n.title}
+                            </div>
+                            <div className="text-[12px] text-[#656D76] mt-0.5">{n.content}</div>
+                            <div className="text-[11px] text-[#9AA0A6] mt-1">
+                              {formatRelativeTime(n.createdAt)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}
           </div>
 
           {/* Profile */}
-          <div className="relative">
+          <div className="relative" ref={profileRef}>
             <button
               onClick={() => {
                 setProfileOpen((o) => !o);
@@ -414,16 +514,6 @@ export default function PortalShell() {
         </main>
       </div>
 
-      {/* Backdrop for dropdowns */}
-      {(notifOpen || profileOpen) && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => {
-            setNotifOpen(false);
-            setProfileOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }

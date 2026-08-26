@@ -245,3 +245,169 @@ export const updateAssessmentRound = async ({
   });
   return data;
 };
+
+/**
+ * 응시율 조회. 회차의 응시 대상자 수 대비 완료 건수를 실시간 집계한다.
+ * target_condition이 없는 회차는 전체 학생을 대상자로 집계한다.
+ *
+ * @param {number} roundId
+ * @returns {Promise<{
+ *   assessmentRoundId: number,
+ *   targetCount: number,
+ *   completedCount: number,
+ *   attendanceRate: number,
+ * }>}
+ */
+export const fetchAssessmentAttendance = async (roundId) => {
+  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/attendance`);
+  return data;
+};
+
+/**
+ * @typedef {Object} AssessmentNonParticipant
+ * @property {number} userId
+ * @property {string} studentId
+ * @property {string} name
+ * @property {string|null} email
+ * @property {string|null} phone
+ * @property {string|null} majorName
+ * @property {number|null} grade
+ */
+
+/**
+ * 미응시자 목록 조회. 회차의 응시 대상자 중 아직 제출을 완료하지 않은 학생 명단을
+ * 페이지 단위로 조회한다. target_condition이 없는 회차는 전체 학생을 대상자로 본다.
+ * 개인정보(학번·이름·연락처)가 포함돼 있지만, 담당 교직원이 미응시자를 확인해야 하는
+ * 기능이라 응시율 조회와 동일하게 hasRole STAFF 전반에게 열려 있다.
+ *
+ * @param {number} roundId
+ * @param {Object} [params]
+ * @param {number} [params.page] 0-base 페이지 번호.
+ * @param {number} [params.size] 페이지당 건수.
+ * @returns {Promise<{content: AssessmentNonParticipant[], page: number, size: number,
+ *   totalElements: number, totalPages: number, first: boolean, last: boolean}>}
+ */
+export const fetchAssessmentNonParticipants = async (roundId, params) => {
+  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/non-participants`, {
+    params,
+  });
+  return data;
+};
+
+/**
+ * 미응시자 알림 발송. 제목·내용은 서버가 회차 정보로 만들어 보내므로 클라이언트가
+ * 전송할 필요가 없다. MVP1 기준 인앱(APP) 채널만 실제로 발송되고 SMS·메일은 연동돼 있지 않다.
+ *
+ * @param {number} roundId
+ * @param {number[]|null} userIds null이면 회차의 전체 미응시자에게, 배열이면 해당 userId에게만 발송.
+ * @returns {Promise<{sentUserIds: number[], failedCount: number}>}
+ */
+export const notifyAssessmentNonParticipants = async (roundId, userIds) => {
+  const { data } = await apiClient.post(`/admin/assessment-rounds/${roundId}/non-participants/notify`, {
+    userIds,
+  });
+  return data;
+};
+
+/**
+ * @typedef {Object} AssessmentResumeItem
+ * @property {number} questionId
+ * @property {number} competencyId
+ * @property {string} competencyName
+ * @property {number} displayOrder
+ * @property {string} questionText
+ * @property {Array<{value: number, label: string}>} responseOptions
+ * @property {number|null} selectedValue 미응답이면 null
+ */
+
+/**
+ * 진단 응시 이어하기 조회 (SCR-S01 #8). 회차 문항 전체와 기존 저장된 응답값(없으면 null),
+ * 진행률을 함께 조회한다. 이미 제출된 attempt를 조회하면 ApiError(코드 Q004)가 throw된다.
+ *
+ * @param {number} attemptId
+ * @returns {Promise<{
+ *   attemptId: number,
+ *   attemptStatus: string,
+ *   progress: {answeredCount: number, totalCount: number},
+ *   items: AssessmentResumeItem[],
+ * }>}
+ */
+export const fetchAssessmentResume = async (attemptId) => {
+  const { data } = await apiClient.get(`/students/assessment-attempts/${attemptId}/responses`);
+  return data;
+};
+
+/**
+ * 문항 응답 저장 (SCR-S01 #8). 이미 저장된 응답이 있으면 값을 갱신한다(upsert).
+ * BE에서 응답 저장 자체가 중도저장이라 별도의 임시저장 API는 없다 — 문항을 선택할 때마다
+ * 이 함수를 호출하는 것이 곧 중도저장이다.
+ *
+ * @param {Object} params
+ * @param {number} params.attemptId
+ * @param {number} params.questionId
+ * @param {number} params.selectedValue
+ * @returns {Promise<{
+ *   questionId: number,
+ *   selectedValue: number,
+ *   savedAt: string,
+ *   progress: {answeredCount: number, totalCount: number},
+ * }>}
+ */
+export const saveAssessmentResponse = async ({ attemptId, questionId, selectedValue }) => {
+  const { data } = await apiClient.put(
+    `/students/assessment-attempts/${attemptId}/responses/${questionId}`,
+    { selectedValue },
+  );
+  return data;
+};
+
+/**
+ * 진단 제출. 미응답 문항이 없으면 제출을 확정하고, 같은 트랜잭션에서
+ * 역량별 환산점수를 산출한다. 미응답 문항이 있으면 ApiError(코드 Q005)가 throw되며,
+ * `error.data`에 미응답 questionId 배열이 함께 담겨 온다.
+ *
+ * @param {number} attemptId
+ * @returns {Promise<{
+ *   attemptId: number,
+ *   attemptStatus: string,
+ *   submittedAt: string,
+ *   scores: Array<{
+ *     competencyId: number,
+ *     competencyName: string,
+ *     displayOrder: number,
+ *     rawScore: number,
+ *     convertedScore: number,
+ *   }>,
+ * }>}
+ */
+export const submitAssessment = async (attemptId) => {
+  const { data } = await apiClient.post(`/students/assessment-attempts/${attemptId}/submit`);
+  return data;
+};
+
+/**
+ * 진단 결과 조회. 역량별 환산점수(방사형 차트)와 전체 평균을 조회한다.
+ * overallAverageScore는 백분위와 무관하게 내 환산점수만으로 항상 계산되는 값이라
+ * percentileAvailable이 false여도 채워져 있다. 아직 채점 전(미제출) attempt를 조회하면
+ * ApiError(코드 Q018)가 throw된다.
+ *
+ * @param {number} attemptId
+ * @returns {Promise<{
+ *   attemptId: number,
+ *   roundId: number,
+ *   submittedAt: string,
+ *   overallAverageScore: number,
+ *   percentileAvailable: boolean,
+ *   scores: Array<{
+ *     competencyId: number,
+ *     competencyName: string,
+ *     displayOrder: number,
+ *     convertedScore: number,
+ *     percentile: number|null,
+ *   }>,
+ * }>}
+ */
+export const fetchAssessmentResult = async (attemptId) => {
+  const { data } = await apiClient.get(`/students/assessment-attempts/${attemptId}/result`);
+  return data;
+};

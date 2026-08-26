@@ -7,6 +7,7 @@ import { ComingSoon } from '@/components/common';
 
 import HomePage from '@/pages/HomePage';
 import MyPage from '@/pages/MyPage';
+import AcademicRecordPage from '@/pages/records/AcademicRecordPage';
 import CompetencyPage from '@/pages/competency/CompetencyPage';
 import ExtracurrPage from '@/pages/program/ExtracurrPage';
 import CounselingPage from '@/pages/counsel/CounselingPage';
@@ -70,6 +71,7 @@ export const router = createBrowserRouter([
         element: <PortalShell />,
         children: [
           { path: '/my', element: <MyPage /> },
+          { path: '/my/records', element: <AcademicRecordPage /> },
           { path: '/competency', element: <CompetencyPage /> },
           { path: '/programs', element: <ExtracurrPage /> },
           { path: '/counsel', element: <CounselingPage /> },
