@@ -192,6 +192,23 @@ export const COUNSELING_SESSION_ERROR_CODE = {
   INVALID_STATE: 'S008',
 };
 
+/** 동의 정책의 모듈 분류 — ConsentPolicy.moduleCode. */
+export const CONSENT_MODULE_CODE = {
+  COMMON: 'COMMON',
+  ASSESSMENT: 'ASSESSMENT',
+  COUNSELING: 'COUNSELING',
+  CAREER: 'CAREER',
+  PROGRAM: 'PROGRAM',
+};
+
+/** 학생 진단 응시(attempt)의 서버 상태 — AssessmentAttempt.attemptStatus. */
+export const ASSESSMENT_ATTEMPT_STATUS = {
+  NOT_STARTED: 'NOT_STARTED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+  SCORED: 'SCORED',
+};
+
 /**
  * 백엔드 응답 형태 참고 (JSDoc — 에디터 자동완성용)
  *

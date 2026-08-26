@@ -411,3 +411,37 @@ export const fetchAssessmentResult = async (attemptId) => {
   const { data } = await apiClient.get(`/students/assessment-attempts/${attemptId}/result`);
   return data;
 };
+
+/**
+ * 진단 안내 조회. 진단명·응시기간·문항수·예상 소요시간과 함께, 이미 응시를
+ * 시작한 적이 있으면 기존 attemptId/attemptStatus를 내려준다(없으면 둘 다 null).
+ *
+ * @param {number} roundId
+ * @returns {Promise<{
+ *   assessmentRoundId: number,
+ *   assessmentName: string,
+ *   startsAt: string,
+ *   endsAt: string,
+ *   questionCount: number,
+ *   estimatedMinutes: number,
+ *   attemptId: number|null,
+ *   attemptStatus: string|null,
+ * }>}
+ */
+export const fetchAssessmentIntro = async (roundId) => {
+  const { data } = await apiClient.get(`/students/assessment-rounds/${roundId}/intro`);
+  return data;
+};
+
+/**
+ * 응시 시작. 필수 동의(`api/consent.js`)를 모두 마친 뒤 호출해야 하며,
+ * 응시기간이 아니면 실패한다(ApiError 코드 Q003). 이미 시작한 학생이 다시 호출하면
+ * 새로 만들지 않고 기존 attempt를 그대로 반환한다(멱등).
+ *
+ * @param {number} roundId
+ * @returns {Promise<{attemptId: number, attemptStatus: string}>}
+ */
+export const startAssessmentAttempt = async (roundId) => {
+  const { data } = await apiClient.post(`/students/assessment-rounds/${roundId}/attempts`);
+  return data;
+};
