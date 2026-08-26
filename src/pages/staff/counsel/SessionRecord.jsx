@@ -312,13 +312,27 @@ export default function SessionRecord() {
     onError: onActionError,
   });
 
-  // 비공개 기록 저장·확정 오류를 공통 분기한다. S009(충돌)는 사용자 실수가 아니라 서버 상태가
-  // 바뀐 것이므로 최신 canSaveDraft/canConfirm/recordStatus만 다시 받아오고 로컬 입력은 지우지
-  // 않는다. 권한·존재 자체가 사라진 오류는 영역을 닫아 더 이상 조작하지 못하게 한다.
-  const onPrivateRecordMutationError = (mutationError) => {
+  // [회귀 방지 불변식] 회기 A의 저장·확정 요청이 응답하는 시점에 사용자가 이미 회기 B를 열어
+  // 두었다면(A 요청 중 footer 닫기는 막혀 있지만, 응답 자체가 늦게 온 경우까지 이중으로 방어),
+  // A의 응답은 B의 화면(입력값·토스트·모달)을 절대 건드리면 안 된다. 이 함수 하나가 그 판정을
+  // 전담하므로, 아래 두 mutation의 어떤 콜백이든 "화면을 바꾸기 전에 반드시 이 함수를 거쳤는가"만
+  // 코드를 읽어 확인하면 이 불변식이 지켜지는지 정적으로 검증할 수 있다.
+  // (Query 캐시 쓰기는 요청의 sessionId로 직접 하므로 이 판정 대상이 아니다 — 어느 회기가
+  // 열려 있든 항상 안전하다.)
+  const isPrivateRecordScreenFor = (requestSessionId) => requestSessionId === detailSessionId;
+
+  // 비공개 기록 저장·확정 오류를 공통 분기한다. requestSessionId는 이 오류를 낸 요청이 대상으로
+  // 삼은 회기다(최신 detailSessionId가 아니라 요청 변수에서 받는다).
+  // S009(충돌)는 사용자 실수가 아니라 서버 상태가 바뀐 것이므로 최신 canSaveDraft/canConfirm/
+  // recordStatus만 다시 받아오고 로컬 입력은 지우지 않는다. 권한·존재 오류는 영역을 닫는다.
+  const onPrivateRecordMutationError = (mutationError, requestSessionId) => {
+    // 캐시 무효화는 요청 회기 기준이라 지금 어떤 회기가 열려 있든 안전하다.
+    // 반면 토스트·영역 닫기 같은 화면 조작은 isPrivateRecordScreenFor를 거친 뒤에만 한다.
     if (mutationError instanceof ApiError && mutationError.code === COUNSELING_SESSION_ERROR_CODE.CONFLICT) {
-      queryClient.invalidateQueries({ queryKey: counselingPrivateRecordQueryKey(detailSessionId) });
-      toast(getPrivateRecordErrorMessage(mutationError), 'error');
+      queryClient.invalidateQueries({ queryKey: counselingPrivateRecordQueryKey(requestSessionId) });
+      if (isPrivateRecordScreenFor(requestSessionId)) {
+        toast(getPrivateRecordErrorMessage(mutationError), 'error');
+      }
       return;
     }
     if (
@@ -327,35 +341,50 @@ export default function SessionRecord() {
         mutationError.code === COUNSELING_SESSION_ERROR_CODE.SESSION_NOT_FOUND ||
         mutationError.code === COUNSELING_SESSION_ERROR_CODE.UNAUTHENTICATED)
     ) {
-      toast(getPrivateRecordErrorMessage(mutationError), 'error');
-      closePrivateRecord();
+      if (isPrivateRecordScreenFor(requestSessionId)) {
+        toast(getPrivateRecordErrorMessage(mutationError), 'error');
+        closePrivateRecord();
+      }
       return;
     }
-    setPrivateRecordFormError(getPrivateRecordErrorMessage(mutationError));
+    if (isPrivateRecordScreenFor(requestSessionId)) {
+      setPrivateRecordFormError(getPrivateRecordErrorMessage(mutationError));
+    }
   };
 
   const savePrivateRecordMutation = useMutation({
     mutationFn: ({ sessionId, privateContent }) =>
       saveCounselingPrivateRecord(sessionId, { privateContent }),
-    onSuccess: (data) => {
+    // 캐시는 요청이 대상으로 한 sessionId(variables.sessionId)에 귀속한다. 최신 클로저
+    // detailSessionId를 쓰면 늦은 응답이 지금 열린 다른 회기 캐시를 덮어쓸 수 있다.
+    onSuccess: (data, { sessionId }) => {
       // 회기 목록·상세 캐시는 건드리지 않는다(원문이 섞이지 않아야 한다). 비공개 query만 갱신한다.
-      queryClient.setQueryData(counselingPrivateRecordQueryKey(detailSessionId), data);
-      setPrivateContentInput(data.privateContent ?? '');
-      toast('비공개 기록을 임시저장했습니다.', 'success');
+      queryClient.setQueryData(counselingPrivateRecordQueryKey(sessionId), data);
+      // 화면에 보이는 로컬 입력·토스트는 isPrivateRecordScreenFor를 거친 뒤에만 갱신한다.
+      if (isPrivateRecordScreenFor(sessionId)) {
+        setPrivateContentInput(data.privateContent ?? '');
+        toast('비공개 기록을 임시저장했습니다.', 'success');
+      }
     },
-    onError: onPrivateRecordMutationError,
+    onError: (mutationError, { sessionId }) =>
+      onPrivateRecordMutationError(mutationError, sessionId),
   });
 
   const confirmPrivateRecordMutation = useMutation({
+    // 확정 요청 변수는 sessionId 스칼라 하나다(저장과 시그니처가 다르다).
     mutationFn: (sessionId) => confirmCounselingPrivateRecord(sessionId),
-    onSuccess: (data) => {
-      queryClient.setQueryData(counselingPrivateRecordQueryKey(detailSessionId), data);
-      setConfirmPrivateRecordOpen(false);
-      toast('비공개 기록을 확정했습니다.', 'success');
+    onSuccess: (data, sessionId) => {
+      queryClient.setQueryData(counselingPrivateRecordQueryKey(sessionId), data);
+      if (isPrivateRecordScreenFor(sessionId)) {
+        setConfirmPrivateRecordOpen(false);
+        toast('비공개 기록을 확정했습니다.', 'success');
+      }
     },
-    onError: (mutationError) => {
-      setConfirmPrivateRecordOpen(false);
-      onPrivateRecordMutationError(mutationError);
+    onError: (mutationError, sessionId) => {
+      if (isPrivateRecordScreenFor(sessionId)) {
+        setConfirmPrivateRecordOpen(false);
+      }
+      onPrivateRecordMutationError(mutationError, sessionId);
     },
   });
 
@@ -645,7 +674,9 @@ export default function SessionRecord() {
               </Button>
             </div>
           ) : (
-            <Button variant="outline" onClick={closeDetail}>
+            // 요청 진행 중에는 상세 모달을 닫지 못하게 막는다. 닫고 다른 회기로 전환하는 사이
+            // 늦은 응답이 도착하면 회기가 뒤섞일 수 있어, 회기 전환 경로 자체를 차단한다.
+            <Button variant="outline" onClick={closeDetail} disabled={isMutating}>
               닫기
             </Button>
           )
