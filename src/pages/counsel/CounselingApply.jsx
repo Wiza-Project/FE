@@ -224,8 +224,9 @@ export default function CounselingApply({ onComplete, onBack }) {
   // 체크박스는 서버 동의 기록 없이는 아무 의미가 없는 일시 UI 상태일 뿐이다.
   const [consentChecked, setConsentChecked] = useState(false);
   const [consentError, setConsentError] = useState('');
+  const [isConsentRefreshing, setIsConsentRefreshing] = useState(false);
   const agreeMutation = useMutation({
-    mutationFn: () => agreeToConsentPolicy(currentPolicy.consentPolicyId),
+    mutationFn: (consentPolicyId) => agreeToConsentPolicy(consentPolicyId),
   });
   const returnToConsentStep = () => {
     setConsentChecked(false);
@@ -233,39 +234,67 @@ export default function CounselingApply({ onComplete, onBack }) {
     setStep(0);
   };
 
-  // "동의하고 다음" 버튼 핸들러. 이미 유효한 동의가 있으면 바로 다음 단계로 넘어가고,
-  // 없으면 서버에 동의를 기록한 뒤 성공 응답을 받고 나서만 다음 단계로 넘어간다.
-  const handleAgreeAndNext = async () => {
-    if (activeConsentId) {
-      // 유효한 동의가 확인됐으므로, 이전에 남아 있을 수 있는 낡은 동의 오류 문구를 지운다.
-      setConsentError('');
-      setConsentChecked(false);
-      setStep(1);
-      return;
+  // 정책 변경이나 동의 철회가 오래된 Query 캐시에 남지 않도록 서버의 최신 상태를 확인한다.
+  const refreshConsentState = async () => {
+    const [policiesResult, consentsResult] = await Promise.all([
+      refetchConsentPolicies({ throwOnError: true }),
+      refetchMyConsents({ throwOnError: true }),
+    ]);
+    const refreshedRequiredPolicies = (policiesResult.data ?? []).filter(
+      (policy) => policy.consentType === CONSENT_TYPE.PERSONAL_INFO && policy.required === true,
+    );
+
+    if (refreshedRequiredPolicies.length !== 1) {
+      return { policy: null, consent: null };
     }
-    if (!currentPolicy || agreeMutation.isPending) {
+
+    const policy = refreshedRequiredPolicies[0];
+    const consent = (consentsResult.data ?? []).find((item) =>
+      isValidActiveConsent(item, policy.consentPolicyId),
+    );
+    return { policy, consent: consent ?? null };
+  };
+
+  // "동의하고 다음" 버튼 핸들러. 최신 정책과 동의 이력을 재확인한 뒤,
+  // 유효한 동의가 있으면 다음 단계로 넘어가고, 없으면 최신 정책에 동의한 뒤 진행한다.
+  const handleAgreeAndNext = async () => {
+    if (agreeMutation.isPending || isConsentRefreshing || !currentPolicy) {
       return;
     }
     setConsentError('');
+    setIsConsentRefreshing(true);
     try {
-      await agreeMutation.mutateAsync();
-      setConsentChecked(false);
-      const [refreshedPoliciesResult, refreshedMyConsentsResult] = await Promise.all([
-        refetchConsentPolicies({ throwOnError: true }),
-        refetchMyConsents({ throwOnError: true }),
-      ]);
-      const refreshedRequiredPolicies = refreshedPoliciesResult.data?.filter(
-        (policy) => policy.consentType === CONSENT_TYPE.PERSONAL_INFO && policy.required === true,
-      );
-      if (refreshedRequiredPolicies?.length !== 1) {
+      const initialConsentState = await refreshConsentState();
+      if (!initialConsentState.policy) {
         setConsentError('동의 처리 후 유효한 동의 정책을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
         return;
       }
-      const refreshedPolicy = refreshedRequiredPolicies[0];
-      const hasValidRefreshedConsent = refreshedMyConsentsResult.data?.some((consent) =>
-        isValidActiveConsent(consent, refreshedPolicy.consentPolicyId),
-      );
-      if (!hasValidRefreshedConsent) {
+
+      if (initialConsentState.consent) {
+        setConsentChecked(false);
+        setStep(1);
+        return;
+      }
+
+      if (initialConsentState.policy.consentPolicyId !== currentPolicy.consentPolicyId) {
+        setConsentChecked(false);
+        setConsentError('동의 정책이 변경되었습니다. 최신 내용을 확인한 뒤 다시 동의해 주세요.');
+        return;
+      }
+
+      if (!consentChecked) {
+        return;
+      }
+
+      await agreeMutation.mutateAsync(initialConsentState.policy.consentPolicyId);
+      setConsentChecked(false);
+
+      const consentStateAfterAgree = await refreshConsentState();
+      if (!consentStateAfterAgree.policy) {
+        setConsentError('동의 처리 후 유효한 동의 정책을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+      if (!consentStateAfterAgree.consent) {
         setConsentError('동의 처리 후 유효한 동의 기록을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
         return;
       }
@@ -275,12 +304,8 @@ export default function CounselingApply({ onComplete, onBack }) {
         // 동시에 들어온 다른 요청이 먼저 동의를 기록했을 수 있다. 이력을 한 번만 재조회해
         // 이미 유효한 동의가 생겼는지 확인하고, 없으면 조용히 넘어가지 않고 오류로 멈춘다.
         try {
-          const consents = await fetchMyConsents();
-          queryClient.setQueryData(['myConsents'], consents);
-          const stillActive = consents.some(
-            (c) => isValidActiveConsent(c, currentPolicy.consentPolicyId),
-          );
-          if (stillActive) {
+          const consentStateAfterConflict = await refreshConsentState();
+          if (consentStateAfterConflict.policy && consentStateAfterConflict.consent) {
             setConsentChecked(false);
             setStep(1);
             return;
@@ -290,6 +315,8 @@ export default function CounselingApply({ onComplete, onBack }) {
         }
       }
       setConsentError('동의 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setIsConsentRefreshing(false);
     }
   };
 
@@ -383,9 +410,9 @@ export default function CounselingApply({ onComplete, onBack }) {
 
   const chosenSlot = schedules.find((s) => s.scheduleId === selectedSlot);
 
-  const handleFinalSubmit = () => {
+  const handleFinalSubmit = async () => {
     // 이미 요청이 진행 중이면 중복 제출을 막는다.
-    if (createReservationMutation.isPending) {
+    if (createReservationMutation.isPending || isConsentRefreshing) {
       return;
     }
     // 다이얼로그가 열린 사이 일정이 갱신돼 선택 슬롯이 사라졌을 수 있다.
@@ -398,29 +425,40 @@ export default function CounselingApply({ onComplete, onBack }) {
       }
       return;
     }
-    // 제출 직전에 유효한 동의가 없으면 요청 자체를 보내지 않고 동의 단계로 되돌린다.
-    // 이 화면 안에서는 있었지만(예: 뒤로가기 중 서버에서 철회된 경우) 사라졌을 수 있기 때문이다.
-    if (!activeConsentId) {
-      // 이유 없이 0단계로 되돌리면 사용자가 혼란스러우므로, 기존 동의 오류 영역에 사유를 남긴다.
-      setConsentError('동의가 유효하지 않아 신청을 진행할 수 없습니다. 동의 내용을 다시 확인해 주세요.');
-      setSubmitConfirm(false);
-      returnToConsentStep();
-      return;
-    }
-
-    setCompletionInfo({
-      typeName: chosenType.typeName,
-      counselorName: chosenSlot.counselorName,
-      startsAt: chosenSlot.startsAt,
-      location: chosenSlot.location,
-    });
     setSubmitConfirm(false);
-    createReservationMutation.mutate({
-      counselingTypeId: chosenType.counselingTypeId,
-      scheduleId: chosenSlot.scheduleId,
-      requestContent: memo.trim(),
-      consentId: activeConsentId,
-    });
+    setIsConsentRefreshing(true);
+    try {
+      // 예약 요청 직전에도 최신 동의 ID를 확인해 오래된 Query 캐시를 사용하지 않는다.
+      const currentConsentState = await refreshConsentState();
+      if (!currentConsentState.policy) {
+        setConsentError('동의 정보를 확인하지 못해 신청할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+        returnToConsentStep();
+        return;
+      }
+      if (!currentConsentState.consent) {
+        setConsentError('동의가 유효하지 않아 신청을 진행할 수 없습니다. 동의 내용을 다시 확인해 주세요.');
+        returnToConsentStep();
+        return;
+      }
+
+      setCompletionInfo({
+        typeName: chosenType.typeName,
+        counselorName: chosenSlot.counselorName,
+        startsAt: chosenSlot.startsAt,
+        location: chosenSlot.location,
+      });
+      createReservationMutation.mutate({
+        counselingTypeId: chosenType.counselingTypeId,
+        scheduleId: chosenSlot.scheduleId,
+        requestContent: memo.trim(),
+        consentId: currentConsentState.consent.userConsentId,
+      });
+    } catch {
+      setConsentError('동의 정보를 확인하지 못해 신청할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+      returnToConsentStep();
+    } finally {
+      setIsConsentRefreshing(false);
+    }
   };
 
   return (
@@ -528,8 +566,11 @@ export default function CounselingApply({ onComplete, onBack }) {
               <div className="flex justify-end">
                 <Button
                   size="md"
-                  disabled={(!activeConsentId && !consentChecked) || agreeMutation.isPending}
-                  loading={agreeMutation.isPending}
+                  disabled={
+                    ((!activeConsentId && !consentChecked) || agreeMutation.isPending) ||
+                    isConsentRefreshing
+                  }
+                  loading={agreeMutation.isPending || isConsentRefreshing}
                   style={activeConsentId || consentChecked ? { background: ACCENT } : {}}
                   onClick={handleAgreeAndNext}
                 >
@@ -870,8 +911,8 @@ export default function CounselingApply({ onComplete, onBack }) {
             </Button>
             <Button
               size="md"
-              disabled={!chosenSlot || createReservationMutation.isPending}
-              loading={createReservationMutation.isPending}
+              disabled={!chosenSlot || createReservationMutation.isPending || isConsentRefreshing}
+              loading={createReservationMutation.isPending || isConsentRefreshing}
               style={chosenSlot ? { background: ACCENT } : {}}
               onClick={() => {
                 if (!chosenSlot) {
@@ -986,6 +1027,7 @@ export default function CounselingApply({ onComplete, onBack }) {
         title="상담 신청 확인"
         message={`${chosenSlot ? formatScheduleLabel(chosenSlot.startsAt) : ''} · ${chosenSlot?.counselorName ?? ''}\n\n위 일정으로 상담을 신청하시겠습니까?`}
         confirmLabel="신청하기"
+        loading={createReservationMutation.isPending || isConsentRefreshing}
         onConfirm={handleFinalSubmit}
         onCancel={() => setSubmitConfirm(false)}
       />
