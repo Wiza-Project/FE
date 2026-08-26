@@ -178,6 +178,9 @@ export default function SessionRecord() {
   });
 
   // 사용자가 명시적으로 연 회기(detailSessionId)에 한해서만 전용 GET을 호출한다.
+  // gcTime: 0 — 이 쿼리를 관찰하는 컴포넌트가 사라지는 즉시 캐시에서 제거한다. 닫기 핸들러의
+  // removeQueries가 닿지 못하는 경로(닫지 않고 다른 메뉴로 이동해 화면이 언마운트되는 경우)에서도
+  // 비공개 원문이 기본 gcTime(5분) 동안 캐시에 남지 않게 한다. 원문은 매번 명시적으로 다시 조회한다.
   const {
     data: privateRecord,
     isLoading: privateRecordLoading,
@@ -187,6 +190,7 @@ export default function SessionRecord() {
     queryKey: counselingPrivateRecordQueryKey(detailSessionId),
     queryFn: () => fetchCounselingPrivateRecord(detailSessionId),
     enabled: privateRecordOpen && detailSessionId !== null,
+    gcTime: 0,
   });
 
   // 서버 초안을 최초 1회만 textarea에 반영한다(위 privateContentSeededRef 설명 참고).
