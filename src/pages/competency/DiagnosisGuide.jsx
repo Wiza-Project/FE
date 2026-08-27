@@ -297,13 +297,18 @@ export default function DiagnosisGuide({ roundId, onStart, onViewResult }) {
                               onClick={() =>
                                 setExpandedId((p) => (p === policy.consentPolicyId ? null : policy.consentPolicyId))
                               }
+                              aria-expanded={isOpen}
+                              aria-controls={`consent-content-${policy.consentPolicyId}`}
                               className="text-[12px] text-[#7C3AED] font-semibold hover:underline flex-shrink-0"
                             >
                               {isOpen ? '접기' : '상세보기'}
                             </button>
                           </div>
                           {isOpen && (
-                            <div className="border-t border-[#E5E7EB] px-5 py-4 bg-[#FAFAFA]">
+                            <div
+                              id={`consent-content-${policy.consentPolicyId}`}
+                              className="border-t border-[#E5E7EB] px-5 py-4 bg-[#FAFAFA]"
+                            >
                               <pre className="text-[12px] text-[#656D76] leading-relaxed whitespace-pre-wrap font-[inherit] max-h-52 overflow-y-auto">
                                 {policy.content}
                               </pre>
