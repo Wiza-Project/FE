@@ -1,8 +1,152 @@
 import { apiClient, downloadFile } from './client';
 
 /**
- * 취창업 자기소개서·포트폴리오 API.
+ * 취창업 이력서·자기소개서·포트폴리오 API.
  */
+
+// ─── 이력서 (Resume) ─────────────────────────────────────────────────────────
+
+/**
+ * 이력서 contentData는 서버가 검증하는 고정 템플릿이다.
+ * 템플릿에 없는 값은 extra에만 담을 수 있다 
+ *
+ * @typedef {Object} ResumeContact
+ * @property {string} name 성명(필수, 최대 50자) — 학사행정 연동 값이 아니라 이력서에 직접 입력한다.
+ * @property {string} [phoneNumber] 예) "010-1234-5678" (하이픈 생략 허용)
+ * @property {string} [email]
+ * @property {string} [address] 최대 200자
+ *
+ * @typedef {Object} ResumeEducation
+ * @property {string} schoolName 필수, 최대 100자
+ * @property {string} [major] 최대 100자
+ * @property {string} [admissionDate] 'YYYY-MM-DD'
+ * @property {string} [graduationDate] 'YYYY-MM-DD'
+ * @property {string} [enrollmentStatus] 최대 20자. 예) "재학중", "졸업"
+ *
+ * @typedef {Object} ResumeCareer
+ * @property {string} companyName 필수, 최대 100자
+ * @property {string} [position] 최대 100자
+ * @property {string} [startDate] 'YYYY-MM-DD'
+ * @property {string} [endDate] 'YYYY-MM-DD'
+ * @property {string} [description] 최대 500자
+ *
+ * @typedef {Object} ResumeCertification
+ * @property {string} certificationName 필수, 최대 100자
+ * @property {string} [issuer] 최대 100자
+ * @property {string} [acquiredDate] 'YYYY-MM-DD'
+ *
+ * @typedef {Object} ResumeLanguageTest
+ * @property {string} testName 필수, 최대 100자. 예) "TOEIC"
+ * @property {string} [score] 최대 20자. 시험별 표기 그대로("905", "AL" 등)
+ * @property {string} [acquiredDate] 'YYYY-MM-DD'
+ *
+ * @typedef {Object} ResumeContentData 고정 이력서 템플릿 본문
+ * @property {ResumeContact} [contact]
+ * @property {ResumeEducation[]} [educations]
+ * @property {ResumeCareer[]} [careers]
+ * @property {ResumeCertification[]} [certifications]
+ * @property {ResumeLanguageTest[]} [languageTests]
+ * @property {Object} [extra] 템플릿에 없는 값 전용 자유 JSON. 예) { portfolioUrl: "https://..." }
+ *
+ * @typedef {Object} ResumeSummary
+ * @property {number} careerDocumentId
+ * @property {string} documentTitle
+ * @property {number} versionNo
+ * @property {string} updatedAt ISO 8601 (KST)
+ *
+ * @typedef {Object} ResumeDetail
+ * @property {number} careerDocumentId
+ * @property {string} documentTitle
+ * @property {number} versionNo
+ * @property {ResumeContentData} contentData
+ * @property {string} createdAt
+ * @property {string} updatedAt
+ */
+
+/**
+ * 내 이력서 목록(버전 이력) 조회. GET /api/v1/students/me/resumes
+ * 서버가 버전 최신순으로 정렬해 내려준다.
+ * @param {Object} [params]
+ * @param {number} [params.page] 0-base 페이지 번호 (기본 0)
+ * @param {number} [params.size] 페이지당 건수 (기본 50 — 버전 이력이 많지 않아 넉넉히 잡음)
+ * @returns {Promise<PageResponse & {content: ResumeSummary[]}>}
+ */
+export const fetchResumes = async (params) => {
+  const { data } = await apiClient.get('/v1/students/me/resumes', {
+    params: { page: 0, size: 50, ...params },
+  });
+  return data;
+};
+
+/**
+ * 내 최신 버전 이력서 조회. GET /api/v1/students/me/resumes/latest
+ * @returns {Promise<ResumeDetail>}
+ */
+export const fetchLatestResume = async () => {
+  const { data } = await apiClient.get('/v1/students/me/resumes/latest');
+  return data;
+};
+
+/**
+ * 이력서 특정 버전 상세 조회. GET /api/v1/students/me/resumes/{documentId}
+ * @param {number} documentId
+ * @returns {Promise<ResumeDetail>}
+ */
+export const fetchResume = async (documentId) => {
+  const { data } = await apiClient.get(`/v1/students/me/resumes/${documentId}`);
+  return data;
+};
+
+/**
+ * 이력서 최초 작성(버전 1). POST /api/v1/students/me/resumes
+ * 이미 작성된 이력이 있으면 실패한다(J018) — 이후 새 버전은 createResumeVersion을 쓴다.
+ * @param {Object} payload
+ * @param {string} payload.documentTitle
+ * @param {ResumeContentData} [payload.contentData]
+ * @returns {Promise<ResumeDetail>}
+ */
+export const createResume = async (payload) => {
+  const { data } = await apiClient.post('/v1/students/me/resumes', payload);
+  return data;
+};
+
+/**
+ * 이력서 임시 저장(새 버전을 만들지 않고 지정한 버전을 그대로 덮어씀).
+ * PUT /api/v1/students/me/resumes/{documentId}
+ * @param {number} documentId
+ * @param {Object} payload
+ * @param {string} payload.documentTitle
+ * @param {ResumeContentData} [payload.contentData]
+ * @returns {Promise<ResumeDetail>}
+ */
+export const updateResume = async (documentId, payload) => {
+  const { data } = await apiClient.put(`/v1/students/me/resumes/${documentId}`, payload);
+  return data;
+};
+
+/**
+ * 새 버전 생성. POST /api/v1/students/me/resumes/{documentId}/versions
+ * 지정한 버전의 현재(저장된) 내용을 그대로 스냅샷하여 새 버전을 만든다 — 아직 저장하지 않은
+ * 화면상의 수정값은 반영되지 않으므로, 반영하려면 먼저 updateResume으로 임시 저장해야 한다.
+ * 응답에 새로 생성된 버전 전체가 담겨오므로 별도 재조회 없이 바로 선택에 쓸 수 있다.
+ * @param {number} documentId 기준이 되는 버전의 문서 ID
+ * @returns {Promise<ResumeDetail>}
+ */
+export const createResumeVersion = async (documentId) => {
+  const { data } = await apiClient.post(`/v1/students/me/resumes/${documentId}/versions`);
+  return data;
+};
+
+/**
+ * 이력서 특정 버전 삭제. DELETE /api/v1/students/me/resumes/{documentId}
+ * 지정한 그 버전 한 건만 삭제한다 — 다른 버전에는 영향이 없다.
+ * @param {number} documentId
+ * @returns {Promise<null>}
+ */
+export const deleteResume = async (documentId) => {
+  const { data } = await apiClient.delete(`/v1/students/me/resumes/${documentId}`);
+  return data;
+};
 
 // ─── 자기소개서 (Cover Letter) ──────────────────────────────────────────────
 
