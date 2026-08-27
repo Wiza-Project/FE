@@ -385,16 +385,16 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                                 className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
                               />
                               <span className="text-[12px] text-[#656D76] leading-snug">
-                                {policy.title}에 동의합니다.{' '}
-                                <button
-                                  type="button"
-                                  onClick={() => toggleContent(policy.consentPolicyId)}
-                                  className="text-[#2563EB] underline"
-                                >
-                                  {contentOpen ? '내용 접기' : '내용 보기'}
-                                </button>
+                                {policy.title}에 동의합니다.
                               </span>
                             </label>
+                            <button
+                              type="button"
+                              onClick={() => toggleContent(policy.consentPolicyId)}
+                              className="text-[12px] text-[#2563EB] underline self-start ml-[26px]"
+                            >
+                              {contentOpen ? '내용 접기' : '내용 보기'}
+                            </button>
                             {contentOpen && (
                               <div className="max-h-32 overflow-y-auto text-[11px] text-[#656D76] whitespace-pre-wrap bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
                                 {policy.content}

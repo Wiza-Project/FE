@@ -7,10 +7,14 @@
  */
 export function Tabs({ tabs, active, onChange, accentColor = '#2563EB' }) {
   return (
-    <div className="flex border-b border-[#E5E7EB] mb-4">
+    <div className="flex border-b border-[#E5E7EB] mb-4" role="tablist">
       {tabs.map((tab) => (
         <button
           key={tab.key}
+          id={`tab-${tab.key}`}
+          role="tab"
+          aria-selected={active === tab.key}
+          aria-controls={`panel-${tab.key}`}
           onClick={() => onChange(tab.key)}
           className={`px-4 py-2.5 text-[13px] font-semibold transition-colors relative whitespace-nowrap ${active === tab.key ? 'text-[#1F2328]' : 'text-[#656D76] hover:text-[#1F2328]'}`}
         >

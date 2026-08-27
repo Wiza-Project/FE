@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, FileUpload, StatusBadge, Tabs, toast } from '@/components/common';
 import {
@@ -17,9 +17,15 @@ const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
-function Section({ num, title, children }) {
+function Section({ num, title, children, id, role, 'aria-labelledby': ariaLabelledBy, tabIndex }) {
   return (
-    <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+    <div
+      id={id}
+      role={role}
+      aria-labelledby={ariaLabelledBy}
+      tabIndex={tabIndex}
+      className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden"
+    >
       <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center gap-3">
         <div
           className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black text-white flex-shrink-0"
@@ -303,6 +309,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const [fileGroupId, setFileGroupId] = useState(null);
   const [existingFileName, setExistingFileName] = useState(null);
   const [existingFileRemoved, setExistingFileRemoved] = useState(false);
+  const uploadSeqRef = useRef(0);
 
   const {
     data: detailData,
@@ -469,13 +476,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
 
   const uploadMutation = useMutation({
     mutationFn: uploadProgramOperationPlan,
-    onSuccess: (data) => {
-      setFileGroupId(data.fileGroupId);
-      toast('운영계획서가 업로드되었습니다.', 'success');
-    },
-    onError: (err) => {
-      toast(err.message ?? '운영계획서 업로드에 실패했습니다.', 'error');
-    },
   });
 
   const validatePeriodRule = () => {
@@ -695,7 +695,14 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
 
       <div className="pb-24">
         {activeTab === 'basic' && (
-          <Section num={1} title="기본정보">
+          <Section
+            num={1}
+            title="기본정보"
+            id="panel-basic"
+            role="tabpanel"
+            aria-labelledby="tab-basic"
+            tabIndex={0}
+          >
             <div className="grid grid-cols-2 gap-5">
               <div className="col-span-2">
                 <Field label="프로그램명" required error={errors.name} htmlFor="programName">
@@ -777,7 +784,14 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         )}
 
         {activeTab === 'schedule' && (
-          <Section num={2} title="모집·운영·정원">
+          <Section
+            num={2}
+            title="모집·운영·정원"
+            id="panel-schedule"
+            role="tabpanel"
+            aria-labelledby="tab-schedule"
+            tabIndex={0}
+          >
             <div className="grid grid-cols-2 gap-5">
               <Field label="모집 기간" required>
                 <div className="flex items-center gap-2">
@@ -830,7 +844,14 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         )}
 
         {activeTab === 'sessions' && (
-          <Section num={3} title="회차 관리">
+          <Section
+            num={3}
+            title="회차 관리"
+            id="panel-sessions"
+            role="tabpanel"
+            aria-labelledby="tab-sessions"
+            tabIndex={0}
+          >
             <div className="flex flex-col gap-4">
               {sessions.map((s, i) => (
                 <SessionCard
@@ -856,7 +877,14 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         )}
 
         {activeTab === 'policy' && (
-          <Section num={4} title="역량·정책">
+          <Section
+            num={4}
+            title="역량·정책"
+            id="panel-policy"
+            role="tabpanel"
+            aria-labelledby="tab-policy"
+            tabIndex={0}
+          >
             <div className="grid grid-cols-2 gap-5">
               <Field label="연계 핵심역량" required error={errors.competencyId} htmlFor="competencyId">
                 <IdSelect
@@ -903,7 +931,14 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         )}
 
         {activeTab === 'attachment' && (
-          <Section num={5} title="첨부">
+          <Section
+            num={5}
+            title="첨부"
+            id="panel-attachment"
+            role="tabpanel"
+            aria-labelledby="tab-attachment"
+            tabIndex={0}
+          >
             <Field label="운영계획서 첨부 (선택)">
               {isEdit && existingFileName && !existingFileRemoved && fileGroupId == null && (
                 <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#F9FAFB] rounded-[6px] border border-[#E5E7EB]">
@@ -920,8 +955,23 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               <FileUpload
                 accept=".pdf"
                 onFiles={(files) => {
-                  if (files.length > 0) uploadMutation.mutate(files[0]);
-                  else setFileGroupId(null);
+                  if (files.length > 0) {
+                    const seq = ++uploadSeqRef.current;
+                    uploadMutation.mutate(files[0], {
+                      onSuccess: (data) => {
+                        if (uploadSeqRef.current !== seq) return;
+                        setFileGroupId(data.fileGroupId);
+                        toast('운영계획서가 업로드되었습니다.', 'success');
+                      },
+                      onError: (err) => {
+                        if (uploadSeqRef.current !== seq) return;
+                        toast(err.message ?? '운영계획서 업로드에 실패했습니다.', 'error');
+                      },
+                    });
+                  } else {
+                    uploadSeqRef.current += 1;
+                    setFileGroupId(null);
+                  }
                 }}
               />
               {uploadMutation.isPending ? (
