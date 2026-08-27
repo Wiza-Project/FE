@@ -859,9 +859,28 @@ const GROUP_AXES = [
   { value: 'MAJOR', label: '전공별' },
 ];
 
-// 집단이 많은 경우(전공) 색이 순환하므로 범례를 함께 표시한다. 교직원 포털이 무채색
-// 기조라 색상 대신 명도 차이로 집단을 구분한다.
-const GROUP_COLORS = ['#1F2937', '#6B7280', '#A7AEB8', '#4B5563', '#8A929C', '#374151'];
+// 집단별 비교 차트의 y축 고정 스케일. 눈금선·막대 모두 이 값 기준이라 막대 높이로
+// 절대 점수를 읽을 수 있다(데이터 최댓값 기준으로 늘리지 않는다).
+const GROUP_COMPARE_MAX_SCORE = 100;
+
+// 이보다 집단이 많으면(주로 전공 축) 종합 평균 상위·하위 3개만 표시한다. 학년 축은 4개
+// 안팎이라 항상 전부 나온다.
+const GROUP_COMPARE_LIMIT = 10;
+
+// 최대 10개 집단까지 겹치지 않는 색을 준다. 교직원 포털 무채색 기조에 맞춰 채도 낮은
+// 회색 계열만 쓰고, 색만으로 부족할 수 있어 범례를 함께 둔다.
+const GROUP_COLORS = [
+  '#1F2937',
+  '#6B7280',
+  '#9CA3AF',
+  '#4B5563',
+  '#374151',
+  '#78716C',
+  '#A8A29E',
+  '#57534E',
+  '#64748B',
+  '#94A3B8',
+];
 
 // 집단(학년/전공)별로 쪼개져 내려온 평균을 역량별 분포 그래프용으로 역량 축에 다시 모은다.
 // 역량 전체 평균은 집단 평균을 응답자 수로 가중해 합산한다(집단 크기가 제각각이라 단순 평균은 왜곡됨).
@@ -891,6 +910,7 @@ function aggregateByCompetency(groups) {
 
 // 집단별 비교 그래프용. groups를 그대로 쓰되, x축이 될 역량 축을 모든 집단에 걸친 합집합에서
 // displayOrder 순으로 뽑고(결과 방사형 차트와 동일 순서), 각 집단을 그 역량 축에 맞춘 series로 만든다.
+// 집단이 GROUP_COMPARE_LIMIT를 넘으면 종합 평균 상위 3 + 하위 3만 남긴다(전공 축이 수십 개일 수 있음).
 function buildGroupCompare(groups) {
   const compMap = new Map();
   groups.forEach((g) =>
@@ -905,50 +925,80 @@ function buildGroupCompare(groups) {
     }),
   );
   const competencies = [...compMap.values()].sort((a, b) => a.displayOrder - b.displayOrder);
-  const series = groups.map((g) => {
+  const allSeries = groups.map((g) => {
     const byId = new Map(
       (g.competencyAverages ?? []).map((c) => [c.competencyId, Number(c.averageScore)]),
     );
+    const values = competencies.map((c) => byId.get(c.id) ?? null);
+    const present = values.filter((v) => v != null);
     return {
       key: g.groupKey,
       label: g.groupLabel,
       respondentCount: g.respondentCount,
-      values: competencies.map((c) => byId.get(c.id) ?? null),
+      values,
+      mean: present.length ? present.reduce((s, v) => s + v, 0) / present.length : 0,
     };
   });
-  return { competencies, series };
+
+  if (allSeries.length <= GROUP_COMPARE_LIMIT) {
+    return { competencies, series: allSeries, truncated: false, totalGroups: allSeries.length };
+  }
+  const ranked = [...allSeries].sort((a, b) => b.mean - a.mean);
+  const top = ranked.slice(0, 3);
+  const bottom = ranked.slice(-3);
+  return {
+    competencies,
+    series: [...top, ...bottom],
+    truncated: true,
+    totalGroups: allSeries.length,
+    topCount: top.length,
+  };
 }
 
 // 역량(6) × 집단(N) 그룹 막대차트. 공용 BarChart는 단일 시리즈만 지원해 여기서만 인라인으로 그린다.
+// y축은 0~100 고정(GROUP_COMPARE_MAX_SCORE)이라 왼쪽 눈금 숫자로 절대 점수를 읽을 수 있다.
 function GroupCompareChart({ competencies, series, height = 200 }) {
-  const allVals = series.flatMap((s) => s.values.filter((v) => v != null));
-  const max = allVals.length ? Math.max(...allVals) : 100;
+  const gutter = 24; // 왼쪽 눈금 라벨 자리
   const clusterW = Math.max(52, series.length * 14 + 20);
-  const chartW = competencies.length * clusterW + 20;
+  const chartW = gutter + competencies.length * clusterW + 12;
   const barW = Math.max(5, Math.min(16, (clusterW - 20) / Math.max(series.length, 1) - 2));
 
   return (
     <svg width={chartW} height={height + 34} viewBox={`0 0 ${chartW} ${height + 34}`}>
-      {[0, 0.25, 0.5, 0.75, 1].map((r) => (
-        <line
-          key={r}
-          x1={10}
-          y1={height * (1 - r)}
-          x2={chartW - 10}
-          y2={height * (1 - r)}
-          stroke="#E5E7EB"
-          strokeWidth="1"
-          strokeDasharray="3 3"
-        />
-      ))}
+      {[0, 25, 50, 75, 100].map((score) => {
+        const y = height * (1 - score / GROUP_COMPARE_MAX_SCORE);
+        return (
+          <g key={score}>
+            <line
+              x1={gutter}
+              y1={y}
+              x2={chartW - 8}
+              y2={y}
+              stroke="#E5E7EB"
+              strokeWidth="1"
+              strokeDasharray="3 3"
+            />
+            <text
+              x={gutter - 4}
+              y={y + 3}
+              textAnchor="end"
+              fontSize="9"
+              fill="#9AA0A6"
+              fontFamily="Pretendard, sans-serif"
+            >
+              {score}
+            </text>
+          </g>
+        );
+      })}
       {competencies.map((c, ci) => {
-        const x0 = 10 + ci * clusterW + 10;
+        const x0 = gutter + ci * clusterW + 10;
         return (
           <g key={c.id}>
             {series.map((s, si) => {
               const v = s.values[ci];
               if (v == null) return null;
-              const barH = (v / max) * height * 0.9;
+              const barH = (Math.min(v, GROUP_COMPARE_MAX_SCORE) / GROUP_COMPARE_MAX_SCORE) * height;
               return (
                 <rect
                   key={s.key}
@@ -1117,29 +1167,69 @@ function ResultStats({ rounds }) {
               />
             ) : (
               <>
+                {groupCompare.truncated && (
+                  <p className="text-[11px] text-[#9AA0A6] mb-3">
+                    {groupBy === 'GRADE' ? '학년' : '전공'} {groupCompare.totalGroups}개 중 종합 평균
+                    상위 3개·하위 3개만 표시합니다.
+                  </p>
+                )}
                 <div className="flex justify-center overflow-x-auto">
                   <GroupCompareChart
                     competencies={groupCompare.competencies}
                     series={groupCompare.series}
                   />
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 justify-center">
-                  {groupCompare.series.map((s, si) => (
-                    <div
-                      key={s.key}
-                      className="flex items-center gap-1.5 text-[10px] text-[#656D76]"
-                    >
-                      <span
-                        className="w-2.5 h-2.5 rounded-[2px] shrink-0"
-                        style={{ background: GROUP_COLORS[si % GROUP_COLORS.length] }}
-                      />
-                      {s.label}
-                      <span className="text-[#9AA0A6]">
-                        ({s.respondentCount.toLocaleString()}명)
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                {groupCompare.truncated ? (
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    {['상위', '하위'].map((tier, ti) => {
+                      const start = ti === 0 ? 0 : groupCompare.topCount;
+                      const items =
+                        ti === 0
+                          ? groupCompare.series.slice(0, groupCompare.topCount)
+                          : groupCompare.series.slice(groupCompare.topCount);
+                      return (
+                        <div
+                          key={tier}
+                          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] text-[#656D76]"
+                        >
+                          <span className="font-bold">
+                            {tier} {items.length}
+                          </span>
+                          {items.map((s, i) => (
+                            <span key={s.key} className="flex items-center gap-1.5">
+                              <span
+                                className="w-2.5 h-2.5 rounded-[2px] shrink-0"
+                                style={{
+                                  background: GROUP_COLORS[(start + i) % GROUP_COLORS.length],
+                                }}
+                              />
+                              {s.label}
+                              <span className="text-[#9AA0A6]">({s.mean.toFixed(1)})</span>
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 justify-center">
+                    {groupCompare.series.map((s, si) => (
+                      <div
+                        key={s.key}
+                        className="flex items-center gap-1.5 text-[10px] text-[#656D76]"
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-[2px] shrink-0"
+                          style={{ background: GROUP_COLORS[si % GROUP_COLORS.length] }}
+                        />
+                        {s.label}
+                        <span className="text-[#9AA0A6]">
+                          ({s.respondentCount.toLocaleString()}명)
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>
