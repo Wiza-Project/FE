@@ -854,9 +854,18 @@ function ResponseManage({ rounds }) {
 
 // ─── Tab 3: 결과 통계 ─────────────────────────────────────────────────────────
 
+const GROUP_AXES = [
+  { value: 'GRADE', label: '학년별' },
+  { value: 'MAJOR', label: '전공별' },
+];
+
+// 집단이 많은 경우(전공) 색이 순환하므로 범례를 함께 표시한다. 교직원 포털이 무채색
+// 기조라 색상 대신 명도 차이로 집단을 구분한다.
+const GROUP_COLORS = ['#1F2937', '#6B7280', '#A7AEB8', '#4B5563', '#8A929C', '#374151'];
+
 // 집단(학년/전공)별로 쪼개져 내려온 평균을 역량별 분포 그래프용으로 역량 축에 다시 모은다.
 // 역량 전체 평균은 집단 평균을 응답자 수로 가중해 합산한다(집단 크기가 제각각이라 단순 평균은 왜곡됨).
-// 축 순서는 결과 방사형 차트(SCR-S02)와 맞추기 위해 displayOrder로 정렬한다.
+// 축 순서는 결과 방사형 차트와 맞추기 위해 displayOrder로 정렬한다.
 function aggregateByCompetency(groups) {
   const acc = new Map();
   groups.forEach((g) => {
@@ -880,20 +889,114 @@ function aggregateByCompetency(groups) {
     }));
 }
 
+// 집단별 비교 그래프용. groups를 그대로 쓰되, x축이 될 역량 축을 모든 집단에 걸친 합집합에서
+// displayOrder 순으로 뽑고(결과 방사형 차트와 동일 순서), 각 집단을 그 역량 축에 맞춘 series로 만든다.
+function buildGroupCompare(groups) {
+  const compMap = new Map();
+  groups.forEach((g) =>
+    (g.competencyAverages ?? []).forEach((c) => {
+      if (!compMap.has(c.competencyId)) {
+        compMap.set(c.competencyId, {
+          id: c.competencyId,
+          name: c.competencyName,
+          displayOrder: c.displayOrder,
+        });
+      }
+    }),
+  );
+  const competencies = [...compMap.values()].sort((a, b) => a.displayOrder - b.displayOrder);
+  const series = groups.map((g) => {
+    const byId = new Map(
+      (g.competencyAverages ?? []).map((c) => [c.competencyId, Number(c.averageScore)]),
+    );
+    return {
+      key: g.groupKey,
+      label: g.groupLabel,
+      respondentCount: g.respondentCount,
+      values: competencies.map((c) => byId.get(c.id) ?? null),
+    };
+  });
+  return { competencies, series };
+}
+
+// 역량(6) × 집단(N) 그룹 막대차트. 공용 BarChart는 단일 시리즈만 지원해 여기서만 인라인으로 그린다.
+function GroupCompareChart({ competencies, series, height = 200 }) {
+  const allVals = series.flatMap((s) => s.values.filter((v) => v != null));
+  const max = allVals.length ? Math.max(...allVals) : 100;
+  const clusterW = Math.max(52, series.length * 14 + 20);
+  const chartW = competencies.length * clusterW + 20;
+  const barW = Math.max(5, Math.min(16, (clusterW - 20) / Math.max(series.length, 1) - 2));
+
+  return (
+    <svg width={chartW} height={height + 34} viewBox={`0 0 ${chartW} ${height + 34}`}>
+      {[0, 0.25, 0.5, 0.75, 1].map((r) => (
+        <line
+          key={r}
+          x1={10}
+          y1={height * (1 - r)}
+          x2={chartW - 10}
+          y2={height * (1 - r)}
+          stroke="#E5E7EB"
+          strokeWidth="1"
+          strokeDasharray="3 3"
+        />
+      ))}
+      {competencies.map((c, ci) => {
+        const x0 = 10 + ci * clusterW + 10;
+        return (
+          <g key={c.id}>
+            {series.map((s, si) => {
+              const v = s.values[ci];
+              if (v == null) return null;
+              const barH = (v / max) * height * 0.9;
+              return (
+                <rect
+                  key={s.key}
+                  x={x0 + si * (barW + 2)}
+                  y={height - barH}
+                  width={barW}
+                  height={barH}
+                  fill={GROUP_COLORS[si % GROUP_COLORS.length]}
+                  rx="2"
+                  opacity="0.9"
+                >
+                  <title>{`${s.label} · ${c.name}: ${v.toFixed(1)}점`}</title>
+                </rect>
+              );
+            })}
+            <text
+              x={x0 + (series.length * (barW + 2)) / 2 - 1}
+              y={height + 14}
+              textAnchor="middle"
+              fontSize="10"
+              fill="#656D76"
+              fontFamily="Pretendard, sans-serif"
+            >
+              {c.name}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 function ResultStats({ rounds }) {
   const [roundId, setRoundId] = useState('');
+  const [groupBy, setGroupBy] = useState('GRADE');
   const selectedRound = rounds.find((r) => String(r.assessmentRoundId) === roundId) ?? null;
 
+  // 역량별 분포·집단별 비교 두 그래프가 이 한 응답을 공유한다. 분포 그래프는 집단 축과
+  // 무관하게 역량 축으로 다시 모으므로, 집단 축(groupBy)은 비교 그래프의 기준으로만 쓰인다.
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['assessmentDistribution', roundId],
-    // 역량별 분포 그래프는 집단 축과 무관하게 역량 축으로 다시 모으므로 GRADE로 한 번만 조회한다.
-    // (집단별 비교 막대그래프는 같은 API를 재사용하는 별도 티켓이라 여기서는 다루지 않는다.)
-    queryFn: () => fetchAssessmentDistribution(Number(roundId), 'GRADE'),
+    queryKey: ['assessmentDistribution', roundId, groupBy],
+    queryFn: () => fetchAssessmentDistribution(Number(roundId), groupBy),
     enabled: !!roundId,
   });
 
   const groups = data?.groups ?? [];
   const competencyBars = aggregateByCompetency(groups);
+  const groupCompare = buildGroupCompare(groups);
   const respondentTotal = groups.reduce((sum, g) => sum + g.respondentCount, 0);
   const overallAvg =
     competencyBars.length > 0
@@ -981,6 +1084,63 @@ function ResultStats({ rounds }) {
               <div className="flex justify-center overflow-x-auto">
                 <BarChart data={competencyBars} color={ACCENT} height={180} unit="점" />
               </div>
+            )}
+          </div>
+
+          {/* Group comparison chart */}
+          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 mt-5">
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
+              <h3 className="text-[13px] font-bold text-[#1F2328]">집단별 비교</h3>
+              <span className="text-[11px] text-[#9AA0A6] ml-1">역량별 평균 점수를 집단 간 비교</span>
+              <div className="ml-auto flex gap-1.5">
+                {GROUP_AXES.map((a) => (
+                  <button
+                    key={a.value}
+                    onClick={() => setGroupBy(a.value)}
+                    aria-pressed={groupBy === a.value}
+                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${groupBy === a.value ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#9CA3AF]'}`}
+                    style={groupBy === a.value ? { background: ACCENT } : {}}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="py-16 text-center text-[12px] text-[#9AA0A6]">불러오는 중...</div>
+            ) : groupCompare.series.length === 0 ? (
+              <EmptyState
+                message="비교할 집단이 없습니다."
+                sub={`${groupBy === 'GRADE' ? '학년' : '전공'} 정보가 등록된 응답자가 없습니다.`}
+              />
+            ) : (
+              <>
+                <div className="flex justify-center overflow-x-auto">
+                  <GroupCompareChart
+                    competencies={groupCompare.competencies}
+                    series={groupCompare.series}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 justify-center">
+                  {groupCompare.series.map((s, si) => (
+                    <div
+                      key={s.key}
+                      className="flex items-center gap-1.5 text-[10px] text-[#656D76]"
+                    >
+                      <span
+                        className="w-2.5 h-2.5 rounded-[2px] shrink-0"
+                        style={{ background: GROUP_COLORS[si % GROUP_COLORS.length] }}
+                      />
+                      {s.label}
+                      <span className="text-[#9AA0A6]">
+                        ({s.respondentCount.toLocaleString()}명)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </>
