@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { setAccessToken, setSessionExpiredHandler } from '@/api/client';
 import { logout as logoutApi } from '@/api/auth';
+import { queryClient } from '@/lib/queryClient';
+import { publishLogout, subscribeToAuthSync } from '@/lib/authSync';
+
+const clearLocalAuth = (set, reason = null) => {
+  setAccessToken(null);
+  queryClient.clear();
+  set({ user: null, isAuthenticated: false, logoutReason: reason });
+};
 
 /**
  * 로그인 사용자 전역 상태.
@@ -26,8 +34,8 @@ export const useAuthStore = create((set, get) => ({
 
   /** 사용자가 직접 누른 로그아웃 버튼 등에서 사용. */
   logout: () => {
-    setAccessToken(null);
-    set({ user: null, isAuthenticated: false, logoutReason: null });
+    clearLocalAuth(set);
+    publishLogout();
     // best-effort: 실패해도 클라이언트 상태는 이미 정리됐으므로 무시합니다.
     logoutApi().catch(() => {});
   },
@@ -38,10 +46,14 @@ export const useAuthStore = create((set, get) => ({
    * ProtectedRoute 가 알아서 /login 으로 리다이렉트하며 reason 을 함께 넘깁니다.
    */
   forceLogout: (reason) => {
-    setAccessToken(null);
-    set({ user: null, isAuthenticated: false, logoutReason: reason ?? null });
+    const logoutReason = reason ?? null;
+    clearLocalAuth(set, logoutReason);
+    publishLogout(logoutReason);
     logoutApi().catch(() => {});
   },
+
+  /** 다른 탭의 로그아웃을 받았을 때 사용. 서버 호출/재전파는 하지 않습니다. */
+  logoutFromOtherTab: (reason) => clearLocalAuth(set, reason ?? null),
 
   finishBootstrap: () => set({ isBootstrapping: false }),
 
@@ -65,4 +77,11 @@ export const useAuthStore = create((set, get) => ({
 // 401 재발급 실패 시 부를 콜백을 여기서 주입합니다.
 setSessionExpiredHandler(() => {
   useAuthStore.getState().forceLogout('session_expired');
+});
+
+// 모듈은 탭마다 한 번만 평가되므로 구독도 한 번만 등록됩니다.
+subscribeToAuthSync((event) => {
+  if (event?.type === 'LOGOUT') {
+    useAuthStore.getState().logoutFromOtherTab(event.reason);
+  }
 });
