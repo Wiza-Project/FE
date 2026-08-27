@@ -1,16 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PageHeader, Tabs, Button, Modal, Drawer, StatusBadge, toast } from '@/components/common';
+import {
+  PageHeader,
+  Tabs,
+  Button,
+  Modal,
+  Drawer,
+  Pagination,
+  StatusBadge,
+  toast,
+} from '@/components/common';
+import { ApiError } from '@/api/client';
 import {
   cancelCounselingReservation,
   changeCounselingReservationSchedule,
   fetchAvailableSchedules,
   fetchCounselingReservations,
   fetchCounselingTypes,
+  getStudentCounselingPublicResult,
+  getStudentCounselingResults,
+  studentCounselingResultDetailQueryKey,
+  studentCounselingResultsQueryKey,
 } from '@/api/counsel';
 import {
   COUNSELING_CANCELLATION_REASON,
   COUNSELING_CANCELLATION_REASON_LABEL,
+  COUNSELING_PUBLIC_RESULT_ERROR_CODE,
   COUNSELING_RESERVATION_ERROR_CODE,
   COUNSELING_RESERVATION_STATUS,
   COUNSELING_RESERVATION_STATUS_LABEL,
@@ -18,47 +33,17 @@ import {
 
 const ACCENT = '#0891B2';
 
-// ─── History records ──────────────────────────────────────────────────────────
+// ─── 상담 이력(공개 결과) ────────────────────────────────────────────────────
 
-const HISTORY = [
-  {
-    id: 'H001',
-    date: '2026-06-15',
-    type: '지도교수 진로·역량 상담',
-    counselor: '김상담 지도교수',
-    status: '완료',
-    publicSummary:
-      '졸업 후 진로 방향 탐색 및 부족한 역량 강화 방안 논의. 취업 또는 대학원 진학 두 경로를 구체적으로 비교·분석하고 단기 목표를 수립하였음.',
-    actionPlan: [
-      '이번 학기 내 TOEIC 860점 이상 취득 목표 수립',
-      '9월 캡스톤디자인 경진대회 참가 신청',
-      '취업 포트폴리오 초안 작성 (10월 말까지)',
-      '대학원 지도교수 1:1 상담 신청 예약',
-    ],
-    recommendedPrograms: [
-      { name: '진로탐색 워크숍', dept: '취업지원팀', credit: 3, deadline: '2026-08-31' },
-      { name: '영어 프레젠테이션 클리닉', dept: '국제교류처', credit: 2, deadline: '2026-09-15' },
-    ],
-  },
-  {
-    id: 'H002',
-    date: '2026-05-20',
-    type: '심리검사 · 해석상담',
-    counselor: '박심리 전문상담사',
-    status: '종결',
-    publicSummary:
-      'MBTI 및 MMPI-2 검사 실시 후 해석상담 진행. 성격 특성 및 현재 심리 상태 파악, 스트레스 관리 전략 수립에 집중하였음.',
-    actionPlan: [
-      '매일 15분 마음챙김 명상 실천',
-      '수면 규칙화 — 오전 1시 전 취침 목표',
-      '상담센터 집단상담 프로그램 참여 권고',
-    ],
-    recommendedPrograms: [
-      { name: '마음건강 집단상담', dept: '학생상담센터', credit: 0, deadline: '2026-09-01' },
-      { name: '스트레스 관리 특강', dept: '학생처', credit: 1, deadline: '2026-08-20' },
-    ],
-  },
-];
+const RESULT_PAGE_SIZE = 20;
+
+function getStudentResultErrorMessage(error) {
+  if (!(error instanceof ApiError))
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  if (error.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.RESULT_NOT_FOUND)
+    return '해당 상담 결과를 찾을 수 없습니다. 목록을 다시 불러왔습니다.';
+  return '상담 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
 
 // ─── Psych tests ──────────────────────────────────────────────────────────────
 
@@ -878,12 +863,70 @@ function ReservationTab({ onApply }) {
 // ─── Tab: 상담 이력 ───────────────────────────────────────────────────────────
 
 function HistoryTab() {
-  const [drawerRecord, setDrawerRecord] = useState(null);
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
+  // 상세를 연 회기 ID만 들고 있는다. 목록 행의 요약 데이터를 그대로 재사용하지 않고 매번
+  // 전용 상세 API로 최신 상태를 다시 받아 온다(다른 학생·미공개 초안 오류를 정확히 검증하기 위함).
+  const [drawerSessionId, setDrawerSessionId] = useState(null);
+
+  const {
+    data: resultPage,
+    isLoading,
+    isError,
+    error: listError,
+    refetch,
+  } = useQuery({
+    queryKey: studentCounselingResultsQueryKey(page, RESULT_PAGE_SIZE),
+    queryFn: () => getStudentCounselingResults({ page, size: RESULT_PAGE_SIZE }),
+    // 상세 쿼리와 동일하게 공개 요약 내용을 담은 캐시를 기본 gcTime(5분) 동안 남기지 않는다.
+    gcTime: 0,
+    retry: false,
+  });
+
+  // 상세 상담 결과는 학생 본인에게도 민감한 개인정보이므로 gcTime: 0으로 두어 Drawer를 닫으면
+  // 즉시 캐시에서 제거한다(기본 gcTime 5분 동안 남지 않도록).
+  const {
+    data: detail,
+    isLoading: detailLoading,
+    isError: detailIsError,
+    error: detailError,
+  } = useQuery({
+    queryKey: studentCounselingResultDetailQueryKey(drawerSessionId),
+    queryFn: () => getStudentCounselingPublicResult(drawerSessionId),
+    enabled: drawerSessionId !== null,
+    gcTime: 0,
+    retry: false,
+  });
+
+  const closeDrawer = useCallback(() => {
+    if (drawerSessionId !== null) {
+      queryClient.removeQueries({ queryKey: studentCounselingResultDetailQueryKey(drawerSessionId) });
+    }
+    setDrawerSessionId(null);
+  }, [drawerSessionId, queryClient]);
+
+  // S011(다른 학생 소유·미공개·존재하지 않음)은 소유권 세부를 노출하지 않고 상세를 닫은 뒤
+  // 목록만 다시 읽는다. 목록에서 이미 사라진 오래된 항목을 계속 보여주지 않기 위함이다.
+  useEffect(() => {
+    if (
+      detailIsError &&
+      detailError instanceof ApiError &&
+      detailError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.RESULT_NOT_FOUND
+    ) {
+      closeDrawer();
+      refetch();
+    }
+  }, [detailIsError, detailError, closeDrawer, refetch]);
+
+  const items = resultPage?.content ?? [];
+  const totalElements = resultPage?.totalElements ?? 0;
+  const totalPages = resultPage?.totalPages ?? 0;
 
   return (
     <div>
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-        <table className="w-full border-collapse text-[12px]">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse text-[12px]">
           <thead>
             <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
               {['상담일', '상담유형', '상담사', '상태', '공개 요약', ''].map((h, i) => (
@@ -897,147 +940,175 @@ function HistoryTab() {
             </tr>
           </thead>
           <tbody>
-            {HISTORY.map((h, i) => (
-              <tr
-                key={h.id}
-                className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#F0FDFE] transition-colors ${i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}
-              >
-                <td className="px-4 py-3 text-center text-[#9AA0A6] font-mono whitespace-nowrap">
-                  {h.date}
-                </td>
-                <td className="px-4 py-3 font-semibold text-[#1F2328]">{h.type}</td>
-                <td className="px-4 py-3 text-[#656D76]">{h.counselor}</td>
-                <td className="px-4 py-3 text-center">
-                  <StatusBadge status={h.status} size="sm" />
-                </td>
-                <td className="px-4 py-3 max-w-[260px]">
-                  <p className="text-[12px] text-[#656D76] leading-snug line-clamp-2">
-                    {h.publicSummary}
-                  </p>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <button
-                    onClick={() => setDrawerRecord(h)}
-                    className="h-6 px-2.5 text-[11px] font-bold rounded-[5px] border transition-colors hover:bg-[#F0FDFE]"
-                    style={{ borderColor: ACCENT, color: ACCENT }}
-                  >
-                    상세보기
-                  </button>
+            {isLoading && (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-[#9AA0A6]">
+                  상담 결과를 불러오는 중입니다.
                 </td>
               </tr>
-            ))}
+            )}
+            {!isLoading && isError && (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center">
+                  <p className="text-[#CF222E]">{getStudentResultErrorMessage(listError)}</p>
+                  <Button size="sm" variant="outline" className="mt-3" onClick={refetch}>
+                    다시 시도
+                  </Button>
+                </td>
+              </tr>
+            )}
+            {!isLoading && !isError && items.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-[#9AA0A6]">
+                  공개된 상담 결과가 없습니다.
+                </td>
+              </tr>
+            )}
+            {!isLoading &&
+              !isError &&
+              items.map((item, i) => (
+                <tr
+                  key={item.publicResultId}
+                  className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#F0FDFE] transition-colors ${i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}
+                >
+                  <td className="px-4 py-3 text-center text-[#9AA0A6] font-mono whitespace-nowrap">
+                    {formatKstDateTime(item.startsAt)}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-[#1F2328]">
+                    {item.counselingTypeName}
+                    <span className="text-[#9AA0A6] font-normal ml-1">
+                      ({item.sessionNo}회기)
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-[#656D76]">{item.counselorName}</td>
+                  <td className="px-4 py-3 text-center">
+                    {/* 서버 finalResult가 참일 때만 '완료 결과'로 표시한다. 일반 공개는 예약 완료가 아니다. */}
+                    <StatusBadge
+                      status={item.finalResult ? 'completed' : 'published'}
+                      variant={item.finalResult ? 'success' : 'info'}
+                      label={item.finalResult ? '완료 결과' : '공개 결과'}
+                      size="sm"
+                    />
+                  </td>
+                  <td className="px-4 py-3 max-w-[260px]">
+                    <p className="text-[12px] text-[#656D76] leading-snug line-clamp-2">
+                      {item.resultSummary}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setDrawerSessionId(item.sessionId)}
+                      aria-label={`${item.counselingTypeName} ${item.sessionNo}회기 상담 결과 상세 보기`}
+                      className="h-6 px-2.5 text-[11px] font-bold rounded-[5px] border transition-colors hover:bg-[#F0FDFE]"
+                      style={{ borderColor: ACCENT, color: ACCENT }}
+                    >
+                      상세보기
+                    </button>
+                  </td>
+                </tr>
+              ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
+
+      {!isLoading && !isError && totalPages > 1 && (
+        <Pagination
+          page={page + 1}
+          totalPages={totalPages}
+          totalItems={totalElements}
+          pageSize={RESULT_PAGE_SIZE}
+          onChange={(nextPage) => setPage(nextPage - 1)}
+        />
+      )}
 
       {/* Detail Drawer */}
       <Drawer
-        open={drawerRecord !== null}
-        onClose={() => setDrawerRecord(null)}
+        open={drawerSessionId !== null}
+        onClose={closeDrawer}
         title="상담 이력 상세"
         footer={
-          <Button size="sm" variant="secondary" onClick={() => setDrawerRecord(null)}>
+          <Button size="sm" variant="secondary" onClick={closeDrawer}>
             닫기
           </Button>
         }
       >
-        {drawerRecord && (
-          <div className="flex flex-col gap-5 py-2">
-            {/* Meta */}
-            <div className="bg-[#F0FDFE] border border-[#A5F3FC] rounded-[8px] px-4 py-3 flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-bold text-[#0E7490]">{drawerRecord.type}</span>
-                <StatusBadge status={drawerRecord.status} size="sm" />
+        {detailLoading ? (
+          <p className="text-center text-[12px] text-[#656D76] py-4">불러오는 중입니다.</p>
+        ) : detailIsError ? (
+          // S011은 위 effect가 이미 Drawer를 닫으므로, 여기 남는 오류는 그 외(네트워크 등)뿐이다.
+          <p className="text-[12px] text-[#CF222E]" role="alert">
+            {getStudentResultErrorMessage(detailError)}
+          </p>
+        ) : (
+          detail && (
+            <div className="flex flex-col gap-5 py-2">
+              {/* Meta */}
+              <div className="bg-[#F0FDFE] border border-[#A5F3FC] rounded-[8px] px-4 py-3 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-bold text-[#0E7490]">
+                    {detail.counselingTypeName}
+                  </span>
+                  <StatusBadge
+                    status={detail.finalResult ? 'completed' : 'published'}
+                    variant={detail.finalResult ? 'success' : 'info'}
+                    label={detail.finalResult ? '완료 결과' : '공개 결과'}
+                    size="sm"
+                  />
+                </div>
+                <div className="flex gap-3 text-[12px] text-[#0891B2]">
+                  <span>
+                    📅 {formatKstDateTime(detail.startsAt)} · {detail.sessionNo}회기
+                  </span>
+                  <span>👤 {detail.counselorName}</span>
+                </div>
+                <p className="text-[11px] text-[#0891B2]">
+                  공개 {formatKstDateTime(detail.publishedAt)}
+                </p>
               </div>
-              <div className="flex gap-3 text-[12px] text-[#0891B2]">
-                <span>📅 {drawerRecord.date}</span>
-                <span>👤 {drawerRecord.counselor}</span>
+
+              {/* Public summary */}
+              <div>
+                <h3 className="text-[13px] font-bold text-[#1F2328] mb-2 flex items-center gap-1.5">
+                  <div className="w-1 h-3.5 rounded-full" style={{ background: ACCENT }} />
+                  공개 요약
+                </h3>
+                {/* dangerouslySetInnerHTML 금지 — 줄바꿈은 CSS(whitespace-pre-wrap)로만 보존한다 */}
+                <p className="text-[13px] text-[#444D56] leading-relaxed bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB] px-4 py-3 whitespace-pre-wrap">
+                  {detail.resultSummary}
+                </p>
               </div>
-            </div>
 
-            {/* Public summary */}
-            <div>
-              <h3 className="text-[13px] font-bold text-[#1F2328] mb-2 flex items-center gap-1.5">
-                <div className="w-1 h-3.5 rounded-full" style={{ background: ACCENT }} />
-                공개 요약
-              </h3>
-              <p className="text-[13px] text-[#444D56] leading-relaxed bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB] px-4 py-3">
-                {drawerRecord.publicSummary}
-              </p>
-            </div>
-
-            {/* Action plan */}
-            <div>
-              <h3 className="text-[13px] font-bold text-[#1F2328] mb-2 flex items-center gap-1.5">
-                <div className="w-1 h-3.5 rounded-full bg-[#7C3AED]" />
-                실행계획
-              </h3>
-              <div className="bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB] px-4 py-3">
-                <ol className="flex flex-col gap-2">
-                  {drawerRecord.actionPlan.map((item, idx) => (
-                    <li key={idx} className="flex items-start gap-2.5 text-[13px] text-[#1F2328]">
-                      <span
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white flex-shrink-0 mt-0.5"
-                        style={{ background: ACCENT }}
-                      >
-                        {idx + 1}
-                      </span>
-                      {item}
-                    </li>
-                  ))}
-                </ol>
+              {/* Action plan */}
+              <div>
+                <h3 className="text-[13px] font-bold text-[#1F2328] mb-2 flex items-center gap-1.5">
+                  <div className="w-1 h-3.5 rounded-full bg-[#7C3AED]" />
+                  실행계획
+                </h3>
+                <p className="text-[13px] text-[#444D56] leading-relaxed bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB] px-4 py-3 whitespace-pre-wrap">
+                  {detail.actionPlan ?? '등록된 실행계획이 없습니다.'}
+                </p>
               </div>
-            </div>
 
-            {/* Recommended programs */}
-            <div>
-              <h3 className="text-[13px] font-bold text-[#1F2328] mb-2 flex items-center gap-1.5">
-                <div className="w-1 h-3.5 rounded-full bg-[#2563EB]" />
-                추천 비교과 프로그램
-              </h3>
-              <div className="flex flex-col gap-2">
-                {drawerRecord.recommendedPrograms.map((p, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-3 flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="text-[13px] font-bold text-[#1F2328]">{p.name}</p>
-                      <div className="flex gap-2 mt-0.5 text-[11px] text-[#9AA0A6]">
-                        <span>{p.dept}</span>
-                        {p.credit > 0 && <span>· {p.credit}학점</span>}
-                        <span>· 마감 {p.deadline}</span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => toast(`${p.name} 신청 화면으로 이동합니다.`, 'info')}
-                      className="h-7 px-3 text-[11px] font-bold rounded-[6px] text-white whitespace-nowrap"
-                      style={{ background: '#2563EB' }}
-                    >
-                      신청
-                    </button>
-                  </div>
-                ))}
+              {/* Private notice */}
+              <div className="flex items-start gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-[8px] px-4 py-3">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 16 16"
+                  fill="#9AA0A6"
+                  className="flex-shrink-0 mt-0.5"
+                >
+                  <circle cx="8" cy="8" r="7" />
+                  <path d="M8 4v5M8 11h.01" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <p className="text-[12px] text-[#9AA0A6] leading-snug">
+                  상담사가 작성한 상세 상담기록은 비공개입니다.
+                </p>
               </div>
             </div>
-
-            {/* Private notice */}
-            <div className="flex items-start gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-[8px] px-4 py-3">
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 16 16"
-                fill="#9AA0A6"
-                className="flex-shrink-0 mt-0.5"
-              >
-                <circle cx="8" cy="8" r="7" />
-                <path d="M8 4v5M8 11h.01" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              <p className="text-[12px] text-[#9AA0A6] leading-snug">
-                상담사가 작성한 상세 상담기록은 비공개입니다.
-              </p>
-            </div>
-          </div>
+          )
         )}
       </Drawer>
     </div>

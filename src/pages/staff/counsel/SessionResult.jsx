@@ -1,392 +1,711 @@
-import { useState } from 'react';
-import { Button, Modal, toast } from '@/components/common';
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, ConfirmDialog, Modal, Pagination, StatusBadge, toast } from '@/components/common';
+import { ApiError } from '@/api/client';
+import {
+  completeCounselingWithPublicResult,
+  counselingSessionsQueryKey,
+  counselorPublicResultQueryKey,
+  fetchCounselingSessions,
+  getCounselorPublicResult,
+  publishCounselorPublicResult,
+  saveCounselorPublicResult,
+  studentCounselingResultDetailQueryKey,
+} from '@/api/counsel';
+import {
+  COUNSELING_PUBLIC_RESULT_ERROR_CODE,
+  COUNSELING_PUBLIC_RESULT_STATUS,
+  COUNSELING_PUBLIC_RESULT_STATUS_LABEL,
+  COUNSELING_SESSION_ATTENDANCE_STATUS,
+  COUNSELING_SESSION_ATTENDANCE_STATUS_LABEL,
+  COUNSELING_SESSION_STATUS,
+  COUNSELING_SESSION_STATUS_LABEL,
+} from '@/constants/domain';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
+const PAGE_SIZE = 20;
+const SUMMARY_MAX_LENGTH = 3000;
+const ACTION_PLAN_MAX_LENGTH = 3000;
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
+// 서버가 준 Instant(UTC)를 한국 시간(Asia/Seoul)으로 표시한다. SessionRecord와 동일한 방식이다.
+function formatKstDateTime(instant) {
+  if (!instant) return '-';
+  const date = new Date(instant);
+  if (Number.isNaN(date.getTime())) return '-';
+  const kst = new Date(date.getTime() + KST_OFFSET_MS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())} ${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}`;
+}
+
+const SESSION_STATUS_BADGE_VARIANT = {
+  [COUNSELING_SESSION_STATUS.PLANNED]: 'info',
+  [COUNSELING_SESSION_STATUS.COMPLETED]: 'success',
+  [COUNSELING_SESSION_STATUS.CANCELED]: 'danger',
+};
+
+const ATTENDANCE_BADGE_VARIANT = {
+  [COUNSELING_SESSION_ATTENDANCE_STATUS.SCHEDULED]: 'neutral',
+  [COUNSELING_SESSION_ATTENDANCE_STATUS.PRESENT]: 'success',
+  [COUNSELING_SESSION_ATTENDANCE_STATUS.ABSENT]: 'warning',
+  [COUNSELING_SESSION_ATTENDANCE_STATUS.NO_SHOW]: 'danger',
+};
+
+const RESULT_STATUS_BADGE_VARIANT = {
+  [COUNSELING_PUBLIC_RESULT_STATUS.EMPTY]: 'neutral',
+  [COUNSELING_PUBLIC_RESULT_STATUS.DRAFT]: 'warning',
+  [COUNSELING_PUBLIC_RESULT_STATUS.PUBLISHED]: 'success',
+};
+
+const STATUS_FILTER_OPTIONS = [
+  { value: '', label: '전체' },
+  { value: COUNSELING_SESSION_STATUS.PLANNED, label: COUNSELING_SESSION_STATUS_LABEL.PLANNED },
+  { value: COUNSELING_SESSION_STATUS.COMPLETED, label: COUNSELING_SESSION_STATUS_LABEL.COMPLETED },
+  { value: COUNSELING_SESSION_STATUS.CANCELED, label: COUNSELING_SESSION_STATUS_LABEL.CANCELED },
+];
+
+function getPublicResultErrorMessage(error) {
+  if (!(error instanceof ApiError))
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  const { code } = error;
+  if (code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.FORBIDDEN)
+    return '이 회기의 공개 결과에 접근할 권한이 없습니다.';
+  if (code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.SESSION_NOT_FOUND)
+    return '해당 회기를 찾을 수 없습니다. 목록을 새로고침했습니다.';
+  if (code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.STATE_CONFLICT)
+    return '현재 상태에서는 처리할 수 없습니다. 최신 상태를 다시 불러왔습니다.';
+  if (code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.INVALID_INPUT)
+    return '입력값을 다시 확인해 주세요.';
+  return '처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
+// setQueryData는 대상 Query가 없으면 새 캐시를 만들 수 있다. 이 화면(또는 이 회기)이 이미
+// 닫혔다면 새로 만들지 않고, 지금 보고 있는 Query만 최신 응답으로 갱신한다.
+function updateQueryIfPresent(queryClient, queryKey, data) {
+  const query = queryClient.getQueryCache().find({ queryKey, exact: true });
+  if (!query) return false;
+  queryClient.setQueryData(queryKey, data);
+  return true;
+}
+
+/**
+ * 상담사가 담당 회기의 공개 상담 결과(학생에게 보이는 요약·실행계획)를 조회·저장·일반 공개하고,
+ * 마지막 출석 완료 회기 결과로 예약을 최종 완료하는 화면이다. 비공개 상담 기록 원문은 이 화면에
+ * 없다(SessionRecord 전용). 결과 정정·버전 이력은 체크리스트 10번 범위이므로 구현하지 않는다.
+ */
 export default function SessionResult() {
-  const SESSION = {
-    id: 'CS-2026-0315',
-    student: '최지수',
-    studentId: '20232050',
-    dept: '심리학과',
-    date: '2026-08-13',
-    confirmedAt: '2026-08-13 11:42',
-    confirmedBy: '김지도',
-  };
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [selectedSessionId, setSelectedSessionId] = useState(null);
 
-  const [confirmed, setConfirmed] = useState(true);
-  const [summary, setSummary] = useState(
-    '학생은 대인관계 어려움과 진로 불안을 주요 호소 문제로 제시함. 경청 중심의 지지적 상담을 진행하며 단기 목표를 설정함.',
-  );
-  const [plan, setPlan] = useState(
-    '1. 진로탐색 워크숍 참여 (2026-09)\n2. 주 1회 일기 쓰기\n3. 다음 상담 2026-09-10 예약',
-  );
-  const [corrections, setCorrections] = useState([
-    {
-      id: 'COR-001',
-      datetime: '2026-08-20 14:52',
-      author: '김지도',
-      reason: '오탈자 수정 및 실행계획 보완',
-      prevSummary: '학생은 대인관계 어려움과 진로 불안을 호소 문제로 제시함.',
-      prevPlan: '1. 워크숍 참여\n2. 다음 상담 예약',
-      expanded: false,
-    },
-  ]);
+  // 로컬 입력값 — 컴포넌트 메모리에만 둔다. Zustand·localStorage·URL에 저장하지 않는다.
+  const [summaryInput, setSummaryInput] = useState('');
+  const [planInput, setPlanInput] = useState('');
+  const [formError, setFormError] = useState('');
+  const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
+  const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
 
-  const [corrOpen, setCorrOpen] = useState(false);
-  const [corrReason, setCorrReason] = useState('');
-  const [corrSummary, setCorrSummary] = useState('');
-  const [corrPlan, setCorrPlan] = useState('');
-  const [unlockOpen, setUnlockOpen] = useState(false);
+  // 서버 초안을 한 번만 입력창에 채운다. 이후 같은 회기에서 재조회(예: 충돌 재검증)가 와도
+  // 사용자가 입력 중인 값을 덮어쓰지 않기 위한 플래그다(SessionRecord 비공개 기록과 동일한 이유).
+  const seededRef = useRef(false);
+  const previousSessionIdRef = useRef(null);
+  // mutation 콜백은 이 컴포넌트가 언마운트된 뒤에도 실행될 수 있다. 늦게 도착한 응답이 다른
+  // 회기 화면이나 이미 닫힌 화면을 건드리지 않도록 최신 상태를 ref로 판별한다.
+  const selectedSessionIdRef = useRef(null);
+  selectedSessionIdRef.current = selectedSessionId;
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
-  const openCorrection = () => {
-    setCorrReason('');
-    setCorrSummary(summary);
-    setCorrPlan(plan);
-    setCorrOpen(true);
-  };
+  const {
+    data: sessionPage,
+    isLoading,
+    isError,
+    error: listError,
+    refetch: refetchSessions,
+  } = useQuery({
+    queryKey: counselingSessionsQueryKey(page, statusFilter),
+    queryFn: () =>
+      fetchCounselingSessions({ page, size: PAGE_SIZE, sessionStatus: statusFilter || undefined }),
+    retry: false,
+  });
 
-  const submitCorrection = () => {
-    if (!corrReason.trim()) {
-      toast('정정 사유를 입력해 주세요.', 'error');
+  useEffect(() => {
+    return () => {
+      queryClient.removeQueries({ queryKey: ['counselingSessions'], type: 'inactive' });
+    };
+  }, [page, statusFilter, queryClient]);
+
+  // 사용자가 목록에서 선택한 회기의 공개 결과만 조회한다. gcTime: 0 — 화면을 벗어나면 즉시
+  // 캐시에서 제거해 공개 요약·실행계획이 기본 gcTime(5분) 동안 남지 않게 한다.
+  const {
+    data: publicResult,
+    isLoading: resultLoading,
+    isError: resultIsError,
+    error: resultError,
+  } = useQuery({
+    queryKey: counselorPublicResultQueryKey(selectedSessionId),
+    queryFn: () => getCounselorPublicResult(selectedSessionId),
+    enabled: selectedSessionId !== null,
+    gcTime: 0,
+    retry: false,
+  });
+
+  const isEditableStatus =
+    publicResult?.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.EMPTY ||
+    publicResult?.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.DRAFT;
+
+  // 회기를 바꾸면 이전 회기의 공개 결과 캐시를 지우고 입력값을 초기화한다.
+  useEffect(() => {
+    const previousSessionId = previousSessionIdRef.current;
+    if (previousSessionId !== null && previousSessionId !== selectedSessionId) {
+      queryClient.removeQueries({ queryKey: counselorPublicResultQueryKey(previousSessionId) });
+    }
+    if (previousSessionId !== selectedSessionId) {
+      setSummaryInput('');
+      setPlanInput('');
+      setFormError('');
+      setConfirmPublishOpen(false);
+      setConfirmCompleteOpen(false);
+      seededRef.current = false;
+    }
+    previousSessionIdRef.current = selectedSessionId;
+  }, [selectedSessionId, queryClient]);
+
+  useEffect(() => {
+    const isAccessError =
+      resultError instanceof ApiError &&
+      (resultError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.FORBIDDEN ||
+        resultError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.SESSION_NOT_FOUND);
+
+    if (!resultIsError || !isAccessError || selectedSessionId === null) return;
+
+    queryClient.removeQueries({ queryKey: counselorPublicResultQueryKey(selectedSessionId) });
+    queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
+    setSelectedSessionId(null);
+  }, [resultIsError, resultError, selectedSessionId, queryClient]);
+
+  // 서버 응답을 최초 1회만 입력창에 반영한다.
+  useEffect(() => {
+    if (
+      selectedSessionId === null ||
+      !publicResult ||
+      publicResult.sessionId !== selectedSessionId ||
+      seededRef.current
+    ) {
       return;
     }
-    const newCor = {
-      id: `COR-${String(corrections.length + 1).padStart(3, '0')}`,
-      datetime:
-        '2026-08-' +
-        String(new Date().getDate()).padStart(2, '0') +
-        ' ' +
-        new Date().toTimeString().slice(0, 5),
-      author: '김지도',
-      reason: corrReason,
-      prevSummary: summary,
-      prevPlan: plan,
-      expanded: false,
-    };
-    setPlan(corrPlan);
-    setSummary(corrSummary);
-    setCorrections((prev) => [newCor, ...prev]);
-    setCorrOpen(false);
-    toast('결과가 정정되었습니다. 정정 이력이 기록됩니다.', 'success');
+    if (
+      publicResult.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.EMPTY ||
+      publicResult.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.DRAFT
+    ) {
+      setSummaryInput(publicResult.resultSummary ?? '');
+      setPlanInput(publicResult.actionPlan ?? '');
+    }
+    seededRef.current = true;
+  }, [selectedSessionId, publicResult]);
+
+  const invalidateList = () => queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
+
+  const closeModal = () => {
+    if (selectedSessionId !== null) {
+      queryClient.removeQueries({ queryKey: counselorPublicResultQueryKey(selectedSessionId) });
+    }
+    setSelectedSessionId(null);
   };
 
-  const toggleExpand = (id) => {
-    setCorrections((prev) => prev.map((c) => (c.id === id ? { ...c, expanded: !c.expanded } : c)));
+  // 늦게 도착한 응답이 이미 닫힌 화면이나 다른 회기 화면을 건드리지 않도록 판별한다.
+  const isResultScreenFor = (requestSessionId) =>
+    isMountedRef.current && requestSessionId === selectedSessionIdRef.current;
+
+  // 저장·공개·완료 오류를 공통 분기한다. S010(충돌)은 로컬 입력을 지우지 않고 최신 서버 상태만
+  // 다시 받아온다. FORBIDDEN·SESSION_NOT_FOUND는 존재 여부를 숨기기 위해 화면을 닫는다.
+  const onMutationError = (mutationError, requestSessionId, action) => {
+    if (
+      mutationError instanceof ApiError &&
+      mutationError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.STATE_CONFLICT
+    ) {
+      queryClient.invalidateQueries({ queryKey: counselorPublicResultQueryKey(requestSessionId) });
+      if (isResultScreenFor(requestSessionId)) {
+        toast(getPublicResultErrorMessage(mutationError), 'error');
+        if (action === 'publish') setConfirmPublishOpen(false);
+        if (action === 'complete') setConfirmCompleteOpen(false);
+      }
+      return;
+    }
+    if (
+      mutationError instanceof ApiError &&
+      (mutationError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.FORBIDDEN ||
+        mutationError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.SESSION_NOT_FOUND)
+    ) {
+      invalidateList();
+      if (isResultScreenFor(requestSessionId)) {
+        toast(getPublicResultErrorMessage(mutationError), 'error');
+        closeModal();
+      }
+      return;
+    }
+    if (isResultScreenFor(requestSessionId)) {
+      setFormError(getPublicResultErrorMessage(mutationError));
+      if (action === 'publish') setConfirmPublishOpen(false);
+      if (action === 'complete') setConfirmCompleteOpen(false);
+    }
   };
 
-  // Unconfirmed view (for demo toggle)
-  if (!confirmed) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="text-[36px] mb-3">📋</div>
-          <p className="text-[14px] font-bold text-[#1F2328]">아직 확정된 상담 결과가 없습니다.</p>
-          <p className="text-[12px] text-[#9AA0A6] mt-1">
-            상담 기록 작성 후 완료 처리를 진행하세요.
-          </p>
-          <button
-            onClick={() => setConfirmed(true)}
-            className="mt-4 text-[12px] font-bold hover:underline"
-            style={{ color: ACCENT }}
-          >
-            (데모) 확정 상태 보기 →
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const saveMutation = useMutation({
+    mutationFn: ({ sessionId, resultSummary, actionPlan }) =>
+      saveCounselorPublicResult(sessionId, { resultSummary, actionPlan }),
+    onSuccess: (data, { sessionId }) => {
+      if (!isResultScreenFor(sessionId)) return;
+      const updated = updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), data);
+      if (!updated) return;
+      setSummaryInput(data.resultSummary ?? '');
+      setPlanInput(data.actionPlan ?? '');
+      setFormError('');
+      toast('공개 결과를 임시저장했습니다.', 'success');
+    },
+    onError: (mutationError, { sessionId }) => onMutationError(mutationError, sessionId, 'save'),
+  });
+
+  // 일반 공개는 예약 상태를 바꾸지 않는다 — 성공해도 목록의 예약·회기 상태를 건드리지 않고
+  // 이 결과와(가능하면) 학생 쪽 결과 조회만 무효화한다.
+  const publishMutation = useMutation({
+    mutationFn: (sessionId) => publishCounselorPublicResult(sessionId),
+    onSuccess: (data, sessionId) => {
+      // 페이지별로 나뉜 학생 결과 목록 캐시를 접두사만으로 한 번에 무효화한다.
+      queryClient.invalidateQueries({ queryKey: ['studentCounselingResults'] });
+      queryClient.invalidateQueries({ queryKey: studentCounselingResultDetailQueryKey(sessionId) });
+      if (!isResultScreenFor(sessionId)) return;
+      updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), data);
+      setConfirmPublishOpen(false);
+      toast('결과를 공개했습니다. 예약은 계속 진행 중입니다.', 'success');
+    },
+    onError: (mutationError, sessionId) => onMutationError(mutationError, sessionId, 'publish'),
+  });
+
+  // 최종 완료는 예약을 COMPLETED로 만들고 활성 배정을 종료할 수 있으므로 회기 목록도
+  // 다시 읽어야 한다. 성공 응답을 받은 뒤에만 반영한다(낙관적 업데이트 금지).
+  const completeMutation = useMutation({
+    mutationFn: (sessionId) => completeCounselingWithPublicResult(sessionId),
+    onSuccess: (data, sessionId) => {
+      invalidateList();
+      // 페이지별로 나뉜 학생 결과 목록 캐시를 접두사만으로 한 번에 무효화한다.
+      queryClient.invalidateQueries({ queryKey: ['studentCounselingResults'] });
+      queryClient.invalidateQueries({ queryKey: studentCounselingResultDetailQueryKey(sessionId) });
+      if (!isResultScreenFor(sessionId)) return;
+      updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), data);
+      setConfirmCompleteOpen(false);
+      toast('상담이 완료 처리되었습니다.', 'success');
+    },
+    onError: (mutationError, sessionId) => onMutationError(mutationError, sessionId, 'complete'),
+  });
+
+  const isMutating = saveMutation.isPending || publishMutation.isPending || completeMutation.isPending;
+  const isDraftDirty =
+    isEditableStatus &&
+    (summaryInput !== (publicResult.resultSummary ?? '') ||
+      planInput !== (publicResult.actionPlan ?? ''));
+
+  const requestClose = () => {
+    if (isMutating) return;
+    if (
+      isDraftDirty &&
+      !window.confirm('저장하지 않은 변경사항이 있습니다. 닫으면 입력 내용이 사라집니다. 그래도 닫으시겠습니까?')
+    ) {
+      return;
+    }
+    closeModal();
+  };
+
+  const submitSave = () => {
+    const trimmedSummary = summaryInput.trim();
+    if (!trimmedSummary) {
+      setFormError('공개 요약을 입력해 주세요.');
+      return;
+    }
+    if (trimmedSummary.length > SUMMARY_MAX_LENGTH) {
+      setFormError(`공개 요약은 ${SUMMARY_MAX_LENGTH.toLocaleString()}자 이내로 입력해 주세요.`);
+      return;
+    }
+    const trimmedPlan = planInput.trim();
+    if (trimmedPlan.length > ACTION_PLAN_MAX_LENGTH) {
+      setFormError(`실행 계획은 ${ACTION_PLAN_MAX_LENGTH.toLocaleString()}자 이내로 입력해 주세요.`);
+      return;
+    }
+    setFormError('');
+    saveMutation.mutate({
+      sessionId: selectedSessionId,
+      resultSummary: trimmedSummary,
+      actionPlan: trimmedPlan || null,
+    });
+  };
+
+  const content = sessionPage?.content ?? [];
+  const totalElements = sessionPage?.totalElements ?? 0;
+  const totalPages = sessionPage?.totalPages ?? 0;
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-[18px] font-black text-[#1F2328]">상담 결과</h1>
           <p className="text-[12px] text-[#9AA0A6] mt-0.5">
-            <span className="font-mono">{SESSION.id}</span> · {SESSION.student} · {SESSION.date}
+            회기별 공개 결과를 저장·공개하고, 마지막 출석 완료 회기 결과로 상담을 완료 처리하세요.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setUnlockOpen(true)}>
-            결과 정정
-          </Button>
-          <button
-            onClick={() => setConfirmed(false)}
-            className="text-[11px] text-[#9AA0A6] hover:underline"
-          >
-            (데모) 미확정 보기
-          </button>
-        </div>
-      </div>
-
-      {/* Confirmed result card */}
-      <div
-        className="bg-white rounded-[8px] border-2 shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden mb-5"
-        style={{ borderColor: ACCENT }}
-      >
-        {/* Confirmed stamp */}
-        <div
-          className="px-5 py-3 flex items-center gap-3 border-b"
-          style={{ background: '#F3F4F6', borderColor: '#E5E7EB' }}
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPage(0);
+          }}
+          className="h-8 px-2.5 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
+          aria-label="회기 상태 필터"
         >
-          <div
-            className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-black shrink-0"
-            style={{ background: ACCENT }}
-          >
-            ✓
-          </div>
-          <span className="text-[12px] font-black" style={{ color: ACCENT }}>
-            확정 {corrections[0]?.datetime ?? SESSION.confirmedAt} · {SESSION.confirmedBy}
-          </span>
-          <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">
-            확정 완료
-          </span>
-        </div>
-
-        <div className="p-5 flex flex-col gap-5">
-          {/* Session meta */}
-          <div className="grid grid-cols-4 gap-4 pb-4 border-b border-[#F3F4F6]">
-            {[
-              { label: '학생', value: `${SESSION.student} (${SESSION.studentId})` },
-              { label: '학과', value: SESSION.dept },
-              { label: '상담일', value: SESSION.date },
-              { label: '출석', value: '출석' },
-            ].map((f) => (
-              <div key={f.label}>
-                <p className="text-[10px] text-[#9AA0A6] mb-0.5">{f.label}</p>
-                <p className="text-[12px] font-bold text-[#1F2328]">{f.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Public summary — READ ONLY */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span
-                className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#F3F4F6]"
-                style={{ color: ACCENT }}
-              >
-                학생 공개
-              </span>
-              <span className="text-[11px] font-bold text-[#1F2328]">공개 요약</span>
-              <span className="ml-auto text-[10px] text-[#9AA0A6] flex items-center gap-1">
-                <svg width="10" height="12" viewBox="0 0 10 12" fill="none">
-                  <rect
-                    x="1"
-                    y="5"
-                    width="8"
-                    height="7"
-                    rx="1"
-                    stroke="#9AA0A6"
-                    strokeWidth="1.2"
-                  />
-                  <path d="M3 5V3.5a2 2 0 014 0V5" stroke="#9AA0A6" strokeWidth="1.2" />
-                </svg>
-                잠김
-              </span>
-            </div>
-            <div className="px-4 py-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[13px] text-[#444D56] leading-relaxed">
-              {summary}
-            </div>
-          </div>
-
-          {/* Action plan — READ ONLY */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-bold text-[#1F2328]">실행계획</span>
-              <span className="ml-auto text-[10px] text-[#9AA0A6] flex items-center gap-1">
-                <svg width="10" height="12" viewBox="0 0 10 12" fill="none">
-                  <rect
-                    x="1"
-                    y="5"
-                    width="8"
-                    height="7"
-                    rx="1"
-                    stroke="#9AA0A6"
-                    strokeWidth="1.2"
-                  />
-                  <path d="M3 5V3.5a2 2 0 014 0V5" stroke="#9AA0A6" strokeWidth="1.2" />
-                </svg>
-                잠김
-              </span>
-            </div>
-            <div className="px-4 py-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[13px] text-[#444D56] leading-relaxed whitespace-pre-line">
-              {plan}
-            </div>
-          </div>
-
-          {/* Private note — locked for non-owner */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
-                비공개 · 상담사 전용
-              </span>
-            </div>
-            <div className="px-4 py-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] flex items-center gap-3 text-[13px] text-[#9AA0A6]">
-              <svg width="16" height="20" viewBox="0 0 16 20" fill="none">
-                <rect
-                  x="1"
-                  y="8"
-                  width="14"
-                  height="12"
-                  rx="2"
-                  stroke="#9AA0A6"
-                  strokeWidth="1.5"
-                />
-                <path d="M4 8V5.5a4 4 0 018 0V8" stroke="#9AA0A6" strokeWidth="1.5" />
-              </svg>
-              담당 상담사만 열람할 수 있습니다.
-            </div>
-          </div>
-        </div>
+          {STATUS_FILTER_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Correction history timeline */}
-      {corrections.length > 0 && (
-        <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-1 h-4 rounded-full bg-[#D97706]" />
-            <h2 className="text-[13px] font-bold text-[#1F2328]">정정 이력</h2>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-              {corrections.length}건
-            </span>
-            <p className="text-[11px] text-[#9AA0A6] ml-1">원본은 보존됩니다.</p>
-          </div>
-
-          <div className="flex flex-col gap-0">
-            {corrections.map((c, i) => (
-              <div key={c.id} className="relative pl-7">
-                {/* Timeline line */}
-                {i < corrections.length - 1 && (
-                  <div className="absolute left-3 top-6 bottom-0 w-px bg-[#E5E7EB]" />
-                )}
-                {/* Dot */}
-                <div className="absolute left-0 top-4 w-6 h-6 rounded-full border-2 border-[#D97706] bg-white flex items-center justify-center">
-                  <div className="w-2 h-2 rounded-full bg-[#D97706]" />
-                </div>
-
-                <div className="pb-5">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-[11px] font-mono text-[#9AA0A6]">{c.datetime}</span>
-                    <span className="text-[11px] font-bold text-[#1F2328]">{c.author}</span>
-                    <span className="text-[11px] text-[#D97706]">{c.reason}</span>
-                    <button
-                      onClick={() => toggleExpand(c.id)}
-                      className="ml-auto text-[10px] text-[#9AA0A6] hover:text-[#1F2328] transition-colors font-semibold"
-                    >
-                      {c.expanded ? '변경 전 내용 접기 ▲' : '변경 전 내용 펼치기 ▼'}
-                    </button>
-                  </div>
-
-                  {c.expanded && (
-                    <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-[8px] p-4 flex flex-col gap-3">
-                      <div>
-                        <p className="text-[10px] font-bold text-[#9AA0A6] mb-1">
-                          변경 전 공개 요약
-                        </p>
-                        <p className="text-[12px] text-[#656D76] leading-relaxed">
-                          {c.prevSummary}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-[#9AA0A6] mb-1">
-                          변경 전 실행계획
-                        </p>
-                        <p className="text-[12px] text-[#656D76] leading-relaxed whitespace-pre-line">
-                          {c.prevPlan}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+        <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
+          <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
+          <span className="text-[13px] font-bold text-[#1F2328]">회기 목록</span>
+          {!isLoading && !isError && (
+            <span className="ml-auto text-[11px] text-[#9AA0A6]">총 {totalElements}건</span>
+          )}
         </div>
+
+        {isLoading ? (
+          <p className="p-6 text-center text-[12px] text-[#656D76]">목록을 불러오는 중입니다.</p>
+        ) : isError ? (
+          <div className="p-4 text-[12px] text-[#CF222E]" role="alert">
+            {getPublicResultErrorMessage(listError)}
+            <button
+              type="button"
+              onClick={refetchSessions}
+              className="mt-2 font-bold underline hover:text-[#A40E26]"
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : content.length === 0 ? (
+          <p className="p-6 text-center text-[12px] text-[#656D76]">조회된 회기가 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
+                  {['회기', '학생', '상담유형', '시작 ~ 종료', '출석', '회기상태', '결과'].map(
+                    (h, i) => (
+                      <th
+                        key={h}
+                        className={`px-4 py-3 text-[11px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i === 6 ? 'text-center' : 'text-left'}`}
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {content.map((s) => (
+                  <tr
+                    key={s.sessionId}
+                    className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
+                  >
+                    <td className="px-4 py-3 font-mono text-[11px]" style={{ color: ACCENT }}>
+                      #{s.sessionId} · {s.sessionNo}회기
+                    </td>
+                    <td className="px-4 py-3 text-[11px] text-[#1F2328]">
+                      {s.studentName}
+                      <span className="text-[#9AA0A6] font-mono ml-1">({s.studentNumber})</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6]"
+                        style={{ color: ACCENT }}
+                      >
+                        {s.counselingTypeName}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-[#444D56] whitespace-nowrap">
+                      {formatKstDateTime(s.startsAt)} ~ {formatKstDateTime(s.endsAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge
+                        status={s.attendanceStatus}
+                        variant={ATTENDANCE_BADGE_VARIANT[s.attendanceStatus]}
+                        label={COUNSELING_SESSION_ATTENDANCE_STATUS_LABEL[s.attendanceStatus]}
+                        size="sm"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge
+                        status={s.sessionStatus}
+                        variant={SESSION_STATUS_BADGE_VARIANT[s.sessionStatus]}
+                        label={COUNSELING_SESSION_STATUS_LABEL[s.sessionStatus]}
+                        size="sm"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSessionId(s.sessionId)}
+                        aria-label={`${s.studentName} ${s.sessionNo}회기 결과 보기`}
+                        className="h-6 px-2 text-[11px] font-bold rounded-[4px] bg-[#F3F4F6] text-[#656D76] hover:bg-[#E5E7EB] transition-colors"
+                      >
+                        결과 보기
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {!isLoading && !isError && totalPages > 1 && (
+        <Pagination
+          page={page + 1}
+          totalPages={totalPages}
+          totalItems={totalElements}
+          pageSize={PAGE_SIZE}
+          onChange={(nextPage) => setPage(nextPage - 1)}
+        />
       )}
 
-      {/* Correction modal */}
+      {/* 공개 결과 모달 — 학생에게 보일 요약·실행계획이므로 열람 시에만 조회하고 닫을 때 캐시를 지운다 */}
       <Modal
-        open={corrOpen}
-        onClose={() => setCorrOpen(false)}
-        title="결과 정정"
+        open={selectedSessionId !== null}
+        onClose={requestClose}
+        title="공개 결과"
         footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setCorrOpen(false)}>
-              취소
-            </Button>
-            <Button style={{ background: '#D97706' }} onClick={submitCorrection}>
-              정정 저장
-            </Button>
-          </div>
+          <Button variant="outline" onClick={requestClose} disabled={isMutating}>
+            닫기
+          </Button>
         }
       >
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-              정정 사유 <span className="text-[#CF222E]">*</span>
-            </label>
-            <input
-              value={corrReason}
-              onChange={(e) => setCorrReason(e.target.value)}
-              placeholder="예) 오탈자 수정, 실행계획 보완 등"
-              className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#D97706] bg-white"
-            />
+        <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1">
+          {resultLoading ? (
+          <p className="text-center text-[12px] text-[#656D76] py-4">불러오는 중입니다.</p>
+        ) : resultIsError ? (
+          <p className="text-[12px] text-[#CF222E]" role="alert">
+            {getPublicResultErrorMessage(resultError)}
+          </p>
+        ) : !publicResult ? null : (
+          <div className="flex flex-col gap-4">
+            <div className="p-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] flex flex-wrap items-center gap-2">
+              <StatusBadge
+                status={publicResult.resultStatus}
+                variant={RESULT_STATUS_BADGE_VARIANT[publicResult.resultStatus]}
+                label={COUNSELING_PUBLIC_RESULT_STATUS_LABEL[publicResult.resultStatus]}
+                size="sm"
+              />
+              {publicResult.finalResult && (
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#1A7F37]">
+                  예약 최종 완료 결과
+                </span>
+              )}
+              {!publicResult.assignmentActive && (
+                <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[#F3F4F6] text-[#656D76] font-bold">
+                  종료된 배정
+                </span>
+              )}
+              <span className="text-[11px] text-[#656D76]">
+                {publicResult.privateRecordConfirmed
+                  ? '비공개 기록 확정됨'
+                  : '비공개 기록 미확정 — 확정 전에는 공개할 수 없습니다.'}
+              </span>
+            </div>
+
+            {publicResult.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.PUBLISHED ? (
+              <>
+                <div>
+                  <p className="text-[11px] font-bold text-[#1F2328] mb-1.5">공개 요약</p>
+                  <div className="px-4 py-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[13px] text-[#444D56] leading-relaxed whitespace-pre-wrap">
+                    {publicResult.resultSummary}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-[#1F2328] mb-1.5">실행계획</p>
+                  <div className="px-4 py-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[13px] text-[#444D56] leading-relaxed whitespace-pre-wrap">
+                    {publicResult.actionPlan ?? '등록된 실행계획이 없습니다.'}
+                  </div>
+                </div>
+                <p className="text-[11px] text-[#656D76]">
+                  {publicResult.createdByName} · 공개 {formatKstDateTime(publicResult.publishedAt)}
+                </p>
+                {/* 이미 공개된 결과도 마지막 출석 완료 회기라면 완료 처리를 할 수 있다(내용은 그대로 유지). */}
+                {publicResult.canCompleteReservation && (
+                  <Button
+                    size="sm"
+                    disabled={completeMutation.isPending}
+                    loading={completeMutation.isPending}
+                    onClick={() => setConfirmCompleteOpen(true)}
+                  >
+                    상담 완료
+                  </Button>
+                )}
+              </>
+            ) : isEditableStatus && publicResult.canSaveDraft ? (
+              <>
+                <div>
+                  <label
+                    htmlFor="summaryInput"
+                    className="block text-[11px] font-semibold text-[#656D76] mb-1.5"
+                  >
+                    공개 요약 <span className="text-[#CF222E]">*</span>
+                  </label>
+                  <textarea
+                    id="summaryInput"
+                    value={summaryInput}
+                    onChange={(e) => setSummaryInput(e.target.value)}
+                    required
+                    aria-required="true"
+                    aria-invalid={Boolean(formError)}
+                    aria-describedby={formError ? 'summaryInput-help result-form-error' : 'summaryInput-help'}
+                    rows={5}
+                    maxLength={SUMMARY_MAX_LENGTH}
+                    placeholder="학생에게 공개할 상담 요약을 입력하세요."
+                    disabled={saveMutation.isPending}
+                    className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151]"
+                  />
+                  <p id="summaryInput-help" className="text-[11px] text-[#656D76] text-right">
+                    {summaryInput.length}/{SUMMARY_MAX_LENGTH}자
+                  </p>
+                </div>
+                <div>
+                  <label
+                    htmlFor="planInput"
+                    className="block text-[11px] font-semibold text-[#656D76] mb-1.5"
+                  >
+                    실행계획 (선택)
+                  </label>
+                  <textarea
+                    id="planInput"
+                    value={planInput}
+                    onChange={(e) => setPlanInput(e.target.value)}
+                    aria-required="false"
+                    aria-invalid={Boolean(formError)}
+                    aria-describedby={formError ? 'planInput-help result-form-error' : 'planInput-help'}
+                    rows={4}
+                    maxLength={ACTION_PLAN_MAX_LENGTH}
+                    placeholder="학생이 수행할 실행 계획을 입력하세요."
+                    disabled={saveMutation.isPending}
+                    className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151]"
+                  />
+                  <p id="planInput-help" className="text-[11px] text-[#656D76] text-right">
+                    {planInput.length}/{ACTION_PLAN_MAX_LENGTH}자
+                  </p>
+                </div>
+                {formError && (
+                  <p
+                    id="result-form-error"
+                    className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]"
+                    role="alert"
+                  >
+                    ⚠ {formError}
+                  </p>
+                )}
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={saveMutation.isPending}
+                    onClick={submitSave}
+                  >
+                    임시저장
+                  </Button>
+                  {publicResult.canPublish && (
+                    <Button
+                    size="sm"
+                    disabled={isDraftDirty || saveMutation.isPending || publishMutation.isPending}
+                    loading={publishMutation.isPending}
+                    onClick={() => setConfirmPublishOpen(true)}
+                  >
+                    결과 공개
+                    </Button>
+                  )}
+                  {publicResult.canCompleteReservation && (
+                    <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isDraftDirty || saveMutation.isPending || completeMutation.isPending}
+                    loading={completeMutation.isPending}
+                    onClick={() => setConfirmCompleteOpen(true)}
+                  >
+                    상담 완료
+                    </Button>
+                  )}
+                </div>
+                {isDraftDirty && (
+                  <p className="text-[11px] text-[#92400E]">
+                    저장하지 않은 변경이 있습니다. 먼저 임시저장한 후 결과 공개 또는 상담 완료를 진행해 주세요.
+                  </p>
+                )}
+                <p className="text-[11px] text-[#656D76]">
+                  버튼은 서버가 판단한 처리 가능 여부에 따라 활성화됩니다.
+                </p>
+              </>
+            ) : isEditableStatus && publicResult.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.DRAFT ? (
+              // canSaveDraft가 false인 초안 — 종료된 이전 담당 상담사는 읽기만 할 수 있다.
+              <>
+                <div>
+                  <p className="text-[11px] font-bold text-[#1F2328] mb-1.5">공개 요약 (초안 · 읽기전용)</p>
+                  <div className="px-4 py-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[13px] text-[#444D56] leading-relaxed whitespace-pre-wrap">
+                    {publicResult.resultSummary}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-[#1F2328] mb-1.5">실행계획 (초안 · 읽기전용)</p>
+                  <div className="px-4 py-3 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[13px] text-[#444D56] leading-relaxed whitespace-pre-wrap">
+                    {publicResult.actionPlan ?? '등록된 실행계획이 없습니다.'}
+                  </div>
+                </div>
+                <p className="text-[11px] text-[#656D76]">
+                  현재 활성 배정 담당 상담사가 아니므로 수정·공개할 수 없습니다.
+                </p>
+              </>
+            ) : (
+              <p className="p-4 text-center text-[12px] text-[#656D76] bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB]">
+                이 회기는 지금 공개 결과를 작성·수정할 수 없습니다. 시작 시각이 지난 예정 회기이거나
+                출석 완료된 회기에서만 작성할 수 있습니다.
+              </p>
+            )}
           </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-              공개 요약 (변경)
-            </label>
-            <textarea
-              value={corrSummary}
-              onChange={(e) => setCorrSummary(e.target.value)}
-              rows={4}
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#D97706] bg-white"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-              실행계획 (변경)
-            </label>
-            <textarea
-              value={corrPlan}
-              onChange={(e) => setCorrPlan(e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#D97706] bg-white"
-            />
-          </div>
-          <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[11px] text-[#92400E]">
-            정정 후 변경 이력이 타임라인에 기록됩니다. 원본은 삭제되지 않습니다.
-          </div>
+          )}
         </div>
       </Modal>
 
-      {/* Unlock confirm */}
-      <Modal
-        open={unlockOpen}
-        onClose={() => setUnlockOpen(false)}
-        title="결과 정정 확인"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setUnlockOpen(false)}>
-              취소
-            </Button>
-            <Button
-              style={{ background: '#D97706' }}
-              onClick={() => {
-                setUnlockOpen(false);
-                openCorrection();
-              }}
-            >
-              정정 진행
-            </Button>
-          </div>
-        }
-      >
-        <div className="p-3 rounded-[8px] bg-[#FFFBEB] border border-[#FDE68A] text-[12px] text-[#92400E] leading-relaxed">
-          확정된 상담 결과를 수정합니다. 변경 이력이 기록되며 원본은 보존됩니다.
-        </div>
-      </Modal>
+      <ConfirmDialog
+        open={confirmPublishOpen}
+        title="결과 공개"
+        message="학생이 이 회기 결과를 볼 수 있게 됩니다. 예약은 계속 진행 중이며 완료 처리되지 않습니다."
+        confirmLabel="공개"
+        loading={publishMutation.isPending}
+        onConfirm={() => publishMutation.mutate(selectedSessionId)}
+        onCancel={() => !publishMutation.isPending && setConfirmPublishOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmCompleteOpen}
+        title="상담 완료"
+        message="필요 시 초안이 공개되고, 예약이 완료(COMPLETED)되며 현재 활성 배정이 종료됩니다. 이후에는 새 회기를 생성할 수 없습니다."
+        confirmLabel="완료 처리"
+        loading={completeMutation.isPending}
+        onConfirm={() => completeMutation.mutate(selectedSessionId)}
+        onCancel={() => !completeMutation.isPending && setConfirmCompleteOpen(false)}
+      />
     </div>
   );
 }
