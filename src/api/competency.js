@@ -310,6 +310,43 @@ export const notifyAssessmentNonParticipants = async (roundId, userIds) => {
 };
 
 /**
+ * @typedef {Object} DistributionCompetencyAverage
+ * @property {number} competencyId
+ * @property {string} competencyName
+ * @property {number} displayOrder 방사형 차트(SCR-S02)와 축 순서를 맞추기 위한 값
+ * @property {number} averageScore 100점 환산 평균
+ */
+
+/**
+ * @typedef {Object} DistributionGroup
+ * @property {string} groupKey 학년이면 "1"~"4", 전공이면 학과 공통코드 codeId 문자열
+ * @property {string} groupLabel 화면 표시용 라벨 ("3학년", 학과명 등)
+ * @property {number} respondentCount 이 집단에서 제출을 완료한 학생 수
+ * @property {DistributionCompetencyAverage[]} competencyAverages
+ */
+
+/**
+ * 진단 결과 통계 - 역량별 분포·집단별 비교 조회 (SCR-A06). 회차의 역량별 평균 환산점수를
+ * 집단 축(GRADE: 학년 / MAJOR: 전공)으로 나눠 집계한다. 역량별 분포 그래프와 집단별 비교
+ * 그래프가 같은 응답 구조를 재사용하며, 역량별 분포는 groups를 역량 축으로 다시 묶어 그린다.
+ * 단과대 축은 지원하지 않는다(학적 데이터에 단과대 계층 없음). GRADE/MAJOR가 아니면 ApiError(Q021).
+ *
+ * @param {number} roundId
+ * @param {'GRADE'|'MAJOR'} groupBy
+ * @returns {Promise<{
+ *   assessmentRoundId: number,
+ *   groupAxis: 'GRADE'|'MAJOR',
+ *   groups: DistributionGroup[],
+ * }>}
+ */
+export const fetchAssessmentDistribution = async (roundId, groupBy) => {
+  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/stats/distribution`, {
+    params: { groupBy },
+  });
+  return data;
+};
+
+/**
  * @typedef {Object} AssessmentResumeItem
  * @property {number} questionId
  * @property {number} competencyId
