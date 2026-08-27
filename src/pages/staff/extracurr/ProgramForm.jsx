@@ -17,13 +17,23 @@ const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
-function Section({ num, title, children, id, role, 'aria-labelledby': ariaLabelledBy, tabIndex }) {
+function Section({
+  num,
+  title,
+  children,
+  id,
+  role,
+  'aria-labelledby': ariaLabelledBy,
+  tabIndex,
+  hidden,
+}) {
   return (
     <div
       id={id}
       role={role}
       aria-labelledby={ariaLabelledBy}
       tabIndex={tabIndex}
+      hidden={hidden}
       className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden"
     >
       <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center gap-3">
@@ -141,7 +151,15 @@ function DateInput({ id, value, onChange, error, ariaLabel }) {
  * @param {boolean} [props.startsAtError]
  * @param {boolean} [props.endsAtError]
  */
-function SessionCard({ index, session, onChange, onRemove, removable, startsAtError, endsAtError }) {
+function SessionCard({
+  index,
+  session,
+  onChange,
+  onRemove,
+  removable,
+  startsAtError,
+  endsAtError,
+}) {
   return (
     <div className="border border-[#E5E7EB] rounded-[8px] p-4 bg-white">
       <div className="flex items-center justify-between mb-3">
@@ -386,9 +404,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     setOpS(formatDate(detailData.operationStartsAt));
     setOpE(formatDate(detailData.operationEndsAt));
     setCapacity(detailData.capacity ?? '');
-    setCompletionRate(
-      detailData.completionRate != null ? Number(detailData.completionRate) : 80,
-    );
+    setCompletionRate(detailData.completionRate != null ? Number(detailData.completionRate) : 80);
     setMileagePolicyId(
       detailData.mileagePolicyId != null ? String(detailData.mileagePolicyId) : '',
     );
@@ -690,304 +706,317 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       </div>
 
       <div className="mb-5">
-        <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} accentColor={ACCENT} withPanels />
+        <Tabs
+          tabs={TABS}
+          active={activeTab}
+          onChange={setActiveTab}
+          accentColor={ACCENT}
+          withPanels
+        />
       </div>
 
       <div className="pb-24">
-        {activeTab === 'basic' && (
-          <Section
-            num={1}
-            title="기본정보"
-            id="panel-basic"
-            role="tabpanel"
-            aria-labelledby="tab-basic"
-            tabIndex={0}
-          >
-            <div className="grid grid-cols-2 gap-5">
-              <div className="col-span-2">
-                <Field label="프로그램명" required error={errors.name} htmlFor="programName">
-                  <TextInput
-                    id="programName"
-                    value={name}
-                    onChange={setName}
-                    placeholder="예) 2026-1 해외문화체험 워크숍"
-                    error={errors.name}
-                    maxLength={200}
-                  />
-                </Field>
-              </div>
+        <Section
+          num={1}
+          title="기본정보"
+          id="panel-basic"
+          role="tabpanel"
+          aria-labelledby="tab-basic"
+          tabIndex={0}
+          hidden={activeTab !== 'basic'}
+        >
+          <div className="grid grid-cols-2 gap-5">
+            <div className="col-span-2">
+              <Field label="프로그램명" required error={errors.name} htmlFor="programName">
+                <TextInput
+                  id="programName"
+                  value={name}
+                  onChange={setName}
+                  placeholder="예) 2026-1 해외문화체험 워크숍"
+                  error={errors.name}
+                  maxLength={200}
+                />
+              </Field>
+            </div>
 
-              <div className="col-span-2">
-                <Field label="설명" htmlFor="description">
-                  <TextArea
-                    id="description"
-                    value={description}
-                    onChange={setDescription}
-                    placeholder="프로그램에 대한 설명을 입력하세요."
-                  />
-                </Field>
-              </div>
+            <div className="col-span-2">
+              <Field label="설명" htmlFor="description">
+                <TextArea
+                  id="description"
+                  value={description}
+                  onChange={setDescription}
+                  placeholder="프로그램에 대한 설명을 입력하세요."
+                />
+              </Field>
+            </div>
 
-              <Field
-                label="프로그램분류"
-                required
+            <Field
+              label="프로그램분류"
+              required
+              error={errors.programTypeCodeId}
+              htmlFor="programTypeCodeId"
+            >
+              <IdSelect
+                id="programTypeCodeId"
+                value={programTypeCodeId}
+                onChange={setProgramTypeCodeId}
+                options={programTypeOptions}
+                placeholder="선택하세요"
+                disabled={programTypeLoading || programTypeErrored}
                 error={errors.programTypeCodeId}
-                htmlFor="programTypeCodeId"
-              >
-                <IdSelect
-                  id="programTypeCodeId"
-                  value={programTypeCodeId}
-                  onChange={setProgramTypeCodeId}
-                  options={programTypeOptions}
-                  placeholder="선택하세요"
-                  disabled={programTypeLoading || programTypeErrored}
-                  error={errors.programTypeCodeId}
-                />
-              </Field>
+              />
+            </Field>
 
-              <Field
-                label="운영부서"
-                required
+            <Field
+              label="운영부서"
+              required
+              error={errors.operatingUnitCodeId}
+              htmlFor="operatingUnitCodeId"
+            >
+              <IdSelect
+                id="operatingUnitCodeId"
+                value={operatingUnitCodeId}
+                onChange={setOperatingUnitCodeId}
+                options={departmentOptions}
+                placeholder={
+                  departmentLoading
+                    ? '불러오는 중…'
+                    : departmentErrored
+                      ? '목록을 불러오지 못했습니다'
+                      : '선택하세요'
+                }
+                disabled={departmentLoading || departmentErrored}
                 error={errors.operatingUnitCodeId}
-                htmlFor="operatingUnitCodeId"
-              >
-                <IdSelect
-                  id="operatingUnitCodeId"
-                  value={operatingUnitCodeId}
-                  onChange={setOperatingUnitCodeId}
-                  options={departmentOptions}
-                  placeholder={
-                    departmentLoading
-                      ? '불러오는 중…'
-                      : departmentErrored
-                        ? '목록을 불러오지 못했습니다'
-                        : '선택하세요'
-                  }
-                  disabled={departmentLoading || departmentErrored}
-                  error={errors.operatingUnitCodeId}
-                />
-                {departmentErrored && (
-                  <p className="text-[11px] text-[#CF222E] mt-1">
-                    운영부서 목록을 불러오지 못했습니다.{' '}
-                    <button
-                      type="button"
-                      onClick={() => refetchDepartments()}
-                      className="underline font-semibold"
-                    >
-                      다시 시도
-                    </button>
-                  </p>
-                )}
-              </Field>
-            </div>
-          </Section>
-        )}
-
-        {activeTab === 'schedule' && (
-          <Section
-            num={2}
-            title="모집·운영·정원"
-            id="panel-schedule"
-            role="tabpanel"
-            aria-labelledby="tab-schedule"
-            tabIndex={0}
-          >
-            <div className="grid grid-cols-2 gap-5">
-              <Field label="모집 기간" required>
-                <div className="flex items-center gap-2">
-                  <DateInput
-                    value={recruitStart}
-                    onChange={setRcS}
-                    error={errors.recruitStart}
-                    ariaLabel="모집 시작일"
-                  />
-                  <span className="text-[12px] text-[#9AA0A6]">~</span>
-                  <DateInput
-                    value={recruitEnd}
-                    onChange={setRcE}
-                    error={errors.recruitEnd}
-                    ariaLabel="모집 종료일"
-                  />
-                </div>
-              </Field>
-
-              <Field label="운영 기간" required>
-                <div className="flex items-center gap-2">
-                  <DateInput
-                    value={operStart}
-                    onChange={setOpS}
-                    error={errors.operStart}
-                    ariaLabel="운영 시작일"
-                  />
-                  <span className="text-[12px] text-[#9AA0A6]">~</span>
-                  <DateInput
-                    value={operEnd}
-                    onChange={setOpE}
-                    error={errors.operEnd}
-                    ariaLabel="운영 종료일"
-                  />
-                </div>
-              </Field>
-
-              <Field label="정원" required error={errors.capacity} htmlFor="capacity">
-                <NumberInput
-                  id="capacity"
-                  value={capacity}
-                  onChange={setCapacity}
-                  min={1}
-                  placeholder="예) 30"
-                  error={errors.capacity}
-                />
-              </Field>
-            </div>
-          </Section>
-        )}
-
-        {activeTab === 'sessions' && (
-          <Section
-            num={3}
-            title="회차 관리"
-            id="panel-sessions"
-            role="tabpanel"
-            aria-labelledby="tab-sessions"
-            tabIndex={0}
-          >
-            <div className="flex flex-col gap-4">
-              {sessions.map((s, i) => (
-                <SessionCard
-                  key={s.localId}
-                  index={i}
-                  session={s}
-                  onChange={(patch) => updateSession(s.localId, patch)}
-                  onRemove={() => removeSession(s.localId)}
-                  removable={sessions.length > 1}
-                  startsAtError={sessionFieldErrors.has(s.localId)}
-                  endsAtError={sessionFieldErrors.has(s.localId)}
-                />
-              ))}
-              <button
-                type="button"
-                onClick={addSession}
-                className="h-9 px-4 self-start text-[12px] font-bold rounded-[6px] border border-dashed border-[#9AA0A6] text-[#656D76] hover:border-[#374151] hover:text-[#1F2328] transition-colors"
-              >
-                + 회차 추가
-              </button>
-            </div>
-          </Section>
-        )}
-
-        {activeTab === 'policy' && (
-          <Section
-            num={4}
-            title="역량·정책"
-            id="panel-policy"
-            role="tabpanel"
-            aria-labelledby="tab-policy"
-            tabIndex={0}
-          >
-            <div className="grid grid-cols-2 gap-5">
-              <Field label="연계 핵심역량" required error={errors.competencyId} htmlFor="competencyId">
-                <IdSelect
-                  id="competencyId"
-                  value={competencyId}
-                  onChange={setCompetencyId}
-                  options={competencyOptions}
-                  placeholder={competencyPlaceholder}
-                  disabled={competencyLoading || competencyErrored}
-                  error={errors.competencyId}
-                />
-              </Field>
-
-              <Field label="마일리지 정책" htmlFor="mileagePolicyId">
-                <IdSelect
-                  id="mileagePolicyId"
-                  value={mileagePolicyId}
-                  onChange={setMileagePolicyId}
-                  options={MILEAGE_POLICY_OPTIONS}
-                  placeholder="선택 안함"
-                />
-              </Field>
-
-              <div className="col-span-2">
-                <Field label="이수 출석률 기준 (%)">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={completionRate}
-                      onChange={(e) => setCompletionRate(Number(e.target.value))}
-                      className="flex-1 accent-[#374151]"
-                    />
-                    <div className="w-20">
-                      <NumberInput value={completionRate} onChange={setCompletionRate} min={0} max={100} />
-                    </div>
-                    <span className="text-[12px] text-[#656D76]">%</span>
-                  </div>
-                </Field>
-              </div>
-            </div>
-          </Section>
-        )}
-
-        {activeTab === 'attachment' && (
-          <Section
-            num={5}
-            title="첨부"
-            id="panel-attachment"
-            role="tabpanel"
-            aria-labelledby="tab-attachment"
-            tabIndex={0}
-          >
-            <Field label="운영계획서 첨부 (선택)">
-              {isEdit && existingFileName && !existingFileRemoved && fileGroupId == null && (
-                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#F9FAFB] rounded-[6px] border border-[#E5E7EB]">
-                  <span className="text-[12px] text-[#1F2328] flex-1 truncate">{existingFileName}</span>
+              />
+              {departmentErrored && (
+                <p className="text-[11px] text-[#CF222E] mt-1">
+                  운영부서 목록을 불러오지 못했습니다.{' '}
                   <button
                     type="button"
-                    onClick={() => setExistingFileRemoved(true)}
-                    className="text-[11px] font-semibold text-[#CF222E] hover:underline"
+                    onClick={() => refetchDepartments()}
+                    className="underline font-semibold"
                   >
-                    삭제
+                    다시 시도
                   </button>
-                </div>
-              )}
-              <FileUpload
-                accept=".pdf"
-                onFiles={(files) => {
-                  // 업로드 중 파일을 빠르게 교체/삭제하면 이전 요청의 응답이 나중에 도착해 최신 fileGroupId를 덮어쓸 수 있어, seq로 최신 요청인지 확인 후에만 반영
-                  if (files.length > 0) {
-                    const seq = ++uploadSeqRef.current;
-                    uploadMutation.mutate(files[0], {
-                      onSuccess: (data) => {
-                        if (uploadSeqRef.current !== seq) return;
-                        setFileGroupId(data.fileGroupId);
-                        toast('운영계획서가 업로드되었습니다.', 'success');
-                      },
-                      onError: (err) => {
-                        if (uploadSeqRef.current !== seq) return;
-                        toast(err.message ?? '운영계획서 업로드에 실패했습니다.', 'error');
-                      },
-                    });
-                  } else {
-                    uploadSeqRef.current += 1;
-                    setFileGroupId(null);
-                  }
-                }}
-              />
-              {uploadMutation.isPending ? (
-                <p className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
-              ) : (
-                isEdit &&
-                !existingFileRemoved && (
-                  <p className="text-[10px] text-[#9AA0A6] mt-1.5">
-                    새 파일을 첨부하지 않으면 기존에 첨부된 파일이 그대로 유지됩니다.
-                  </p>
-                )
+                </p>
               )}
             </Field>
-          </Section>
-        )}
+          </div>
+        </Section>
+
+        <Section
+          num={2}
+          title="모집·운영·정원"
+          id="panel-schedule"
+          role="tabpanel"
+          aria-labelledby="tab-schedule"
+          tabIndex={0}
+          hidden={activeTab !== 'schedule'}
+        >
+          <div className="grid grid-cols-2 gap-5">
+            <Field label="모집 기간" required>
+              <div className="flex items-center gap-2">
+                <DateInput
+                  value={recruitStart}
+                  onChange={setRcS}
+                  error={errors.recruitStart}
+                  ariaLabel="모집 시작일"
+                />
+                <span className="text-[12px] text-[#9AA0A6]">~</span>
+                <DateInput
+                  value={recruitEnd}
+                  onChange={setRcE}
+                  error={errors.recruitEnd}
+                  ariaLabel="모집 종료일"
+                />
+              </div>
+            </Field>
+
+            <Field label="운영 기간" required>
+              <div className="flex items-center gap-2">
+                <DateInput
+                  value={operStart}
+                  onChange={setOpS}
+                  error={errors.operStart}
+                  ariaLabel="운영 시작일"
+                />
+                <span className="text-[12px] text-[#9AA0A6]">~</span>
+                <DateInput
+                  value={operEnd}
+                  onChange={setOpE}
+                  error={errors.operEnd}
+                  ariaLabel="운영 종료일"
+                />
+              </div>
+            </Field>
+
+            <Field label="정원" required error={errors.capacity} htmlFor="capacity">
+              <NumberInput
+                id="capacity"
+                value={capacity}
+                onChange={setCapacity}
+                min={1}
+                placeholder="예) 30"
+                error={errors.capacity}
+              />
+            </Field>
+          </div>
+        </Section>
+
+        <Section
+          num={3}
+          title="회차 관리"
+          id="panel-sessions"
+          role="tabpanel"
+          aria-labelledby="tab-sessions"
+          tabIndex={0}
+          hidden={activeTab !== 'sessions'}
+        >
+          <div className="flex flex-col gap-4">
+            {sessions.map((s, i) => (
+              <SessionCard
+                key={s.localId}
+                index={i}
+                session={s}
+                onChange={(patch) => updateSession(s.localId, patch)}
+                onRemove={() => removeSession(s.localId)}
+                removable={sessions.length > 1}
+                startsAtError={sessionFieldErrors.has(s.localId)}
+                endsAtError={sessionFieldErrors.has(s.localId)}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={addSession}
+              className="h-9 px-4 self-start text-[12px] font-bold rounded-[6px] border border-dashed border-[#9AA0A6] text-[#656D76] hover:border-[#374151] hover:text-[#1F2328] transition-colors"
+            >
+              + 회차 추가
+            </button>
+          </div>
+        </Section>
+
+        <Section
+          num={4}
+          title="역량·정책"
+          id="panel-policy"
+          role="tabpanel"
+          aria-labelledby="tab-policy"
+          tabIndex={0}
+          hidden={activeTab !== 'policy'}
+        >
+          <div className="grid grid-cols-2 gap-5">
+            <Field
+              label="연계 핵심역량"
+              required
+              error={errors.competencyId}
+              htmlFor="competencyId"
+            >
+              <IdSelect
+                id="competencyId"
+                value={competencyId}
+                onChange={setCompetencyId}
+                options={competencyOptions}
+                placeholder={competencyPlaceholder}
+                disabled={competencyLoading || competencyErrored}
+                error={errors.competencyId}
+              />
+            </Field>
+
+            <Field label="마일리지 정책" htmlFor="mileagePolicyId">
+              <IdSelect
+                id="mileagePolicyId"
+                value={mileagePolicyId}
+                onChange={setMileagePolicyId}
+                options={MILEAGE_POLICY_OPTIONS}
+                placeholder="선택 안함"
+              />
+            </Field>
+
+            <div className="col-span-2">
+              <Field label="이수 출석률 기준 (%)">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={completionRate}
+                    onChange={(e) => setCompletionRate(Number(e.target.value))}
+                    className="flex-1 accent-[#374151]"
+                  />
+                  <div className="w-20">
+                    <NumberInput
+                      value={completionRate}
+                      onChange={setCompletionRate}
+                      min={0}
+                      max={100}
+                    />
+                  </div>
+                  <span className="text-[12px] text-[#656D76]">%</span>
+                </div>
+              </Field>
+            </div>
+          </div>
+        </Section>
+
+        <Section
+          num={5}
+          title="첨부"
+          id="panel-attachment"
+          role="tabpanel"
+          aria-labelledby="tab-attachment"
+          tabIndex={0}
+          hidden={activeTab !== 'attachment'}
+        >
+          <Field label="운영계획서 첨부 (선택)">
+            {isEdit && existingFileName && !existingFileRemoved && fileGroupId == null && (
+              <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#F9FAFB] rounded-[6px] border border-[#E5E7EB]">
+                <span className="text-[12px] text-[#1F2328] flex-1 truncate">
+                  {existingFileName}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setExistingFileRemoved(true)}
+                  className="text-[11px] font-semibold text-[#CF222E] hover:underline"
+                >
+                  삭제
+                </button>
+              </div>
+            )}
+            <FileUpload
+              accept=".pdf"
+              onFiles={(files) => {
+                // 업로드 중 파일을 빠르게 교체/삭제하면 이전 요청의 응답이 나중에 도착해 최신 fileGroupId를 덮어쓸 수 있어, seq로 최신 요청인지 확인 후에만 반영
+                if (files.length > 0) {
+                  const seq = ++uploadSeqRef.current;
+                  uploadMutation.mutate(files[0], {
+                    onSuccess: (data) => {
+                      if (uploadSeqRef.current !== seq) return;
+                      setFileGroupId(data.fileGroupId);
+                      toast('운영계획서가 업로드되었습니다.', 'success');
+                    },
+                    onError: (err) => {
+                      if (uploadSeqRef.current !== seq) return;
+                      toast(err.message ?? '운영계획서 업로드에 실패했습니다.', 'error');
+                    },
+                  });
+                } else {
+                  uploadSeqRef.current += 1;
+                  setFileGroupId(null);
+                }
+              }}
+            />
+            {uploadMutation.isPending ? (
+              <p className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
+            ) : (
+              isEdit &&
+              !existingFileRemoved && (
+                <p className="text-[10px] text-[#9AA0A6] mt-1.5">
+                  새 파일을 첨부하지 않으면 기존에 첨부된 파일이 그대로 유지됩니다.
+                </p>
+              )
+            )}
+          </Field>
+        </Section>
       </div>
 
       {/* ── Fixed bottom action bar ── */}
