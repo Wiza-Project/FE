@@ -4,6 +4,7 @@ import { UNIVERSITY_NAME } from '@/data/dummy';
 import { useAuthStore } from '@/stores/authStore';
 import { login as loginApi } from '@/api/auth';
 import { USER_TYPE } from '@/constants/domain';
+import { publishActivity } from '@/lib/authSync';
 
 // 포털(학생/교직원)을 화면에서 따로 선택받지 않고 학생 브랜드 컬러를 기본값으로 씁니다.
 // 로그인 후 completeLogin()이 응답에 담긴 user.userType으로 화면을 분기합니다.
@@ -87,6 +88,8 @@ export default function LoginPage() {
       const data = await loginApi({ loginId: id.trim(), password: pw });
       if (saveId) localStorage.setItem(SAVE_ID_KEY, id.trim());
       else localStorage.removeItem(SAVE_ID_KEY);
+      // 이전 세션의 오래된 활동 시각이 새 로그인 직후 즉시 만료 처리되지 않게 합니다.
+      publishActivity();
       authLogin(data.user, data.accessToken);
       completeLogin(data.user);
     } catch (err) {

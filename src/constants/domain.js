@@ -193,6 +193,17 @@ export const COUNSELING_SESSION_STATUS_LABEL = {
   [COUNSELING_SESSION_STATUS.CANCELED]: '취소',
 };
 
+/**
+ * 비공개 상담 기록의 상태 — CounselingPrivateRecordResponse.recordStatus.
+ * 서버가 DB 상태 컬럼이 아니라 응답에서 계산해 내려준다(행 없음=EMPTY, 미확정=DRAFT, 확정=CONFIRMED).
+ * 화면 분기(읽기전용 확정본 vs 편집 초안)에 문자열 리터럴 대신 이 상수를 쓴다.
+ */
+export const COUNSELING_PRIVATE_RECORD_STATUS = {
+  EMPTY: 'EMPTY',
+  DRAFT: 'DRAFT',
+  CONFIRMED: 'CONFIRMED',
+};
+
 /** 상담 회기 목록·상세·후속생성·완료·취소 API가 반환하는 업무 오류 코드. */
 export const COUNSELING_SESSION_ERROR_CODE = {
   INVALID_INPUT: 'C001',
@@ -206,6 +217,8 @@ export const COUNSELING_SESSION_ERROR_CODE = {
   TIME_CONFLICT: 'S002',
   /** 종료된 배정, PLANNED가 아닌 회기의 완료·취소, 미래 후속 회기 생성 등 상태 위반 */
   INVALID_STATE: 'S008',
+  /** 비공개 기록 전용. 회기·출결·배정·기록 상태가 요청과 맞지 않음(최신 서버 상태 재조회 필요) */
+  CONFLICT: 'S009',
 };
 
 /** 학생 진단 응시(attempt)의 서버 상태 — AssessmentAttempt.attemptStatus. */
