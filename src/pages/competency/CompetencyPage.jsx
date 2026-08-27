@@ -18,9 +18,10 @@ const TAB_CONFIG = [
 
 const SUB_VIEWS = ['guide', 'questions', 'result', 'history', 'compare', 'recommend'];
 
-// TODO(WP-118 S00): 진단 안내+동의 화면에서 발급받은 실제 attemptId로 교체.
-// S00 API(동의 시 attempt 생성)가 아직 연동되지 않아 응답·결과 화면을 우선 검증하기 위한 임시값.
-const DEV_ATTEMPT_ID = 1;
+// TODO: 학생이 여러 진행중 회차 중 하나를 고르는 화면은 개발 순서에 없다(개발순서_브랜치.md
+// 참조 — 진단 안내·동의는 화면 하나로 끝나는 범위). 실제로는 알림/대시보드 딥링크로 roundId가
+// 정해져 이 화면에 들어온다고 가정하고, 그 진입점이 아직 없어 임시로 고정값을 쓴다.
+const CURRENT_ASSESSMENT_ROUND_ID = 1;
 
 /**
  * 핵심역량 진단 화면 허브. 하위 화면들은 별도 라우트가 아니라 탭/버튼으로 전환되는
@@ -29,7 +30,7 @@ const DEV_ATTEMPT_ID = 1;
  */
 export default function CompetencyPage() {
   const [view, setView] = useState('guide');
-  const [alreadyDone] = useState(true); // false로 바꾸면 안내+동의 폼을 확인할 수 있습니다.
+  const [attemptId, setAttemptId] = useState(null);
 
   // Tab keys that map to sub-views
   const tabKey = SUB_VIEWS.includes(view) && view !== 'questions' ? view : 'guide';
@@ -55,15 +56,21 @@ export default function CompetencyPage() {
       {/* Sub-views */}
       {view === 'guide' && (
         <DiagnosisGuide
-          alreadyDone={alreadyDone}
-          onStart={() => setView('questions')}
-          onViewResult={() => setView('result')}
+          roundId={CURRENT_ASSESSMENT_ROUND_ID}
+          onStart={(id) => {
+            setAttemptId(id);
+            setView('questions');
+          }}
+          onViewResult={(id) => {
+            setAttemptId(id);
+            setView('result');
+          }}
         />
       )}
 
       {view === 'questions' && (
         <DiagnosisQuestions
-          attemptId={DEV_ATTEMPT_ID}
+          attemptId={attemptId}
           onComplete={() => setView('result')}
           onBack={() => setView('guide')}
         />
@@ -71,7 +78,7 @@ export default function CompetencyPage() {
 
       {view === 'result' && (
         <DiagnosisResult
-          attemptId={DEV_ATTEMPT_ID}
+          attemptId={attemptId}
           onBack={() => setView('history')}
           onCompare={() => setView('compare')}
           onRecommend={() => setView('recommend')}
