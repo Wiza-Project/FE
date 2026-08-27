@@ -15,11 +15,11 @@ export function IdleWarningModal({ open, onExtend, onLogout }) {
     <Modal
       open={open}
       onClose={onExtend}
-      title="자동 로그아웃 안내"
+      title="자동 로그아웃 예정"
       size="sm"
       footer={
         <>
-          <Button variant="secondary" size="sm" onClick={onLogout}>
+          <Button variant="outline" size="sm" onClick={onLogout}>
             로그아웃
           </Button>
           <Button variant="primary" size="sm" onClick={onExtend}>
@@ -28,7 +28,11 @@ export function IdleWarningModal({ open, onExtend, onLogout }) {
         </>
       }
     >
-      <p className="text-[13px] text-[#1F2328]">장시간 활동이 없어 5분 후 자동 로그아웃됩니다.</p>
+      <p className="text-[13px] text-[#1F2328] leading-relaxed">
+        장시간 활동이 없어 <span className="font-semibold text-[#D85A30]">5분 후 자동 로그아웃</span>됩니다.
+        <br />
+        계속 이용하시려면 아래 버튼을 눌러주세요.
+      </p>
     </Modal>
   );
 }
