@@ -10,9 +10,8 @@ const WIDTHS = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl
  * @param {import('react').ReactNode} props.children
  * @param {import('react').ReactNode} [props.footer]
  * @param {'sm'|'md'|'lg'|'xl'} [props.size]
- * @param {boolean} [props.dismissible] 
  */
-export function Modal({ open, onClose, title, children, footer, size = 'md', dismissible = true }) {
+export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden';
     else document.body.style.overflow = '';
@@ -25,30 +24,25 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', dis
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
-        onClick={dismissible ? onClose : undefined}
-      />
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
       <div
         className={`relative bg-white rounded-[8px] shadow-xl w-full ${WIDTHS[size]} animate-[fadeIn_0.15s_ease-out]`}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB]">
           <h2 className="text-[16px] font-bold text-[#1F2328]">{title}</h2>
-          {dismissible && (
-            <button
-              onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#656D76] transition-colors"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                <path
-                  d="M1 1l12 12M13 1L1 13"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-          )}
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#656D76] transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+              <path
+                d="M1 1l12 12M13 1L1 13"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
         <div className="px-5 py-4">{children}</div>
         {footer && (
