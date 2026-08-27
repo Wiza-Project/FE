@@ -40,6 +40,9 @@ export default function DiagnosisGuide({ roundId, onStart, onViewResult }) {
   const requiredPolicies = useMemo(() => policies.filter((p) => p.required), [policies]);
   const allRequiredAgreed = requiredPolicies.every((p) => agreedIds.has(p.consentPolicyId));
   const allAgreed = policies.length > 0 && policies.every((p) => agreedIds.has(p.consentPolicyId));
+  // 동의 정책이 아직 로딩/실패 중이면 policies가 []이라 allRequiredAgreed가 무조건 true가 된다 —
+  // 그 상태를 CTA의 disabled·배경색 판정에 동일하게 반영해야 활성 색상이 잘못 보이지 않는다.
+  const canStart = allRequiredAgreed && !policiesQuery.isPending && !policiesQuery.isError;
 
   const toggleAll = (checked) => {
     setAgreedIds(checked ? new Set(policies.map((p) => p.consentPolicyId)) : new Set());
@@ -326,9 +329,9 @@ export default function DiagnosisGuide({ roundId, onStart, onViewResult }) {
                 <Button
                   size="lg"
                   className="w-full justify-center"
-                  disabled={!allRequiredAgreed || policiesQuery.isPending || policiesQuery.isError}
+                  disabled={!canStart}
                   loading={startMutation.isPending}
-                  style={{ background: allRequiredAgreed ? '#7C3AED' : undefined }}
+                  style={{ background: canStart ? '#7C3AED' : undefined }}
                   onClick={() => startMutation.mutate()}
                 >
                   진단 시작하기
