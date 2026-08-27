@@ -4,17 +4,17 @@
  * @param {string} props.active
  * @param {(key: string) => void} props.onChange
  * @param {string} [props.accentColor]
- * @param {boolean} [props.withPanels] - set when matching `id="panel-${tab.key}"` / `role="tabpanel"` elements are rendered
+ * @param {boolean} [props.withPanels] - set when matching `id="panel-${tab.key}"` / `role="tabpanel"` elements are rendered; also gates `role`/`id`/`aria-selected`/`aria-controls` on the tabs themselves, since ARIA tabs are invalid without panels to control
  */
 export function Tabs({ tabs, active, onChange, accentColor = '#2563EB', withPanels = false }) {
   return (
-    <div className="flex border-b border-[#E5E7EB] mb-4" role="tablist">
+    <div className="flex border-b border-[#E5E7EB] mb-4" role={withPanels ? 'tablist' : undefined}>
       {tabs.map((tab) => (
         <button
           key={tab.key}
-          id={`tab-${tab.key}`}
-          role="tab"
-          aria-selected={active === tab.key}
+          id={withPanels ? `tab-${tab.key}` : undefined}
+          role={withPanels ? 'tab' : undefined}
+          aria-selected={withPanels ? active === tab.key : undefined}
           // 대응하는 role="tabpanel" 요소가 있는 사용처(ProgramForm)에서만 true로 전달 — 없으면 aria-controls가 존재하지 않는 요소를 가리키게 됨
           aria-controls={withPanels ? `panel-${tab.key}` : undefined}
           onClick={() => onChange(tab.key)}
