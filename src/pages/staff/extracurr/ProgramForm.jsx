@@ -301,6 +301,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const [errors, setErrors] = useState({});
   const [prefilled, setPrefilled] = useState(false);
   const [fileGroupId, setFileGroupId] = useState(null);
+  const [existingFileName, setExistingFileName] = useState(null);
+  const [existingFileRemoved, setExistingFileRemoved] = useState(false);
 
   const {
     data: detailData,
@@ -342,6 +344,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     data: departmentCodes = [],
     isLoading: departmentLoading,
     isError: departmentErrored,
+    refetch: refetchDepartments,
   } = useCommonCode('DEPARTMENT');
   const departmentOptions = departmentCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
 
@@ -382,6 +385,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     setMileagePolicyId(
       detailData.mileagePolicyId != null ? String(detailData.mileagePolicyId) : '',
     );
+    setExistingFileName(detailData.fileName ?? null);
 
     const competencyMatch = competencyOptions.find((o) => o.label === detailData.competencyName);
     if (competencyMatch) {
@@ -555,7 +559,16 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const buildPayload = () => ({
     // 새로 업로드한 파일이 있으면 그 fileGroupId를 보낸다.
     // 수정 모드에서 파일을 바꾸지 않았다면 키 자체를 생략해 백엔드가 기존 첨부(file_group_id)를 그대로 유지하도록 한다.
-    ...(isEdit ? (fileGroupId != null ? { fileGroupId } : {}) : { fileGroupId }),
+    // 기존 첨부만 삭제하고 새로 업로드하지 않았다면 clearFileGroup: true를 보내 프로그램-첨부 연결(file_group_id)만
+    // 해제하도록 요청한다. FileGroup은 여러 도메인이 공유하는 테이블이라 fileGroupId를 null로 보내는 방식은
+    // 쓰지 않는다 — clearFileGroup은 연결 해제(unlink)일 뿐 FileGroup/StoredFile row 자체를 지우지 않는다.
+    ...(isEdit
+      ? fileGroupId != null
+        ? { fileGroupId }
+        : existingFileRemoved
+          ? { clearFileGroup: true }
+          : {}
+      : { fileGroupId }),
     operatingUnitCodeId: Number(operatingUnitCodeId),
     programTypeCodeId: Number(programTypeCodeId),
     competencyId: Number(competencyId),
@@ -736,10 +749,28 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                   value={operatingUnitCodeId}
                   onChange={setOperatingUnitCodeId}
                   options={departmentOptions}
-                  placeholder="선택하세요"
+                  placeholder={
+                    departmentLoading
+                      ? '불러오는 중…'
+                      : departmentErrored
+                        ? '목록을 불러오지 못했습니다'
+                        : '선택하세요'
+                  }
                   disabled={departmentLoading || departmentErrored}
                   error={errors.operatingUnitCodeId}
                 />
+                {departmentErrored && (
+                  <p className="text-[11px] text-[#CF222E] mt-1">
+                    운영부서 목록을 불러오지 못했습니다.{' '}
+                    <button
+                      type="button"
+                      onClick={() => refetchDepartments()}
+                      className="underline font-semibold"
+                    >
+                      다시 시도
+                    </button>
+                  </p>
+                )}
               </Field>
             </div>
           </Section>
@@ -874,16 +905,30 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         {activeTab === 'attachment' && (
           <Section num={5} title="첨부">
             <Field label="운영계획서 첨부 (선택)">
+              {isEdit && existingFileName && !existingFileRemoved && fileGroupId == null && (
+                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#F9FAFB] rounded-[6px] border border-[#E5E7EB]">
+                  <span className="text-[12px] text-[#1F2328] flex-1 truncate">{existingFileName}</span>
+                  <button
+                    type="button"
+                    onClick={() => setExistingFileRemoved(true)}
+                    className="text-[11px] font-semibold text-[#CF222E] hover:underline"
+                  >
+                    삭제
+                  </button>
+                </div>
+              )}
               <FileUpload
                 accept=".pdf"
                 onFiles={(files) => {
                   if (files.length > 0) uploadMutation.mutate(files[0]);
+                  else setFileGroupId(null);
                 }}
               />
               {uploadMutation.isPending ? (
                 <p className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
               ) : (
-                isEdit && (
+                isEdit &&
+                !existingFileRemoved && (
                   <p className="text-[10px] text-[#9AA0A6] mt-1.5">
                     새 파일을 첨부하지 않으면 기존에 첨부된 파일이 그대로 유지됩니다.
                   </p>

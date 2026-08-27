@@ -44,7 +44,12 @@ export function FileUpload({
     onFiles?.(filesToUse);
   };
 
-  const removeFile = (i) => setFiles((prev) => prev.filter((_, j) => j !== i));
+  const removeFile = (i) =>
+    setFiles((prev) => {
+      const next = prev.filter((_, j) => j !== i);
+      onFiles?.(next);
+      return next;
+    });
 
   return (
     <div className="flex flex-col gap-2">

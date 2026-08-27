@@ -29,6 +29,7 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
   const [applying, setApplying] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [openContentIds, setOpenContentIds] = useState(() => new Set());
+  const [sessionsOpen, setSessionsOpen] = useState(false);
 
   const consent = useProgramConsent();
   const queryClient = useQueryClient();
@@ -124,7 +125,13 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
   const p = detail;
   const period = `${formatDate(p.operationStartsAt)} ~ ${formatDate(p.operationEndsAt)}`;
   const sessionCount = p.sessions?.length ?? 0;
-  const location = p.sessions?.[0]?.location || '-';
+  const sessionLocations = new Set((p.sessions ?? []).map((s) => s.location).filter(Boolean));
+  const location =
+    sessionLocations.size === 0
+      ? '-'
+      : sessionLocations.size === 1
+        ? [...sessionLocations][0]
+        : '회차별 상이';
   const recruitPeriod = `${formatDate(p.recruitmentStartsAt)} ~ ${formatDate(p.recruitmentEndsAt)}`;
   // 모집기간이 끝나면(OPERATING/CLOSED) 신청을 받지 않는다 — 백엔드 apply()도 모집종료 시각 기준으로
   // 이미 거부하지만(APPLICATION_PERIOD_CLOSED), 버튼도 미리 막아 불필요한 실패 요청을 없앤다.
@@ -168,6 +175,7 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
             <div className="divide-y divide-[#F3F4F6]">
               {[
                 { label: '주관부서', value: p.operatingUnitCodeName || '-' },
+                { label: '프로그램유형', value: p.programTypeCodeName || '-' },
                 { label: '운영기간', value: `${period} (${sessionCount}회차)` },
                 { label: '장소', value: location },
                 { label: '모집기간', value: recruitPeriod },
@@ -180,6 +188,34 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                   <span className="text-[13px] text-[#1F2328]">{row.value}</span>
                 </div>
               ))}
+              {sessionCount > 0 && (
+                <div className="px-5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setSessionsOpen((v) => !v)}
+                    className="text-[12px] font-semibold text-[#2563EB] hover:underline"
+                  >
+                    회차 상세 {sessionsOpen ? '접기' : `보기 (${sessionCount}회차)`}
+                  </button>
+                  {sessionsOpen && (
+                    <div className="mt-2 flex flex-col gap-2">
+                      {p.sessions.map((s, i) => (
+                        <div
+                          key={s.programSessionId ?? i}
+                          className="text-[12px] text-[#656D76] bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2"
+                        >
+                          <span className="font-semibold text-[#1F2328]">{i + 1}회차</span>
+                          {s.sessionName && <span> · {s.sessionName}</span>}
+                          <div>
+                            {formatDate(s.startsAt)} ~ {formatDate(s.endsAt)}
+                            {s.location ? ` · ${s.location}` : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {p.competencyName && (
                 <div className="flex px-5 py-3">
                   <span className="w-24 flex-shrink-0 text-[13px] font-semibold text-[#656D76]">

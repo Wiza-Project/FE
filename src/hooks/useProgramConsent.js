@@ -70,6 +70,7 @@ export function useProgramConsent() {
   const ensureAllAgreed = async () => {
     const pending = requiredPolicies.filter((p) => !isPolicyAgreed(p.consentPolicyId));
     for (const p of pending) {
+      if (!checkedIds.has(p.consentPolicyId)) continue;
       await agreeMutation.mutateAsync(p.consentPolicyId);
     }
   };
