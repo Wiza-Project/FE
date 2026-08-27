@@ -553,6 +553,7 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                     <button
                       type="button"
                       onClick={() => toggleContent(policy.consentPolicyId)}
+                      aria-expanded={contentOpen}
                       className="text-[12px] text-[#2563EB] underline self-start ml-[26px]"
                     >
                       {contentOpen ? '내용 접기' : '내용 보기'}
