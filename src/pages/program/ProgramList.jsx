@@ -599,16 +599,17 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                         className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
                       />
                       <span className="text-[12px] text-[#656D76] leading-snug">
-                        {policy.title}에 동의합니다.{' '}
-                        <button
-                          type="button"
-                          onClick={() => toggleContent(policy.consentPolicyId)}
-                          className="text-[#2563EB] underline"
-                        >
-                          {contentOpen ? '내용 접기' : '내용 보기'}
-                        </button>
+                        {policy.title}에 동의합니다.
                       </span>
                     </label>
+                    {/* button을 label 밖으로 분리: label 내부에 두면 클릭 시 체크박스 토글과 버튼 onClick이 동시에 발생하고, interactive element가 중첩됨 */}
+                    <button
+                      type="button"
+                      onClick={() => toggleContent(policy.consentPolicyId)}
+                      className="text-[12px] text-[#2563EB] underline self-start ml-[26px]"
+                    >
+                      {contentOpen ? '내용 접기' : '내용 보기'}
+                    </button>
                     {contentOpen && (
                       <div className="max-h-32 overflow-y-auto text-[11px] text-[#656D76] whitespace-pre-wrap bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
                         {policy.content}

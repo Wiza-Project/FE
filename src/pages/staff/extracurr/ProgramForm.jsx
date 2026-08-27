@@ -690,7 +690,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       </div>
 
       <div className="mb-5">
-        <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} accentColor={ACCENT} />
+        <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} accentColor={ACCENT} withPanels />
       </div>
 
       <div className="pb-24">
@@ -955,6 +955,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               <FileUpload
                 accept=".pdf"
                 onFiles={(files) => {
+                  // 업로드 중 파일을 빠르게 교체/삭제하면 이전 요청의 응답이 나중에 도착해 최신 fileGroupId를 덮어쓸 수 있어, seq로 최신 요청인지 확인 후에만 반영
                   if (files.length > 0) {
                     const seq = ++uploadSeqRef.current;
                     uploadMutation.mutate(files[0], {
