@@ -4,7 +4,7 @@ import { fetchProgramDetail, downloadProgramOperationPlan } from '@/api/programs
 import { applyToProgram } from '@/api/programApplications';
 import { formatDate } from '@/utils/date';
 import { useProgramConsent } from '@/hooks/useProgramConsent';
-import { PROGRAM_APPLICATION_ERROR_CODE } from '@/constants/domain';
+import { PROGRAM_APPLICATION_ERROR_CODE, CONSENT_MODULE_CODE } from '@/constants/domain';
 import { useQueryClient } from '@tanstack/react-query';
 
 const ACCENT = '#2563EB';
@@ -86,6 +86,7 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
       if (err.code === PROGRAM_APPLICATION_ERROR_CODE.REQUIRED_CONSENT_NOT_AGREED) {
         toast('필수 동의 항목에 동의해야 신청할 수 있습니다.', 'danger');
         queryClient.invalidateQueries({ queryKey: ['myConsents'] });
+        queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.PROGRAM] });
       } else {
         toast(err.message ?? '신청에 실패했습니다.', 'danger');
       }

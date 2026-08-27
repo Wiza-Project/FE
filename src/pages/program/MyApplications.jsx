@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { fetchMyApplications, cancelMyApplication, applyToProgram } from '@/api/programApplications';
 import {
   PageHeader,
@@ -10,6 +11,8 @@ import {
   toast,
 } from '@/components/common';
 import { formatDate } from '@/utils/date';
+import { useProgramConsent } from '@/hooks/useProgramConsent';
+import { PROGRAM_APPLICATION_ERROR_CODE, CONSENT_MODULE_CODE } from '@/constants/domain';
 
 const ACCENT = '#2563EB';
 
@@ -76,6 +79,9 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
   const [now, setNow] = useState(() => Date.now());
   const PAGE_SIZE = 8;
 
+  const consent = useProgramConsent();
+  const queryClient = useQueryClient();
+
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30000);
     return () => clearInterval(id);
@@ -126,9 +132,27 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
     }
   };
 
+  const clearReapplying = (programId) =>
+    setReapplyingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(programId);
+      return next;
+    });
+
   const runReapply = async (app) => {
     if (reapplyingIds.has(app.programId)) return;
+    if (!consent.canProceed) {
+      toast('필수 동의 항목에 동의해야 재신청할 수 있습니다.', 'danger');
+      return;
+    }
     setReapplyingIds((prev) => new Set(prev).add(app.programId));
+    try {
+      await consent.ensureAllAgreed();
+    } catch (err) {
+      toast(err.message ?? '약관 동의 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'danger');
+      clearReapplying(app.programId);
+      return;
+    }
     try {
       const res = await applyToProgram(app.programId);
       if (res.applicationStatus === 'WAITLISTED') {
@@ -138,13 +162,15 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
       }
       setReloadKey((k) => k + 1);
     } catch (err) {
-      toast(err.message ?? '재신청에 실패했습니다.', 'danger');
+      if (err.code === PROGRAM_APPLICATION_ERROR_CODE.REQUIRED_CONSENT_NOT_AGREED) {
+        toast('필수 동의 항목에 동의해야 재신청할 수 있습니다.', 'danger');
+        queryClient.invalidateQueries({ queryKey: ['myConsents'] });
+        queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.PROGRAM] });
+      } else {
+        toast(err.message ?? '재신청에 실패했습니다.', 'danger');
+      }
     } finally {
-      setReapplyingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(app.programId);
-        return next;
-      });
+      clearReapplying(app.programId);
     }
   };
 

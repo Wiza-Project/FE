@@ -45,9 +45,10 @@ export function useProgramConsent() {
 
   const isPolicyAgreed = (consentPolicyId) => agreedPolicyIds.has(consentPolicyId);
   const allAgreed = requiredPolicies.every((p) => isPolicyAgreed(p.consentPolicyId));
-  const canProceed = requiredPolicies.every(
-    (p) => isPolicyAgreed(p.consentPolicyId) || checkedIds.has(p.consentPolicyId),
-  );
+  const canProceed =
+    !isPoliciesError &&
+    !isConsentsError &&
+    requiredPolicies.every((p) => isPolicyAgreed(p.consentPolicyId) || checkedIds.has(p.consentPolicyId));
 
   const toggleChecked = (consentPolicyId, checked) => {
     setCheckedIds((prev) => {
@@ -57,6 +58,8 @@ export function useProgramConsent() {
       return next;
     });
   };
+
+  const resetChecked = () => setCheckedIds(new Set());
 
   const agreeMutation = useMutation({
     mutationFn: (consentPolicyId) => agreeToConsentPolicy(consentPolicyId),
@@ -79,6 +82,7 @@ export function useProgramConsent() {
     allAgreed,
     checkedIds,
     toggleChecked,
+    resetChecked,
     canProceed,
     isAgreeing: agreeMutation.isPending,
     ensureAllAgreed,

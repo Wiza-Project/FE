@@ -526,11 +526,13 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       toast('최소 1회차는 입력해야합니다.', 'error');
       return false;
     }
-    const invalidSessions = sessions.filter((s) => !s.startsAt || !s.endsAt);
+    const invalidSessions = sessions.filter(
+      (s) => !s.startsAt || !s.endsAt || (s.startsAt && s.endsAt && s.startsAt > s.endsAt),
+    );
     if (invalidSessions.length > 0) {
       setSessionFieldErrors(new Set(invalidSessions.map((s) => s.localId)));
       setActiveTab('sessions');
-      toast('모든 회차의 시작일과 종료일을 입력해 주세요.', 'error');
+      toast('모든 회차의 시작일과 종료일을 확인해 주세요.', 'error');
       return false;
     }
     setSessionFieldErrors(new Set());
@@ -807,8 +809,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                   onChange={(patch) => updateSession(s.localId, patch)}
                   onRemove={() => removeSession(s.localId)}
                   removable={sessions.length > 1}
-                  startsAtError={sessionFieldErrors.has(s.localId) && !s.startsAt}
-                  endsAtError={sessionFieldErrors.has(s.localId) && !s.endsAt}
+                  startsAtError={sessionFieldErrors.has(s.localId)}
+                  endsAtError={sessionFieldErrors.has(s.localId)}
                 />
               ))}
               <button
