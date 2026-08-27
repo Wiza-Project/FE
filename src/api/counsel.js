@@ -100,6 +100,7 @@ export const fetchCounselingReservations = async ({ page = 0, size = 20 } = {}) 
  * @property {number} counselingTypeId 0보다 큰 상담 유형 ID
  * @property {number} scheduleId 0보다 큰 상담 일정 ID
  * @property {string} requestContent 공백만으로 구성될 수 없다.
+ * @property {number} consentId 0보다 큰 본인 소유 COUNSELING+PERSONAL_INFO 동의 ID
  */
 
 /**
@@ -332,3 +333,215 @@ export const rejectCounselingReservation = async (reservationId, request) => {
 // 대기 목록 조회 query key. ReservationManage(첫 페이지)와 StaffCounselingPage(뱃지)가
 // 같은 페이지를 조회할 때 캐시를 공유하도록 두 화면에서 이 함수만 사용한다. 키 배열 형태를 바꾸지 않는다.
 export const pendingReservationsQueryKey = (page) => ['counselorPendingReservations', page];
+
+/**
+ * @typedef {Object} CounselingSessionResponse
+ * @property {number} sessionId
+ * @property {number} assignmentId 회기가 고정된 배정 ID. 후속 회기 생성 경로에 사용한다.
+ * @property {number} reservationId
+ * @property {number} sessionNo 배정 안에서 자동 채번된 회기 번호
+ * @property {number} studentId
+ * @property {string} studentNumber app_user.university_no
+ * @property {string} studentName
+ * @property {string|null} departmentName
+ * @property {string} counselingTypeName
+ * @property {string} startsAt UTC ISO-8601 Instant
+ * @property {string} endsAt UTC ISO-8601 Instant
+ * @property {'SCHEDULED'|'PRESENT'|'ABSENT'|'NO_SHOW'} attendanceStatus
+ * @property {'PLANNED'|'COMPLETED'|'CANCELED'} sessionStatus
+ * @property {string|null} nextSessionAt UTC ISO-8601 Instant. 시간 점유를 보장하지 않는 다음 회기 예정 시각
+ * @property {string|null} cancellationReason CANCELED일 때만 값이 있다
+ * @property {boolean} assignmentActive 현재 배정의 endedAt == null 여부
+ * @property {boolean} canCreateFollowUp
+ * @property {boolean} canComplete
+ * @property {boolean} canCancel
+ */
+
+/**
+ * @typedef {Object} CounselingSessionPage
+ * @property {CounselingSessionResponse[]} content
+ * @property {number} page 0부터 시작
+ * @property {number} size
+ * @property {number} totalElements
+ * @property {number} totalPages
+ * @property {boolean} first
+ * @property {boolean} last
+ */
+
+/**
+ * 로그인한 상담사 본인의 현재·과거 배정에 연결된 회기 목록을 startsAt DESC로 조회한다.
+ * 신청 원문, 비공개 기록, 공개 결과, 학생 연락처는 포함하지 않는다.
+ *
+ * @param {Object} [params]
+ * @param {number} [params.page=0]
+ * @param {number} [params.size=20]
+ * @param {'PLANNED'|'COMPLETED'|'CANCELED'} [params.sessionStatus]
+ * @param {string} [params.from] UTC ISO-8601 Instant. to와 함께 있으면 from < to 여야 한다.
+ * @param {string} [params.to] UTC ISO-8601 Instant
+ * @returns {Promise<CounselingSessionPage>}
+ */
+export const fetchCounselingSessions = async ({
+  page = 0,
+  size = 20,
+  sessionStatus,
+  from,
+  to,
+} = {}) => {
+  const { data } = await apiClient.get('/counselors/counseling-sessions', {
+    params: { page, size, sessionStatus, from, to },
+  });
+  return data;
+};
+
+/**
+ * 회기 상세를 조회한다. 현재 또는 과거 배정의 담당 상담사 본인만 조회할 수 있다.
+ *
+ * @param {number} sessionId
+ * @returns {Promise<CounselingSessionResponse>}
+ */
+export const fetchCounselingSessionDetail = async (sessionId) => {
+  const { data } = await apiClient.get(`/counselors/counseling-sessions/${sessionId}`);
+  return data;
+};
+
+/**
+ * @typedef {Object} CreateFollowUpSessionRequest
+ * @property {string} startsAt UTC ISO-8601 Instant. assignment.assignedAt <= startsAt < endsAt, startsAt <= now
+ * @property {string} endsAt UTC ISO-8601 Instant
+ */
+
+/**
+ * 현재 활성 배정에 후속 회기를 생성한다. 생성 상태는 SCHEDULED + PLANNED다.
+ *
+ * @param {number} assignmentId
+ * @param {CreateFollowUpSessionRequest} request
+ * @returns {Promise<CounselingSessionResponse>}
+ */
+export const createFollowUpSession = async (assignmentId, request) => {
+  const { data } = await apiClient.post(
+    `/counselors/counseling-assignments/${assignmentId}/sessions`,
+    request,
+  );
+  return data;
+};
+
+/**
+ * @typedef {Object} CompleteCounselingSessionRequest
+ * @property {'PRESENT'|'ABSENT'|'NO_SHOW'} attendanceStatus
+ * @property {string} [nextSessionAt] UTC ISO-8601 Instant. 입력 시 now와 회기 endsAt보다 모두 이후여야 한다.
+ */
+
+/**
+ * 종료 시각이 지난 PLANNED 회기를 출결 완료 처리한다. PRESENT이고 예약이 APPROVED면
+ * 같은 트랜잭션에서 예약을 IN_PROGRESS로 바꾼다.
+ *
+ * @param {number} sessionId
+ * @param {CompleteCounselingSessionRequest} request
+ * @returns {Promise<CounselingSessionResponse>}
+ */
+export const completeCounselingSession = async (sessionId, request) => {
+  const { data } = await apiClient.patch(
+    `/counselors/counseling-sessions/${sessionId}/complete`,
+    request,
+  );
+  return data;
+};
+
+/**
+ * @typedef {Object} CancelCounselingSessionRequest
+ * @property {string} cancellationReason 공백 제외 1~500자 필수
+ */
+
+/**
+ * 시작 시각 전의 PLANNED 회기를 취소한다. 예약·배정 상태는 바꾸지 않는다.
+ *
+ * @param {number} sessionId
+ * @param {CancelCounselingSessionRequest} request
+ * @returns {Promise<CounselingSessionResponse>}
+ */
+export const cancelCounselingSession = async (sessionId, request) => {
+  const { data } = await apiClient.patch(
+    `/counselors/counseling-sessions/${sessionId}/cancel`,
+    request,
+  );
+  return data;
+};
+
+// 회기 목록 query key. 필터(status)와 페이지가 바뀔 때마다 별도 캐시 엔트리를 쓴다.
+export const counselingSessionsQueryKey = (page, sessionStatus) => [
+  'counselingSessions',
+  page,
+  sessionStatus ?? 'ALL',
+];
+
+// 회기 상세 query key. 액션(완료·취소·후속생성) 성공 후 이 키만 무효화한다.
+export const counselingSessionDetailQueryKey = (sessionId) => [
+  'counselingSessionDetail',
+  sessionId,
+];
+
+/**
+ * @typedef {Object} CounselingPrivateRecordResponse
+ * @property {number} sessionId
+ * @property {number|null} privateRecordId 기록 없으면 null
+ * @property {number|null} versionNo 첫 초안 1, 기록 없으면 null
+ * @property {string|null} privateContent 비공개 원문. 기록 없으면 null
+ * @property {'EMPTY'|'DRAFT'|'CONFIRMED'} recordStatus
+ * @property {string|null} confirmedAt UTC ISO-8601 Instant. 확정 전 null
+ * @property {boolean} canSaveDraft
+ * @property {boolean} canConfirm
+ */
+
+/**
+ * 회기의 비공개 상담 기록을 조회한다. 담당(또는 과거 담당) 상담사 본인만 조회할 수 있고,
+ * 학생·일반 회기 상세·목록에는 이 원문이 포함되지 않는다. 사용자가 명시적으로 열람을 선택했을
+ * 때만 호출해야 한다(자동 조회 금지 — 상세 모달을 열었다는 이유만으로 부르지 않는다).
+ *
+ * @param {number} sessionId
+ * @returns {Promise<CounselingPrivateRecordResponse>}
+ */
+export const fetchCounselingPrivateRecord = async (sessionId) => {
+  const { data } = await apiClient.get(`/counselors/counseling-sessions/${sessionId}/private-record`);
+  return data;
+};
+
+/**
+ * @typedef {Object} SaveCounselingPrivateRecordRequest
+ * @property {string} privateContent 공백 제거 후 1~10,000자
+ */
+
+/**
+ * 비공개 기록 초안을 생성하거나 수정한다(회기당 미확정 초안 한 행). 확정된 기록은 이 API로
+ * 수정할 수 없다(서버가 409로 거절).
+ *
+ * @param {number} sessionId
+ * @param {SaveCounselingPrivateRecordRequest} request
+ * @returns {Promise<CounselingPrivateRecordResponse>}
+ */
+export const saveCounselingPrivateRecord = async (sessionId, request) => {
+  const { data } = await apiClient.put(
+    `/counselors/counseling-sessions/${sessionId}/private-record`,
+    request,
+  );
+  return data;
+};
+
+/**
+ * 저장된 최신 초안을 확정한다. 원문을 요청 본문으로 다시 보내지 않는다(서버가 이미 저장된
+ * 초안만 확정하며, 확정 후에는 수정·재확정을 허용하지 않는다).
+ *
+ * @param {number} sessionId
+ * @returns {Promise<CounselingPrivateRecordResponse>}
+ */
+export const confirmCounselingPrivateRecord = async (sessionId) => {
+  const { data } = await apiClient.patch(
+    `/counselors/counseling-sessions/${sessionId}/private-record/confirm`,
+  );
+  return data;
+};
+
+// 비공개 기록 전용 query key. 회기 목록·상세 캐시와 완전히 분리해 privateContent가 섞이지 않게 한다.
+export const counselingPrivateRecordQueryKey = (sessionId) => [
+  'counselingPrivateRecord',
+  sessionId,
+];

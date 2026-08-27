@@ -1,39 +1,8 @@
 import { useState } from 'react';
-import { Button, FileUpload, toast } from '@/components/common';
+import { Button, toast } from '@/components/common';
+import PortfolioSection from './PortfolioSection';
 
 const ACCENT = '#059669';
-
-// ─── Portfolio items ──────────────────────────────────────────────────────────
-
-const INIT_PORTFOLIO = [
-  {
-    id: 'P1',
-    title: '졸업작품 — 실시간 협업 코드 에디터',
-    period: '2026-03 ~ 2026-06',
-    file: '졸업작품_포트폴리오.pdf',
-    fileSize: '3.2 MB',
-    public: true,
-    updatedAt: '2026-08-10',
-  },
-  {
-    id: 'P2',
-    title: '캡스톤디자인 — AI 일정 추천 시스템',
-    period: '2025-09 ~ 2025-12',
-    file: '캡스톤_발표자료.pptx',
-    fileSize: '5.8 MB',
-    public: true,
-    updatedAt: '2026-01-05',
-  },
-  {
-    id: 'P3',
-    title: '오픈소스 기여 — VSCode Extension',
-    period: '2025-06 ~ 진행중',
-    file: 'github_contributions.pdf',
-    fileSize: '0.8 MB',
-    public: false,
-    updatedAt: '2026-06-20',
-  },
-];
 
 // ─── Preferred NCS chips ──────────────────────────────────────────────────────
 
@@ -64,7 +33,6 @@ const PRIORITIES_INIT = ['연봉·보상', '직무 성장성', '기업 문화', 
 
 export default function PortfolioPrefs() {
   const [section, setSection] = useState('portfolio');
-  const [portfolio, setPortfolio] = useState(INIT_PORTFOLIO);
   const [selectedNCS, setSelectedNCS] = useState(['응용SW개발', 'AI개발']);
   const [region, setRegion] = useState('서울·경기');
   const [empType, setEmpType] = useState('정규직');
@@ -77,10 +45,6 @@ export default function PortfolioPrefs() {
   const [consentResume, setConsentResume] = useState(true);
   const [consentPortfolio, setConsentPortfolio] = useState(true);
   const [consentCompetency, setConsentCompetency] = useState(false);
-
-  const togglePublic = (id) => {
-    setPortfolio((prev) => prev.map((p) => (p.id === id ? { ...p, public: !p.public } : p)));
-  };
 
   const toggleNCS = (n) => {
     setSelectedNCS((prev) => (prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]));
@@ -125,97 +89,7 @@ export default function PortfolioPrefs() {
       </div>
 
       {/* ── Portfolio ── */}
-      {section === 'portfolio' && (
-        <div className="flex flex-col gap-4">
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              style={{ background: ACCENT }}
-              onClick={() => toast('항목 추가 폼이 열립니다.', 'info')}
-            >
-              + 항목 추가
-            </Button>
-          </div>
-
-          <div className="grid gap-4 grid-cols-3">
-            {portfolio.map((item) => (
-              <div
-                key={item.id}
-                className="bg-white rounded-[10px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 flex flex-col gap-3"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="text-[13px] font-bold text-[#1F2328] leading-snug">
-                      {item.title}
-                    </p>
-                    <button
-                      onClick={() => toast('삭제하시겠습니까?', 'warning')}
-                      className="text-[#C8D0D9] hover:text-[#CF222E] transition-colors flex-shrink-0 text-[14px] mt-0.5"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-[#9AA0A6]">{item.period}</p>
-                </div>
-
-                {/* File */}
-                <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2 flex items-center gap-2">
-                  <svg width="12" height="14" viewBox="0 0 12 14" fill="#9AA0A6">
-                    <path d="M7 1H2a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V5L7 1z" />
-                    <path d="M7 1v4h4" stroke="#9AA0A6" strokeWidth="0.8" fill="none" />
-                  </svg>
-                  <span className="text-[11px] text-[#656D76] flex-1 truncate">{item.file}</span>
-                  <span className="text-[10px] text-[#C8D0D9]">{item.fileSize}</span>
-                  <button className="text-[10px] text-[#059669] font-bold hover:underline">
-                    미리보기
-                  </button>
-                </div>
-
-                {/* Public toggle */}
-                <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-[#656D76]">공개 여부</span>
-                  <button
-                    onClick={() => togglePublic(item.id)}
-                    className={`w-10 h-5 rounded-full transition-colors relative ${item.public ? 'bg-[#059669]' : 'bg-[#E5E7EB]'}`}
-                  >
-                    <span
-                      className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${item.public ? 'left-5' : 'left-0.5'}`}
-                    />
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[#C8D0D9]">최종 수정: {item.updatedAt}</span>
-                  <button
-                    className="text-[11px] text-[#059669] font-bold hover:underline"
-                    onClick={() => toast('수정 화면으로 이동합니다.', 'info')}
-                  >
-                    수정
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {/* Add placeholder */}
-            <button
-              onClick={() => toast('항목 추가 폼이 열립니다.', 'info')}
-              className="rounded-[10px] border-2 border-dashed border-[#D1D5DB] p-5 flex flex-col items-center justify-center gap-2 text-[#9AA0A6] hover:border-[#059669] hover:text-[#059669] transition-colors min-h-[200px]"
-            >
-              <span className="text-[28px]">+</span>
-              <span className="text-[12px] font-semibold">항목 추가</span>
-            </button>
-          </div>
-
-          {/* Upload area */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-              <h2 className="text-[14px] font-bold text-[#1F2328]">파일 업로드</h2>
-            </div>
-            <FileUpload accept=".pdf,.pptx,.zip" maxSize="20MB" multiple />
-          </div>
-        </div>
-      )}
+      {section === 'portfolio' && <PortfolioSection />}
 
       {/* ── Preferences ── */}
       {section === 'prefs' && (

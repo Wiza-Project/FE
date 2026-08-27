@@ -29,6 +29,7 @@ export const createProgram = async (payload) => {
  * @param {Object} [params]
  * @param {string} [params.status] DRAFT(모집중)/OPERATING(운영중)/CLOSED(종료). 생략 시 전체.
  * @param {string} [params.keyword] 프로그램명 부분 일치 검색어.
+ * @param {number} [params.competencyId]
  * @param {number} [params.page] 0-base 페이지 번호.
  * @param {number} [params.size] 페이지당 건수.
  * @param {string} [params.sort] 예: "createdAt,desc"
@@ -76,6 +77,15 @@ export const fetchMyAttendance = async (programId) => {
  */
 export const fetchCompetencyOptions = async () => {
   const { data } = await apiClient.get('/admin/programs/competencies');
+  return data;
+};
+
+/**
+ * 학생용 "핵심역량" 필터 옵션 조회. GET /api/students/programs/competencies
+ * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number}[]>}
+ */
+export const fetchCompetencyOptionsStudent = async () => {
+  const { data } = await apiClient.get('/students/programs/competencies');
   return data;
 };
 
