@@ -173,7 +173,7 @@ function TrendChart({ data = [] }) {
  */
 export default function MileageDashboard({ onExternal }) {
   const [tab, setTab] = useState('dashboard');
-  const [simTarget, setSimTarget] = useState(0);
+  const [simTarget, setSimTarget] = useState('');
   const [simulationOptions, setSimulationOptions] = useState(null);
   const [simulationOptionsLoading, setSimulationOptionsLoading] = useState(false);
   const [simulationOptionsError, setSimulationOptionsError] = useState('');
@@ -235,7 +235,7 @@ export default function MileageDashboard({ onExternal }) {
         const firstTarget = targets[0];
         setSimulationOptions(data ?? { targets: [], activities: [] });
         setSelectedTargetBenefitPolicyId(firstTarget?.benefitPolicyId ?? null);
-        setSimTarget(Number(firstTarget?.targetPoints ?? data?.currentPoints ?? 0));
+        setSimTarget(String(firstTarget?.targetPoints ?? data?.currentPoints ?? ''));
         setSelectedActivities([]);
         setSimulationResult(null);
         setSimulationError('');
@@ -328,15 +328,14 @@ export default function MileageDashboard({ onExternal }) {
 
   const selectSimulationTarget = (target) => {
     setSelectedTargetBenefitPolicyId(target.benefitPolicyId);
-    setSimTarget(Number(target.targetPoints ?? 0));
+    setSimTarget(String(target.targetPoints ?? ''));
     setSimulationResult(null);
     setSimulationError('');
   };
 
   const selectCustomSimulationTarget = (value) => {
-    const nextTarget = Math.max(0, Number(value) || 0);
     setSelectedTargetBenefitPolicyId(null);
-    setSimTarget(nextTarget);
+    setSimTarget(value);
     setSimulationResult(null);
     setSimulationError('');
   };
@@ -354,7 +353,7 @@ export default function MileageDashboard({ onExternal }) {
   };
 
   const updateSimulationActivityQuantity = (mileagePolicyId, quantity) => {
-    const nextQuantity = Math.max(1, Number(quantity) || 1);
+    const nextQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
     setSelectedActivities((current) =>
       current.map((item) =>
         item.mileagePolicyId === mileagePolicyId ? { ...item, quantity: nextQuantity } : item,
@@ -366,10 +365,23 @@ export default function MileageDashboard({ onExternal }) {
 
   const runMileageSimulation = async () => {
     const hasBenefitTarget = selectedTargetBenefitPolicyId != null;
-    const targetPoints = Number(simTarget);
+    const targetText = String(simTarget).trim();
+    const [integerPart = '', decimalPart = ''] = targetText.split('.');
+    const normalizedIntegerPart = integerPart.replace(/^0+(?=\d)/, '');
+    const targetPoints = Number(targetText);
+    const isValidTargetPoints =
+      targetText !== '' &&
+      targetText.split('.').length <= 2 &&
+      /^\d+$/.test(integerPart) &&
+      /^\d*$/.test(decimalPart) &&
+      normalizedIntegerPart.length <= 10 &&
+      decimalPart.length <= 2;
 
-    if (!hasBenefitTarget && (!Number.isFinite(targetPoints) || targetPoints < 0)) {
-      setSimulationError('목표 점수를 입력해주세요.');
+    if (
+      !hasBenefitTarget &&
+      (!isValidTargetPoints || !Number.isFinite(targetPoints) || targetPoints < 0)
+    ) {
+      setSimulationError('목표 점수는 0 이상이며 정수 10자리·소수 둘째 자리까지 입력해주세요.');
       return;
     }
 
@@ -862,7 +874,7 @@ export default function MileageDashboard({ onExternal }) {
 
           {simulationError && (
             <div className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
-              시뮬레이션을 실행하지 못했습니다. 입력값을 확인한 후 다시 시도해주세요.
+              {simulationError}
             </div>
           )}
 
