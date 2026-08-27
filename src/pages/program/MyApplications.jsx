@@ -34,7 +34,13 @@ const toRow = (dto) => ({
   decisionReason: dto.decisionReason,
   processedAt: dto.processedAt,
   cancellationReason: dto.cancellationReason,
+  remainingCapacity: dto.remainingCapacity,
+  recruitmentEndsAt: dto.recruitmentEndsAt,
 });
+
+// recruitmentEndsAt이 없는(레거시) 데이터는 마감 아님으로 간주 — 최종 판단은 어차피
+// applyToProgram API 호출 시 백엔드가 한다.
+const isRecruitmentClosed = (iso, now) => !!iso && new Date(iso).getTime() < now;
 
 const CANCELABLE = new Set(['APPLIED', 'WAITLISTED', 'APPROVED']);
 
@@ -67,7 +73,13 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [reapplyingIds, setReapplyingIds] = useState(new Set());
+  const [now, setNow] = useState(() => Date.now());
   const PAGE_SIZE = 8;
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -325,23 +337,36 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                     </td>
                     <td className="px-3 py-3 text-center">
                       <div className="flex items-center gap-1.5 justify-center">
-                        {app.status === '취소' || app.status === '반려' ? (
-                          // 취소/반려는 출결을 볼 수 없는 종결 상태라 관리 버튼 하나만 보여준다.
+                        {app.status === '반려' ? (
                           <button
                             onClick={() => handleBtn(app)}
-                            disabled={app.status === '취소' && reapplyingIds.has(app.programId)}
-                            className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                              app.status === '반려'
-                                ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
-                                : 'border border-[#2563EB] text-[#2563EB] hover:bg-[#EFF6FF]'
-                            }`}
+                            className="h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]"
                           >
-                            {app.status === '반려'
-                              ? '사유확인'
-                              : reapplyingIds.has(app.programId)
-                                ? '처리 중...'
-                                : '재신청'}
+                            사유확인
                           </button>
+                        ) : app.status === '취소' ? (
+                          isRecruitmentClosed(app.recruitmentEndsAt, now) ? (
+                            <span className="text-[11px] text-[#9AA0A6]">신청 불가</span>
+                          ) : app.remainingCapacity == null ? (
+                            <span className="text-[11px] text-[#9AA0A6]">정원 확인 불가</span>
+                          ) : (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <button
+                                onClick={() => handleBtn(app)}
+                                disabled={reapplyingIds.has(app.programId)}
+                                className="h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-[#2563EB] text-[#2563EB] hover:bg-[#EFF6FF]"
+                              >
+                                {reapplyingIds.has(app.programId)
+                                  ? '처리 중...'
+                                  : app.remainingCapacity > 0
+                                    ? '재신청'
+                                    : '대기'}
+                              </button>
+                              {app.remainingCapacity <= 0 && (
+                                <span className="text-[10px] text-[#CF222E]">정원이 마감되었습니다</span>
+                              )}
+                            </div>
+                          )
                         ) : (
                           <>
                             <button
