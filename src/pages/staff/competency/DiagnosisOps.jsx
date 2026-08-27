@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   BarChart,
@@ -17,6 +17,7 @@ import {
 } from '@/components/common';
 import {
   fetchAssessmentAttendance,
+  fetchAssessmentDistribution,
   fetchAssessmentNonParticipants,
   notifyAssessmentNonParticipants,
   registerAssessmentRound,
@@ -30,75 +31,6 @@ const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
 const NON_PARTICIPANT_PAGE_SIZE = 10;
-
-const COLLEGE_DATA = [
-  {
-    college: '공과대학',
-    cnt: 312,
-    c1: 68.2,
-    c2: 65.1,
-    c3: 70.4,
-    c4: 59.3,
-    c5: 72.1,
-    c6: 74.8,
-    avg: 68.3,
-  },
-  {
-    college: '경영대학',
-    cnt: 248,
-    c1: 71.4,
-    c2: 70.8,
-    c3: 72.1,
-    c4: 63.7,
-    c5: 67.9,
-    c6: 76.2,
-    avg: 70.4,
-  },
-  {
-    college: '사회과학대학',
-    cnt: 198,
-    c1: 73.1,
-    c2: 72.5,
-    c3: 74.8,
-    c4: 61.2,
-    c5: 64.3,
-    c6: 78.1,
-    avg: 70.7,
-  },
-  {
-    college: '인문대학',
-    cnt: 156,
-    c1: 74.2,
-    c2: 75.3,
-    c3: 76.1,
-    c4: 68.9,
-    c5: 62.1,
-    c6: 79.4,
-    avg: 72.7,
-  },
-  {
-    college: '자연과학대학',
-    cnt: 112,
-    c1: 66.8,
-    c2: 63.4,
-    c3: 68.2,
-    c4: 57.1,
-    c5: 74.5,
-    c6: 72.3,
-    avg: 67.1,
-  },
-  {
-    college: '글로벌대학',
-    cnt: 80,
-    c1: 70.3,
-    c2: 73.2,
-    c3: 71.5,
-    c4: 78.4,
-    c5: 63.8,
-    c6: 75.1,
-    avg: 72.1,
-  },
-];
 
 // ─── Tab 1: 회차 관리 ─────────────────────────────────────────────────────────
 
@@ -922,284 +854,137 @@ function ResponseManage({ rounds }) {
 
 // ─── Tab 3: 결과 통계 ─────────────────────────────────────────────────────────
 
-function ResultStats() {
-  const [roundSel, setRoundSel] = useState('2026-1 사후진단');
-  const [collegeSel, setCollegeSel] = useState('전체');
-  const [gradeSel, setGradeSel] = useState('전체');
-  const [deptSel, setDeptSel] = useState('전체');
-  const [queried, setQueried] = useState(true);
-  const [dropOpen, setDropOpen] = useState(false);
-  const [privacyInfo, setPrivacyInfo] = useState(false);
-  const dropRef = useRef(null);
-
-  const COMP_AVGS = [
-    { label: '자기관리', value: 71.3 },
-    { label: '의사소통', value: 68.9 },
-    { label: '대인관계', value: 70.4 },
-    { label: '글로벌', value: 61.5 },
-    { label: '문제해결', value: 69.8 },
-    { label: '직업윤리', value: 75.2 },
-  ];
-
-  const COMP_KEYS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
-  const COMP_LABELS = ['자기관리', '의사소통', '대인관계', '글로벌', '문제해결', '직업윤리'];
-
-  // Find minimum value per column for heatmap
-  const minPerCol = {};
-  COMP_KEYS.forEach((k) => {
-    minPerCol[k] = Math.min(...COLLEGE_DATA.map((r) => r[k]));
+// 집단(학년/전공)별로 쪼개져 내려온 평균을 역량별 분포 그래프용으로 역량 축에 다시 모은다.
+// 역량 전체 평균은 집단 평균을 응답자 수로 가중해 합산한다(집단 크기가 제각각이라 단순 평균은 왜곡됨).
+// 축 순서는 결과 방사형 차트(SCR-S02)와 맞추기 위해 displayOrder로 정렬한다.
+function aggregateByCompetency(groups) {
+  const acc = new Map();
+  groups.forEach((g) => {
+    (g.competencyAverages ?? []).forEach((c) => {
+      const prev = acc.get(c.competencyId) ?? {
+        competencyName: c.competencyName,
+        displayOrder: c.displayOrder,
+        weightedSum: 0,
+        weight: 0,
+      };
+      prev.weightedSum += Number(c.averageScore) * g.respondentCount;
+      prev.weight += g.respondentCount;
+      acc.set(c.competencyId, prev);
+    });
   });
-  minPerCol['avg'] = Math.min(...COLLEGE_DATA.map((r) => r.avg));
+  return [...acc.values()]
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .map((c) => ({
+      label: c.competencyName,
+      value: c.weight > 0 ? Math.round((c.weightedSum / c.weight) * 10) / 10 : 0,
+    }));
+}
 
-  const handleDownload = (type) => {
-    setDropOpen(false);
-    setPrivacyInfo(true);
-    toast(`'${type}' 다운로드 요청이 기록되었습니다.`, 'info');
-  };
+function ResultStats({ rounds }) {
+  const [roundId, setRoundId] = useState('');
+  const selectedRound = rounds.find((r) => String(r.assessmentRoundId) === roundId) ?? null;
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['assessmentDistribution', roundId],
+    // 역량별 분포 그래프는 집단 축과 무관하게 역량 축으로 다시 모으므로 GRADE로 한 번만 조회한다.
+    // (집단별 비교 막대그래프는 같은 API를 재사용하는 별도 티켓이라 여기서는 다루지 않는다.)
+    queryFn: () => fetchAssessmentDistribution(Number(roundId), 'GRADE'),
+    enabled: !!roundId,
+  });
+
+  const groups = data?.groups ?? [];
+  const competencyBars = aggregateByCompetency(groups);
+  const respondentTotal = groups.reduce((sum, g) => sum + g.respondentCount, 0);
+  const overallAvg =
+    competencyBars.length > 0
+      ? competencyBars.reduce((s, c) => s + c.value, 0) / competencyBars.length
+      : 0;
 
   return (
     <div>
-      {/* Condition bar */}
-      <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-5 flex gap-3 flex-wrap items-end">
-        {[
-          {
-            label: '회차',
-            val: roundSel,
-            set: setRoundSel,
-            opts: ['2026-1 사후진단', '2026-1 사전진단', '2025-2 사후진단', '2025-2 사전진단'],
-          },
-          {
-            label: '단과대',
-            val: collegeSel,
-            set: setCollegeSel,
-            opts: [
-              '전체',
-              '공과대학',
-              '경영대학',
-              '사회과학대학',
-              '인문대학',
-              '자연과학대학',
-              '글로벌대학',
-            ],
-          },
-          {
-            label: '학년',
-            val: gradeSel,
-            set: setGradeSel,
-            opts: ['전체', '1학년', '2학년', '3학년', '4학년'],
-          },
-          {
-            label: '전공',
-            val: deptSel,
-            set: setDeptSel,
-            opts: ['전체', '컴퓨터공학과', '경영학과', '심리학과', '산업공학과'],
-          },
-        ].map((f) => (
-          <div key={f.label} className="flex flex-col gap-1 w-44">
-            <label className="text-[10px] font-semibold text-[#656D76]">{f.label}</label>
-            <select
-              value={f.val}
-              onChange={(e) => f.set(e.target.value)}
-              className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-            >
-              {f.opts.map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </select>
-          </div>
-        ))}
-        <Button style={{ background: ACCENT }} onClick={() => setQueried(true)}>
-          조회
-        </Button>
-
-        {/* Download dropdown */}
-        <div className="relative ml-auto" ref={dropRef}>
-          <button
-            onClick={() => setDropOpen(!dropOpen)}
-            className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#374151] hover:text-[#374151] transition-colors flex items-center gap-1"
-          >
-            결과 내려받기 <span className="text-[10px]">▾</span>
-          </button>
-          {dropOpen && (
-            <div className="absolute right-0 top-9 z-30 bg-white rounded-[8px] border border-[#E5E7EB] shadow-lg w-52 overflow-hidden">
-              {[
-                { label: '원시 응답 데이터(CSV)', icon: '📄' },
-                { label: '집계 결과(XLSX)', icon: '📊' },
-              ].map((d) => (
-                <button
-                  key={d.label}
-                  onClick={() => handleDownload(d.label)}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-[12px] text-[#1F2328] hover:bg-[#F3F4F6] transition-colors text-left border-b border-[#F3F4F6] last:border-0"
-                >
-                  <span>{d.icon}</span>
-                  {d.label}
-                </button>
-              ))}
-              <div className="px-4 py-2.5 text-[10px] text-[#9AA0A6] leading-snug border-t border-[#F3F4F6]">
-                개인 식별 데이터 다운로드는 별도 권한이 필요하며 다운로드 이력이 기록됩니다.
-              </div>
-            </div>
-          )}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h2 className="text-[16px] font-black text-[#1F2328]">결과 통계</h2>
+          <p className="text-[12px] text-[#9AA0A6] mt-0.5">
+            {selectedRound
+              ? `진단 회차: ${selectedRound.assessmentName}`
+              : '조회할 진단 회차를 선택해 주세요.'}
+          </p>
         </div>
+        <select
+          value={roundId}
+          onChange={(e) => setRoundId(e.target.value)}
+          aria-label="진단 회차 선택"
+          className="h-9 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151] min-w-[220px]"
+        >
+          <option value="">회차 선택</option>
+          {rounds.map((r) => (
+            <option key={r.assessmentRoundId} value={r.assessmentRoundId}>
+              {r.assessmentName}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {queried && (
+      {!roundId && rounds.length === 0 && (
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center text-[12px] text-[#9AA0A6]">
+          회차 관리 탭에서 진단 회차를 먼저 등록해 주세요.
+        </div>
+      )}
+
+      {!roundId && rounds.length > 0 && (
+        <EmptyState message="조회할 진단 회차를 선택해 주세요." />
+      )}
+
+      {roundId && isError && (
+        <div className="p-3 rounded-[8px] bg-[#FEE2E2] border border-[#FECACA] text-[12px] text-[#CF222E] font-semibold">
+          {error instanceof ApiError ? error.message : '결과 통계를 조회하지 못했습니다.'}
+        </div>
+      )}
+
+      {roundId && !isError && (
         <>
-          {/* KPI row */}
-          <div className="grid grid-cols-4 gap-4 mb-5">
+          {/* Summary */}
+          <div className="grid grid-cols-2 gap-4 mb-5 max-w-[520px]">
             <StatTile
-              label="응시 대상"
-              value="1,537명"
-              sub="2026-1 사후진단"
+              label="응답 학생"
+              value={isLoading ? '-' : `${respondentTotal.toLocaleString()}명`}
+              sub="학적 정보가 등록된 응답자 기준"
               accentColor={ACCENT}
             />
-            <StatTile label="응시 완료" value="1,106명" sub="미응시 431명" accentColor="#059669" />
             <StatTile
-              label="응시율"
-              value="72.0%"
-              sub="전년 동기 대비"
-              accentColor="#D97706"
-              trend={{ value: '-3.2%p', up: false }}
+              label="전체 평균"
+              value={isLoading ? '-' : `${overallAvg.toFixed(1)}점`}
+              sub="6개 역량 평균 · 100점 기준"
+              accentColor="#374151"
             />
-            <StatTile label="평균 점수" value="66.2점" sub="100점 기준" accentColor="#374151" />
           </div>
 
-          {/* Bar chart */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 mb-5">
+          {/* Competency distribution bar chart */}
+          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
               <h3 className="text-[13px] font-bold text-[#1F2328]">역량별 평균 점수 분포</h3>
-              <span className="text-[11px] text-[#9AA0A6] ml-1">100점 기준</span>
+              <span className="text-[11px] text-[#9AA0A6] ml-1">
+                100점 기준 · 축 순서는 결과 방사형 차트와 동일
+              </span>
             </div>
-            <div className="flex justify-center overflow-x-auto">
-              <BarChart data={COMP_AVGS} color={ACCENT} height={160} />
-            </div>
-            {/* Threshold line annotation */}
-            <div className="flex justify-center mt-2">
-              <div className="flex items-center gap-1.5 text-[10px] text-[#D97706]">
-                <div className="w-6 border-t-2 border-dashed border-[#D97706]" />
-                <span>60점 기준선 (미달 시 역량 강화 권고)</span>
-              </div>
-            </div>
-          </div>
 
-          {/* Heatmap table */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-            <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
-              <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-              <h3 className="text-[13px] font-bold text-[#1F2328]">단과대별 역량 점수 비교</h3>
-              <span className="text-[11px] text-[#9AA0A6] ml-1">옅은 빨강 = 해당 열 최솟값</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[12px]">
-                <thead>
-                  <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#656D76] text-left whitespace-nowrap">
-                      단과대
-                    </th>
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#656D76] text-center whitespace-nowrap">
-                      응시자
-                    </th>
-                    {COMP_LABELS.map((l) => (
-                      <th
-                        key={l}
-                        className="px-4 py-3 text-[10px] font-semibold text-[#656D76] text-center whitespace-nowrap"
-                      >
-                        {l}
-                      </th>
-                    ))}
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#656D76] text-center whitespace-nowrap">
-                      종합 평균
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {COLLEGE_DATA.map((row, ri) => (
-                    <tr
-                      key={row.college}
-                      className={`border-b border-[#F3F4F6] last:border-0 ${ri % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'} hover:bg-[#F3F4F6] transition-colors`}
-                    >
-                      <td className="px-4 py-3 font-bold text-[#1F2328] whitespace-nowrap">
-                        {row.college}
-                      </td>
-                      <td className="px-4 py-3 text-center text-[#656D76]">{row.cnt}</td>
-                      {COMP_KEYS.map((k) => {
-                        const v = row[k];
-                        const isMin = v === minPerCol[k];
-                        return (
-                          <td
-                            key={k}
-                            className="px-4 py-3 text-center"
-                            style={isMin ? { background: '#FEF2F2' } : {}}
-                          >
-                            <span
-                              className={`text-[12px] font-bold ${isMin ? 'text-[#CF222E]' : ''}`}
-                            >
-                              {v.toFixed(1)}
-                            </span>
-                          </td>
-                        );
-                      })}
-                      <td
-                        className="px-4 py-3 text-center"
-                        style={row.avg === minPerCol['avg'] ? { background: '#FEF2F2' } : {}}
-                      >
-                        <span
-                          className={`text-[12px] font-black ${row.avg === minPerCol['avg'] ? 'text-[#CF222E]' : ''}`}
-                          style={row.avg !== minPerCol['avg'] ? { color: ACCENT } : {}}
-                        >
-                          {row.avg.toFixed(1)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {/* Footer: column min */}
-                <tfoot>
-                  <tr className="bg-[#F6F8FA] border-t border-[#E5E7EB]">
-                    <td className="px-4 py-2.5 text-[10px] font-bold text-[#656D76]">최솟값</td>
-                    <td className="px-4 py-2.5 text-center text-[10px] text-[#9AA0A6]">
-                      {Math.min(...COLLEGE_DATA.map((r) => r.cnt))}
-                    </td>
-                    {COMP_KEYS.map((k) => (
-                      <td
-                        key={k}
-                        className="px-4 py-2.5 text-center text-[10px] font-bold text-[#CF222E]"
-                      >
-                        {minPerCol[k].toFixed(1)}
-                      </td>
-                    ))}
-                    <td className="px-4 py-2.5 text-center text-[10px] font-bold text-[#CF222E]">
-                      {minPerCol['avg'].toFixed(1)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+            {isLoading ? (
+              <div className="py-16 text-center text-[12px] text-[#9AA0A6]">불러오는 중...</div>
+            ) : competencyBars.length === 0 ? (
+              <EmptyState
+                message="집계할 응답이 없습니다."
+                sub="아직 제출된 진단 결과가 없거나 학적 정보가 등록된 응답자가 없습니다."
+              />
+            ) : (
+              <div className="flex justify-center overflow-x-auto">
+                <BarChart data={competencyBars} color={ACCENT} height={180} unit="점" />
+              </div>
+            )}
           </div>
         </>
       )}
-
-      {/* Privacy modal */}
-      <Modal
-        open={privacyInfo}
-        onClose={() => setPrivacyInfo(false)}
-        title="다운로드 안내"
-        footer={
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setPrivacyInfo(false)}>
-              확인
-            </Button>
-          </div>
-        }
-      >
-        <div className="p-4 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[13px] text-[#92400E] leading-relaxed">
-          개인 식별 데이터 다운로드는 별도 권한이 필요하며 <strong>다운로드 이력이 기록</strong>
-          됩니다.
-          <br />
-          권한 신청은 시스템 관리자에게 문의하세요.
-        </div>
-      </Modal>
     </div>
   );
 }
@@ -1227,7 +1012,7 @@ export default function DiagnosisOps() {
 
       {tab === 'round' && <RoundManage rounds={rounds} setRounds={setRounds} />}
       {tab === 'response' && <ResponseManage rounds={rounds} />}
-      {tab === 'stats' && <ResultStats />}
+      {tab === 'stats' && <ResultStats rounds={rounds} />}
     </div>
   );
 }
