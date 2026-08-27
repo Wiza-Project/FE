@@ -126,7 +126,10 @@ export const COUNSELING_RESERVATION_STATUS_LABEL = {
 
 /** 동의 정책 모듈 코드 — 백엔드 ConsentModuleCode enum 기준. 코드 분기용 상수. */
 export const CONSENT_MODULE_CODE = {
+  COMMON: 'COMMON',
+  ASSESSMENT: 'ASSESSMENT',
   COUNSELING: 'COUNSELING',
+  CAREER: 'CAREER',
   PROGRAM: 'PROGRAM',
 };
 
@@ -227,6 +230,14 @@ export const COUNSELING_SESSION_ERROR_CODE = {
   INVALID_STATE: 'S008',
   /** 비공개 기록 전용. 회기·출결·배정·기록 상태가 요청과 맞지 않음(최신 서버 상태 재조회 필요) */
   CONFLICT: 'S009',
+};
+
+/** 학생 진단 응시(attempt)의 서버 상태 — AssessmentAttempt.attemptStatus. */
+export const ASSESSMENT_ATTEMPT_STATUS = {
+  NOT_STARTED: 'NOT_STARTED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+  SCORED: 'SCORED',
 };
 
 /**
