@@ -19,7 +19,8 @@ const clearLocalAuth = (set, reason = null) => {
  * isBootstrapping: 부팅 시 reissue 시도가 끝났는지 여부. AuthBootstrap 이
  *   RouterProvider 를 이 값으로 게이팅하므로, ProtectedRoute 는 신경 쓸 필요가 없습니다.
  * logoutReason: 유휴 타임아웃/세션 만료처럼 "내가 누른 로그아웃이 아닌" 경우
- *   로그인 화면에 보여줄 안내 사유. 'idle' | 'session_expired' | null
+ *   로그인 화면에 보여줄 안내 사유. 'idle' | 'session_expired' | 'session_replaced' | null
+ *   'session_replaced'는 다른 기기 로그인으로 인한 세션 종료(SessionEventsListener)
  */
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -54,6 +55,17 @@ export const useAuthStore = create((set, get) => ({
 
   /** 다른 탭의 로그아웃을 받았을 때 사용. 서버 호출/재전파는 하지 않습니다. */
   logoutFromOtherTab: (reason) => clearLocalAuth(set, reason ?? null),
+
+  /**
+   * SSE(session-events)로 "다른 기기에서 로그인됨"(session-replaced) 통지를 받았을 때 사용합니다.
+   * 이 세션의 refresh token 은 서버에서 새 로그인으로 이미 교체·무효화됐으므로
+   * /api/auth/logout 을 호출하지 않습니다. 클라이언트 상태만 정리하고, 같은 브라우저의 다른 탭에는
+   * 로그아웃을 전파합니다(다른 탭은 logoutFromOtherTab 으로 받아 조용히 정리됩니다).
+   */
+  sessionReplaced: () => {
+    clearLocalAuth(set, 'session_replaced');
+    publishLogout('session_replaced');
+  },
 
   finishBootstrap: () => set({ isBootstrapping: false }),
 
