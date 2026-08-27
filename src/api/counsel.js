@@ -583,8 +583,8 @@ export const getCounselorPublicResult = async (sessionId) => {
 
 /**
  * @typedef {Object} SaveCounselorPublicResultRequest
- * @property {string} resultSummary 앞뒤 공백 제거 후 1~3,000자 필수
- * @property {string|null} [actionPlan] 값이 없으면 null로 보낸다(빈 문자열·공백 금지, 호출부가 정규화)
+ * @property {string} resultSummary 호출부 검증 후 1~3,000자 필수. 함수 경계에서 다시 trim한다.
+ * @property {string|null} [actionPlan] 함수 경계에서 trim한 값이 비어 있으면 null로 보낸다.
  */
 
 /**
@@ -596,11 +596,11 @@ export const getCounselorPublicResult = async (sessionId) => {
  * @returns {Promise<CounselorCounselingPublicResultResponse>}
  */
 export const saveCounselorPublicResult = async (sessionId, request) => {
-  // actionPlan은 빈 문자열/공백만 있는 값을 null로 정규화해서 보낸다 — 서버 정규화 규칙과
-  // 별개로 프론트에서도 의미 없는 공백을 그대로 저장하지 않기 위함이다.
+  // 호출부 검증과 별개로 함수 경계에서 trim한다. nullish 값은 TypeError 대신 서버 검증이
+  // 처리할 수 있는 빈 문자열 또는 null로 바꿔, 의미 없는 공백을 저장하지 않는다.
   const normalized = {
-    resultSummary: request.resultSummary,
-    actionPlan: request.actionPlan && request.actionPlan.trim() ? request.actionPlan : null,
+    resultSummary: request?.resultSummary?.trim?.() ?? '',
+    actionPlan: request?.actionPlan?.trim?.() || null,
   };
   const { data } = await apiClient.put(
     `/counselors/counseling-sessions/${sessionId}/public-result`,

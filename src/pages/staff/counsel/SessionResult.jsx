@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, ConfirmDialog, Modal, Pagination, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
@@ -18,6 +18,7 @@ import {
   COUNSELING_PUBLIC_RESULT_STATUS_LABEL,
   COUNSELING_SESSION_ATTENDANCE_STATUS,
   COUNSELING_SESSION_ATTENDANCE_STATUS_LABEL,
+  COUNSELING_SESSION_ERROR_CODE,
   COUNSELING_SESSION_STATUS,
   COUNSELING_SESSION_STATUS_LABEL,
 } from '@/constants/domain';
@@ -79,6 +80,19 @@ function getPublicResultErrorMessage(error) {
   return '처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
+function getSessionListErrorMessage(error) {
+  if (!(error instanceof ApiError))
+    return '회기 목록을 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  const { code } = error;
+  if (code === COUNSELING_SESSION_ERROR_CODE.UNAUTHENTICATED)
+    return '로그인이 만료되었습니다. 다시 로그인해 주세요.';
+  if (code === COUNSELING_SESSION_ERROR_CODE.FORBIDDEN)
+    return '회기 목록을 조회할 권한이 없습니다. 활성 상담사 계정인지 확인해 주세요.';
+  if (code === COUNSELING_SESSION_ERROR_CODE.INVALID_INPUT)
+    return '회기 목록 조회 조건을 확인해 주세요.';
+  return '회기 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
 // setQueryData는 대상 Query가 없으면 새 캐시를 만들 수 있다. 이 화면(또는 이 회기)이 이미
 // 닫혔다면 새로 만들지 않고, 지금 보고 있는 Query만 최신 응답으로 갱신한다.
 function updateQueryIfPresent(queryClient, queryKey, data) {
@@ -86,6 +100,40 @@ function updateQueryIfPresent(queryClient, queryKey, data) {
   if (!query) return false;
   queryClient.setQueryData(queryKey, data);
   return true;
+}
+
+function handleResultModalKeyDown(event, modalElement, isPending, requestClose) {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    if (!isPending) requestClose();
+    return;
+  }
+
+  if (event.key !== 'Tab' || !modalElement) return;
+
+  const focusableElements = Array.from(
+    modalElement.querySelectorAll(
+      'button:not([disabled]), select:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  );
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements[focusableElements.length - 1];
+
+  if (!firstElement || !lastElement) {
+    event.preventDefault();
+    return;
+  }
+
+  if (event.shiftKey && document.activeElement === firstElement) {
+    event.preventDefault();
+    lastElement.focus();
+    return;
+  }
+
+  if (!event.shiftKey && document.activeElement === lastElement) {
+    event.preventDefault();
+    firstElement.focus();
+  }
 }
 
 /**
@@ -105,6 +153,16 @@ export default function SessionResult() {
   const [formError, setFormError] = useState('');
   const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
+
+  const modalContentRef = useRef(null);
+  const resultTriggerRef = useRef(null);
+  const restoreResultTriggerFocus = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      if (resultTriggerRef.current?.isConnected) {
+        resultTriggerRef.current.focus();
+      }
+    });
+  }, []);
 
   // 서버 초안을 한 번만 입력창에 채운다. 이후 같은 회기에서 재조회(예: 충돌 재검증)가 와도
   // 사용자가 입력 중인 값을 덮어쓰지 않기 위한 플래그다(SessionRecord 비공개 기록과 동일한 이유).
@@ -188,7 +246,8 @@ export default function SessionResult() {
     queryClient.removeQueries({ queryKey: counselorPublicResultQueryKey(selectedSessionId) });
     queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
     setSelectedSessionId(null);
-  }, [resultIsError, resultError, selectedSessionId, queryClient]);
+    restoreResultTriggerFocus();
+  }, [resultIsError, resultError, selectedSessionId, queryClient, restoreResultTriggerFocus]);
 
   // 서버 응답을 최초 1회만 입력창에 반영한다.
   useEffect(() => {
@@ -212,12 +271,13 @@ export default function SessionResult() {
 
   const invalidateList = () => queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     if (selectedSessionId !== null) {
       queryClient.removeQueries({ queryKey: counselorPublicResultQueryKey(selectedSessionId) });
     }
     setSelectedSessionId(null);
-  };
+    restoreResultTriggerFocus();
+  }, [selectedSessionId, queryClient, restoreResultTriggerFocus]);
 
   // 늦게 도착한 응답이 이미 닫힌 화면이나 다른 회기 화면을 건드리지 않도록 판별한다.
   const isResultScreenFor = (requestSessionId) =>
@@ -311,7 +371,7 @@ export default function SessionResult() {
     (summaryInput !== (publicResult.resultSummary ?? '') ||
       planInput !== (publicResult.actionPlan ?? ''));
 
-  const requestClose = () => {
+  const requestClose = useCallback(() => {
     if (isMutating) return;
     if (
       isDraftDirty &&
@@ -320,7 +380,24 @@ export default function SessionResult() {
       return;
     }
     closeModal();
-  };
+  }, [isMutating, isDraftDirty, closeModal]);
+
+  useEffect(() => {
+    if (selectedSessionId !== null) {
+      modalContentRef.current?.focus();
+    }
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    if (selectedSessionId === null) return undefined;
+
+    const modalElement = modalContentRef.current?.closest('.fixed');
+    const onKeyDown = (event) =>
+      handleResultModalKeyDown(event, modalElement, isMutating, requestClose);
+
+    modalElement?.addEventListener('keydown', onKeyDown);
+    return () => modalElement?.removeEventListener('keydown', onKeyDown);
+  }, [selectedSessionId, isMutating, requestClose]);
 
   const submitSave = () => {
     const trimmedSummary = summaryInput.trim();
@@ -388,7 +465,7 @@ export default function SessionResult() {
           <p className="p-6 text-center text-[12px] text-[#656D76]">목록을 불러오는 중입니다.</p>
         ) : isError ? (
           <div className="p-4 text-[12px] text-[#CF222E]" role="alert">
-            {getPublicResultErrorMessage(listError)}
+            {getSessionListErrorMessage(listError)}
             <button
               type="button"
               onClick={refetchSessions}
@@ -459,7 +536,10 @@ export default function SessionResult() {
                     <td className="px-4 py-3 text-center">
                       <button
                         type="button"
-                        onClick={() => setSelectedSessionId(s.sessionId)}
+                        onClick={(event) => {
+                          resultTriggerRef.current = event.currentTarget;
+                          setSelectedSessionId(s.sessionId);
+                        }}
                         aria-label={`${s.studentName} ${s.sessionNo}회기 결과 보기`}
                         className="h-6 px-2 text-[11px] font-bold rounded-[4px] bg-[#F3F4F6] text-[#656D76] hover:bg-[#E5E7EB] transition-colors"
                       >
@@ -495,7 +575,11 @@ export default function SessionResult() {
           </Button>
         }
       >
-        <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1">
+        <div
+          ref={modalContentRef}
+          tabIndex={-1}
+          className="max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1"
+        >
           {resultLoading ? (
           <p className="text-center text-[12px] text-[#656D76] py-4">불러오는 중입니다.</p>
         ) : resultIsError ? (
