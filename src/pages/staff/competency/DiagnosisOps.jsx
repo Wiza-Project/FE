@@ -1052,6 +1052,10 @@ function ResultStats({ rounds }) {
     competencyBars.length > 0
       ? competencyBars.reduce((s, c) => s + c.value, 0) / competencyBars.length
       : 0;
+  // 응답자·역량 데이터가 모두 있어야 집계가 의미 있다. 응답자 0명이면 aggregateByCompetency가
+  // 값 0인 막대를 채워 length 체크를 통과하므로(BarChart max=0 → NaN, 평균은 0.0점으로 오인),
+  // 세 곳(평균 타일·역량별 분포·집단 비교)이 이 플래그 하나로 빈 상태를 함께 판정한다.
+  const hasResultData = respondentTotal > 0 && competencyBars.length > 0;
 
   return (
     <div>
@@ -1107,7 +1111,7 @@ function ResultStats({ rounds }) {
             />
             <StatTile
               label="전체 평균"
-              value={isLoading ? '-' : `${overallAvg.toFixed(1)}점`}
+              value={isLoading || !hasResultData ? '-' : `${overallAvg.toFixed(1)}점`}
               sub="6개 역량 평균 · 100점 기준"
               accentColor="#374151"
             />
@@ -1125,7 +1129,7 @@ function ResultStats({ rounds }) {
 
             {isLoading ? (
               <div className="py-16 text-center text-[12px] text-[#9AA0A6]">불러오는 중...</div>
-            ) : competencyBars.length === 0 ? (
+            ) : !hasResultData ? (
               <EmptyState
                 message="집계할 응답이 없습니다."
                 sub="아직 제출된 진단 결과가 없거나 학적 정보가 등록된 응답자가 없습니다."
@@ -1160,7 +1164,7 @@ function ResultStats({ rounds }) {
 
             {isLoading ? (
               <div className="py-16 text-center text-[12px] text-[#9AA0A6]">불러오는 중...</div>
-            ) : groupCompare.series.length === 0 ? (
+            ) : !hasResultData || groupCompare.series.length === 0 ? (
               <EmptyState
                 message="비교할 집단이 없습니다."
                 sub={`${groupBy === 'GRADE' ? '학년' : '전공'} 정보가 등록된 응답자가 없습니다.`}

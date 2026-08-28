@@ -31,6 +31,8 @@ const CURRENT_ASSESSMENT_ROUND_ID = 1;
 export default function CompetencyPage() {
   const [view, setView] = useState('guide');
   const [attemptId, setAttemptId] = useState(null);
+  // 진단 이력에서 체크박스로 고른 두 회차. 사전·사후 비교 화면이 이 두 attemptId로 조회한다.
+  const [comparePair, setComparePair] = useState(null);
 
   // Tab keys that map to sub-views
   const tabKey = SUB_VIEWS.includes(view) && view !== 'questions' ? view : 'guide';
@@ -50,7 +52,17 @@ export default function CompetencyPage() {
 
       {/* Top tabs (hide when in questions view — full focus mode) */}
       {view !== 'questions' && (
-        <Tabs tabs={TAB_CONFIG} active={tabKey} onChange={setView} accentColor={COMP_COLOR} />
+        <Tabs
+          tabs={TAB_CONFIG}
+          active={tabKey}
+          onChange={(next) => {
+            // 탭으로 비교 화면에 직접 들어오면 이전 비교 선택을 버리고 회차 선택부터 다시 하게 한다
+            // (선택 후 진입은 DiagnosisHistory의 onCompare가 comparePair를 채워준다).
+            if (next === 'compare') setComparePair(null);
+            setView(next);
+          }}
+          accentColor={COMP_COLOR}
+        />
       )}
 
       {/* Sub-views */}
@@ -80,21 +92,32 @@ export default function CompetencyPage() {
         <DiagnosisResult
           attemptId={attemptId}
           onBack={() => setView('history')}
-          onCompare={() => setView('compare')}
+          // 비교는 두 회차를 골라야 하므로 결과 화면에서는 이력으로 보내 선택하게 한다.
+          onCompare={() => setView('history')}
           onRecommend={() => setView('recommend')}
         />
       )}
 
       {view === 'history' && (
         <DiagnosisHistory
-          onViewResult={() => setView('result')}
-          onCompare={() => setView('compare')}
+          onViewResult={(id) => {
+            setAttemptId(id);
+            setView('result');
+          }}
+          onCompare={(pair) => {
+            setComparePair(pair);
+            setView('compare');
+          }}
         />
       )}
 
-      {view === 'compare' && <ComparisonPage hasBoth onBack={() => setView('history')} />}
+      {view === 'compare' && (
+        <ComparisonPage pair={comparePair} onBack={() => setView('history')} />
+      )}
 
-      {view === 'recommend' && <RecommendedPrograms />}
+      {view === 'recommend' && (
+        <RecommendedPrograms attemptId={attemptId} onBack={() => setView('history')} />
+      )}
     </div>
   );
 }
