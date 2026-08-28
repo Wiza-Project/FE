@@ -115,7 +115,9 @@ export default function CompetencyPage() {
         <ComparisonPage pair={comparePair} onBack={() => setView('history')} />
       )}
 
-      {view === 'recommend' && <RecommendedPrograms />}
+      {view === 'recommend' && (
+        <RecommendedPrograms attemptId={attemptId} onBack={() => setView('history')} />
+      )}
     </div>
   );
 }
