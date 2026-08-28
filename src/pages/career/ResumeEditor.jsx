@@ -66,6 +66,8 @@ const emptyCareer = () => ({
 });
 const emptyCertification = () => ({ certificationName: '', issuer: '', acquiredDate: '' });
 const emptyLanguageTest = () => ({ testName: '', score: '', acquiredDate: '' });
+const withDefaults = (defaults, source) =>
+  Object.fromEntries(Object.keys(defaults).map((key) => [key, source?.[key] ?? defaults[key]]));
 
 const EDUCATION_FIELDS = [
   { key: 'schoolName', label: '학교명', required: true, placeholder: '예) 가나다대학교', maxLength: 100 },
@@ -140,11 +142,15 @@ function RepeatableFieldSection({
               <div className="flex flex-wrap gap-2.5 items-end">
                 {fields.map((f) => (
                   <div key={f.key} style={{ flex: f.width ? `0 1 ${f.width}px` : '1 1 140px' }}>
-                    <label className="block text-[11px] font-semibold text-[#656D76] mb-1">
+                    <label
+                      className="block text-[11px] font-semibold text-[#656D76] mb-1"
+                      htmlFor={`${title}-${idx}-${f.key}`}
+                    >
                       {f.label}
                       {f.required && <span className="text-[#CF222E]"> *</span>}
                     </label>
                     <input
+                      id={`${title}-${idx}-${f.key}`}
                       type={f.type ?? 'text'}
                       value={item[f.key] ?? ''}
                       maxLength={f.maxLength}
@@ -164,10 +170,14 @@ function RepeatableFieldSection({
               </div>
               {textField && (
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#656D76] mb-1">
+                  <label
+                    className="block text-[11px] font-semibold text-[#656D76] mb-1"
+                    htmlFor={`${title}-${idx}-${textField.key}`}
+                  >
                     {textField.label}
                   </label>
                   <textarea
+                    id={`${title}-${idx}-${textField.key}`}
                     value={item[textField.key] ?? ''}
                     maxLength={textField.maxLength}
                     onChange={(e) => onChange(idx, textField.key, e.target.value)}
@@ -234,11 +244,11 @@ function ResumeTab() {
     if (!doc || doc.careerDocumentId === loadedId) return;
     setTitle(doc.documentTitle ?? '이력서');
     const content = doc.contentData ?? {};
-    setContact({ ...emptyContact(), ...content.contact });
-    setEducations((content.educations ?? []).map((e) => ({ ...emptyEducation(), ...e })));
-    setCareers((content.careers ?? []).map((c) => ({ ...emptyCareer(), ...c })));
-    setCertifications((content.certifications ?? []).map((c) => ({ ...emptyCertification(), ...c })));
-    setLanguageTests((content.languageTests ?? []).map((l) => ({ ...emptyLanguageTest(), ...l })));
+    setContact(withDefaults(emptyContact(), content.contact));
+    setEducations((content.educations ?? []).map((e) => withDefaults(emptyEducation(), e)));
+    setCareers((content.careers ?? []).map((c) => withDefaults(emptyCareer(), c)));
+    setCertifications((content.certifications ?? []).map((c) => withDefaults(emptyCertification(), c)));
+    setLanguageTests((content.languageTests ?? []).map((l) => withDefaults(emptyLanguageTest(), l)));
     setPortfolioUrl(content.extra?.portfolioUrl ?? '');
     setLoadedId(doc.careerDocumentId);
     setCreating(false);

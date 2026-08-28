@@ -27,6 +27,7 @@ function CategoryChips({ categories, value, onChange }) {
           <button
             key={c.categoryCode || 'all'}
             onClick={() => onChange(c.categoryCode)}
+            aria-pressed={active}
             className={`px-3 py-1 rounded-[999px] text-[12px] font-semibold transition-colors border ${active ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#6B7280] hover:text-[#374151]'}`}
             style={active ? { background: ACCENT, borderColor: ACCENT } : {}}
           >
@@ -49,6 +50,7 @@ function FaqAccordionItem({ post, open, onToggle }) {
     <div className="border-b border-[#F3F4F6] last:border-0">
       <button
         onClick={onToggle}
+        aria-expanded={open}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-[#F9FAFB] transition-colors"
       >
         <span

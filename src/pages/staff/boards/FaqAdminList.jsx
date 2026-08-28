@@ -127,6 +127,7 @@ export default function FaqAdminList({ onNew, onEdit }) {
                     setCategoryCode(c.categoryCode);
                     setPage(1);
                   }}
+                  aria-pressed={active}
                   className={`px-3 py-1 rounded-[999px] text-[12px] font-semibold transition-colors border ${active ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#1F2937] hover:text-[#1F2328]'}`}
                   style={active ? { background: ACCENT, borderColor: ACCENT } : {}}
                 >

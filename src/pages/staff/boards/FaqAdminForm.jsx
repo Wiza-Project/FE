@@ -192,8 +192,11 @@ export default function FaqAdminForm({ postId, onBack, onSubmit }) {
         />
 
         <div className="flex flex-col gap-1">
-          <label className="text-[13px] font-semibold text-[#1F2328]">답변</label>
+          <label className="text-[13px] font-semibold text-[#1F2328]" htmlFor="faq-content">
+            답변
+          </label>
           <textarea
+            id="faq-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={8}

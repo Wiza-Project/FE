@@ -185,8 +185,11 @@ export default function NoticeAdminForm({ postId, onBack, onSubmit }) {
         />
 
         <div className="flex flex-col gap-1">
-          <label className="text-[13px] font-semibold text-[#1F2328]">내용</label>
+          <label className="text-[13px] font-semibold text-[#1F2328]" htmlFor="notice-content">
+            내용
+          </label>
           <textarea
+            id="notice-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={10}
