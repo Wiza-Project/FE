@@ -1205,7 +1205,7 @@ export default function SessionResult() {
             <div className="rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] p-3 flex flex-col gap-2" role="alert">
               <p className="text-[11px] font-bold text-[#92400E]">
                 다른 요청이 먼저 v{conflictLatest.versionNo}를 공개했습니다. 아래 최신 내용을 확인한 뒤
-                계속하거나 입력을 다시 조정해 주세요.
+                &lsquo;최신 버전 기준으로 계속&rsquo;을 누르면 작성 중인 입력을 다시 조정할 수 있습니다.
               </p>
               <div>
                 <p className="text-[11px] font-semibold text-[#1F2328] mb-1">최신 공개 요약</p>
