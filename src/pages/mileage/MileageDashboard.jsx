@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/api/client';
+import { fetchMileageSimulationOptions, simulateMileage } from '@/api/mileage';
 import {
   PageHeader,
   StatTile,
@@ -56,13 +57,6 @@ const formatDateTime = (value) => {
     timeStyle: 'short',
   }).format(date);
 };
-
-// Simulation recommendations
-const SIM_RECS = [
-  { name: '봉사활동 20시간', score: 60, period: '1~2주', key: 'R1' },
-  { name: 'NCS 특강 참여', score: 60, period: '1일', key: 'R2' },
-  { name: '교내 공모전 참가상', score: 80, period: '3주', key: 'R3' },
-];
 
 // ── Inline Trend Line Chart (SVG) ──
 function TrendChart({ data = [] }) {
@@ -179,7 +173,16 @@ function TrendChart({ data = [] }) {
  */
 export default function MileageDashboard({ onExternal }) {
   const [tab, setTab] = useState('dashboard');
-  const [simTarget, setSimTarget] = useState(1500);
+  const [simTarget, setSimTarget] = useState('');
+  const [simulationOptions, setSimulationOptions] = useState(null);
+  const [simulationOptionsLoading, setSimulationOptionsLoading] = useState(false);
+  const [simulationOptionsError, setSimulationOptionsError] = useState('');
+  const [selectedTargetBenefitPolicyId, setSelectedTargetBenefitPolicyId] = useState(null);
+  const [selectedActivities, setSelectedActivities] = useState([]);
+  const [simulationResult, setSimulationResult] = useState(null);
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [simulationError, setSimulationError] = useState('');
+  const simulationRequestIdRef = useRef(0);
   const [page, setPage] = useState(1);
   const [dashboardData, setDashboardData] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
@@ -217,6 +220,45 @@ export default function MileageDashboard({ onExternal }) {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (tab !== 'simulation') {
+      simulationRequestIdRef.current += 1;
+      setSimulationLoading(false);
+      return undefined;
+    }
+
+    let mounted = true;
+    setSimulationOptionsLoading(true);
+    setSimulationOptionsError('');
+    setSimulationResult(null);
+    setSimulationError('');
+
+    fetchMileageSimulationOptions(DASHBOARD_PERIOD)
+      .then((data) => {
+        if (!mounted) return;
+
+        const targets = Array.isArray(data?.targets) ? data.targets : [];
+        const firstTarget = targets[0];
+        setSimulationOptions(data ?? { targets: [], activities: [] });
+        setSelectedTargetBenefitPolicyId(firstTarget?.benefitPolicyId ?? null);
+        setSimTarget(String(firstTarget?.targetPoints ?? data?.currentPoints ?? ''));
+        setSelectedActivities([]);
+        setSimulationResult(null);
+        setSimulationError('');
+      })
+      .catch((error) => {
+        if (mounted) setSimulationOptionsError(error.message);
+      })
+      .finally(() => {
+        if (mounted) setSimulationOptionsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+      simulationRequestIdRef.current += 1;
+    };
+  }, [tab]);
 
   useEffect(() => {
     let mounted = true;
@@ -292,6 +334,94 @@ export default function MileageDashboard({ onExternal }) {
     setTransactionDetailError('');
   };
 
+  const selectSimulationTarget = (target) => {
+    setSelectedTargetBenefitPolicyId(target.benefitPolicyId);
+    setSimTarget(String(target.targetPoints ?? ''));
+    setSimulationResult(null);
+    setSimulationError('');
+  };
+
+  const selectCustomSimulationTarget = (value) => {
+    setSelectedTargetBenefitPolicyId(null);
+    setSimTarget(value);
+    setSimulationResult(null);
+    setSimulationError('');
+  };
+
+  const toggleSimulationActivity = (mileagePolicyId) => {
+    setSelectedActivities((current) => {
+      const exists = current.some((item) => item.mileagePolicyId === mileagePolicyId);
+      if (exists) {
+        return current.filter((item) => item.mileagePolicyId !== mileagePolicyId);
+      }
+      return [...current, { mileagePolicyId, quantity: 1 }];
+    });
+    setSimulationResult(null);
+    setSimulationError('');
+  };
+
+  const updateSimulationActivityQuantity = (mileagePolicyId, quantity) => {
+    const parsedQuantity = Number(quantity);
+    const flooredQuantity = Math.floor(parsedQuantity);
+    const nextQuantity = Number.isSafeInteger(flooredQuantity)
+      ? Math.max(1, flooredQuantity)
+      : 1;
+    setSelectedActivities((current) =>
+      current.map((item) =>
+        item.mileagePolicyId === mileagePolicyId ? { ...item, quantity: nextQuantity } : item,
+      ),
+    );
+    setSimulationResult(null);
+    setSimulationError('');
+  };
+
+  const runMileageSimulation = async () => {
+    const hasBenefitTarget = selectedTargetBenefitPolicyId != null;
+    const targetText = String(simTarget).trim();
+    const [integerPart = '', decimalPart = ''] = targetText.split('.');
+    const normalizedIntegerPart = integerPart.replace(/^0+(?=\d)/, '');
+    const targetPoints = Number(targetText);
+    const isValidTargetPoints =
+      targetText !== '' &&
+      targetText.split('.').length <= 2 &&
+      /^\d+$/.test(integerPart) &&
+      /^\d*$/.test(decimalPart) &&
+      normalizedIntegerPart.length <= 10 &&
+      decimalPart.length <= 2;
+
+    if (
+      !hasBenefitTarget &&
+      (!isValidTargetPoints || !Number.isFinite(targetPoints) || targetPoints < 0)
+    ) {
+      setSimulationError('목표 점수는 0 이상이며 정수 10자리·소수 둘째 자리까지 입력해주세요.');
+      return;
+    }
+
+    setSimulationLoading(true);
+    setSimulationResult(null);
+    setSimulationError('');
+    const requestId = simulationRequestIdRef.current + 1;
+    simulationRequestIdRef.current = requestId;
+
+    try {
+      const data = await simulateMileage({
+        academicYear: DASHBOARD_PERIOD.academicYear,
+        semesterCode: DASHBOARD_PERIOD.semesterCode,
+        targetBenefitPolicyId: hasBenefitTarget ? selectedTargetBenefitPolicyId : null,
+        targetPoints: hasBenefitTarget ? null : targetPoints,
+        plannedActivities: selectedActivities,
+      });
+      if (requestId === simulationRequestIdRef.current) setSimulationResult(data);
+    } catch (error) {
+      if (requestId === simulationRequestIdRef.current) {
+        setSimulationError(error.message);
+        setSimulationResult(null);
+      }
+    } finally {
+      if (requestId === simulationRequestIdRef.current) setSimulationLoading(false);
+    }
+  };
+
   const hasDashboardData = Boolean(dashboardData);
   const currentScore = hasDashboardData
     ? Number(dashboardData.summary?.cumulativePoints ?? 0)
@@ -333,7 +463,10 @@ export default function MileageDashboard({ onExternal }) {
         : nextGradeName
           ? `${nextGradeName}까지 ${formatPoints(pointsToNextGrade)}점`
           : '등급 기준 없음';
-  const needed = Math.max(0, simTarget - currentScore);
+  const simulationTargets = simulationOptions?.targets ?? [];
+  const simulationActivities = simulationOptions?.activities ?? [];
+  const simulationResultShortage = Number(simulationResult?.shortagePoints ?? 0);
+  const simulationResultActivities = simulationResult?.plannedActivities ?? [];
   const ledgerRows = ledgerData?.content ?? [];
   const ledgerTotalItems = ledgerData?.totalElements ?? 0;
   const ledgerTotalPages = Math.max(1, ledgerData?.totalPages ?? 1);
@@ -684,128 +817,215 @@ export default function MileageDashboard({ onExternal }) {
       {/* ═══════════════════════════════════════════════════════ */}
       {tab === 'simulation' && (
         <div className="max-w-[760px] flex flex-col gap-5">
-          {/* Target input */}
+          {/* Simulation target */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-6">
             <div className="flex items-center gap-2 mb-5">
               <div className="w-1 h-4 rounded-full bg-[#D97706]" />
               <h2 className="text-[14px] font-bold text-[#1F2328]">목표 점수 설정</h2>
             </div>
-            <div className="flex items-center gap-4 mb-4">
-              <span className="text-[13px] text-[#656D76] w-20 flex-shrink-0">목표 점수</span>
-              <input
-                type="range"
-                min={currentScore}
-                max={2000}
-                step={50}
-                value={simTarget}
-                onChange={(e) => setSimTarget(Number(e.target.value))}
-                className="flex-1 accent-[#D97706]"
-              />
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  value={simTarget}
-                  min={currentScore}
-                  max={2000}
-                  step={50}
-                  onChange={(e) =>
-                    setSimTarget(Math.max(currentScore, Math.min(2000, Number(e.target.value))))
-                  }
-                  className="w-20 h-9 px-2 text-center text-[14px] font-black text-[#D97706] border-2 border-[#D97706] rounded-[6px] focus:outline-none"
-                />
-                <span className="text-[13px] text-[#656D76]">점</span>
+            {simulationOptionsLoading && (
+              <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-5 text-center text-[12px] text-[#656D76]">
+                시뮬레이션 선택지를 불러오는 중입니다.
               </div>
-            </div>
+            )}
+            {!simulationOptionsLoading && simulationOptionsError && (
+              <div role="alert" className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
+                시뮬레이션 선택지를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
+              </div>
+            )}
+            {!simulationOptionsLoading && !simulationOptionsError && (
+              <>
+                <div className="mb-4">
+                  <p className="mb-2 text-[12px] font-semibold text-[#656D76]">목표 기준</p>
+                  <div className="flex flex-wrap gap-2">
+                    {simulationTargets.map((target) => {
+                      const selected = selectedTargetBenefitPolicyId === target.benefitPolicyId;
+                      return (
+                        <button
+                          key={target.benefitPolicyId}
+                          type="button"
+                          disabled={simulationLoading}
+                          onClick={() => selectSimulationTarget(target)}
+                          className={`h-8 rounded-[20px] border px-3 text-[11px] font-bold transition-colors ${selected ? 'border-[#D97706] bg-[#FEF3C7] text-[#D97706]' : 'border-[#E5E7EB] text-[#656D76] hover:border-[#D97706] hover:text-[#D97706]'}`}
+                        >
+                          {target.benefitName ?? '목표 기준'} {formatPoints(target.targetPoints)}점
+                        </button>
+                      );
+                    })}
+                    {simulationTargets.length === 0 && (
+                      <span className="text-[12px] text-[#9AA0A6]">
+                        등록된 목표 기준이 없습니다.
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-            {/* Result bar */}
-            <div className="bg-[#F9FAFB] rounded-[8px] p-4 mb-4">
-              <div className="flex justify-between text-[12px] mb-2">
-                <span className="text-[#656D76]">현재 마일리지</span>
-                <span className="font-black text-[#D97706]">{currentScore.toLocaleString()}점</span>
-              </div>
-              <div className="h-3 bg-[#E5E7EB] rounded-full overflow-hidden mb-2">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${Math.min(100, (currentScore / simTarget) * 100)}%`,
-                    background: ACCENT,
-                  }}
-                />
-              </div>
-              <div className="flex justify-between text-[12px]">
-                <span className="text-[#656D76]">목표까지 부족</span>
-                <span
-                  className={`font-black ${needed === 0 ? 'text-[#1A7F37]' : 'text-[#CF222E]'}`}
-                >
-                  {needed === 0 ? '✓ 달성!' : `-${needed}점`}
-                </span>
-              </div>
-            </div>
+                <div className="mb-4 flex items-center gap-4">
+                  <label htmlFor="simulation-target-points" className="w-24 flex-shrink-0 text-[13px] text-[#656D76]">
+                    목표 점수
+                  </label>
+                  <input
+                    id="simulation-target-points"
+                    type="number"
+                    min="0"
+                    value={simTarget}
+                    disabled={simulationLoading}
+                    onChange={(event) => selectCustomSimulationTarget(event.target.value)}
+                    className="h-9 w-28 rounded-[6px] border-2 border-[#D97706] px-2 text-center text-[14px] font-black text-[#D97706] focus:outline-none"
+                  />
+                  <span className="text-[13px] text-[#656D76]">점</span>
+                  {selectedTargetBenefitPolicyId == null && (
+                    <span className="text-[11px] text-[#9AA0A6]">직접 입력 목표</span>
+                  )}
+                </div>
 
-            {/* Preset buttons */}
-            <div className="flex gap-2 flex-wrap">
-              <span className="text-[12px] text-[#9AA0A6] self-center">빠른 선택:</span>
-              {[
-                { label: '장학금 신청 1,000점', val: 1000 },
-                { label: '우수장학 1,500점', val: 1500 },
-                { label: '핵심역량 인증 1,500점', val: 1500 },
-              ].map((p) => (
-                <button
-                  key={p.label}
-                  onClick={() => setSimTarget(p.val)}
-                  className={`h-7 px-3 text-[11px] font-bold rounded-[20px] border transition-colors ${simTarget === p.val ? 'border-[#D97706] bg-[#FEF3C7] text-[#D97706]' : 'border-[#E5E7EB] text-[#656D76] hover:border-[#D97706] hover:text-[#D97706]'}`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    style={{ background: ACCENT }}
+                    loading={simulationLoading}
+                    disabled={simulationOptions == null}
+                    onClick={runMileageSimulation}
+                  >
+                    시뮬레이션 실행
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Recommendation cards */}
-          {needed > 0 && (
-            <div>
-              <h3 className="text-[13px] font-bold text-[#1F2328] mb-3">
-                <span className="text-[#D97706]">{needed}점</span> 부족분 채우기 — 추천 활동
-              </h3>
-              <div className="grid grid-cols-3 gap-3">
-                {SIM_RECS.map((r) => (
-                  <div
-                    key={r.key}
-                    className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-4 flex flex-col gap-3"
-                  >
-                    <div>
-                      <p className="text-[13px] font-bold text-[#1F2328] mb-1">{r.name}</p>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                          +{r.score}점
-                        </span>
-                        <span className="text-[10px] text-[#9AA0A6]">⏱ {r.period}</span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => toast(`${r.name} 신청 페이지로 이동합니다.`, 'info')}
-                      className="h-8 rounded-[6px] text-[12px] font-bold text-white transition-colors"
-                      style={{ background: ACCENT }}
-                    >
-                      신청하기
-                    </button>
-                  </div>
-                ))}
-              </div>
+          {simulationError && (
+            <div role="alert" className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
+              {simulationError}
             </div>
           )}
 
-          {needed === 0 && (
-            <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded-[8px] p-5 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#DCFCE7] flex items-center justify-center text-[20px]">
-                🎉
+          {!simulationOptionsLoading && !simulationOptionsError && simulationOptions && (
+            <div>
+              <h3 className="mb-3 text-[13px] font-bold text-[#1F2328]">계획 활동 선택</h3>
+              {simulationActivities.length === 0 ? (
+                <div className="rounded-[8px] border border-[#E5E7EB] bg-white px-4 py-8 text-center text-[12px] text-[#9AA0A6]">
+                  선택 가능한 활동이 없습니다.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {simulationActivities.map((activity) => {
+                    const selectedActivity = selectedActivities.find(
+                      (item) => item.mileagePolicyId === activity.mileagePolicyId,
+                    );
+                    const selected = selectedActivity != null;
+                    return (
+                      <div
+                        key={activity.mileagePolicyId}
+                        className={`flex flex-col gap-3 rounded-[8px] border bg-white p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)] ${selected ? 'border-[#D97706]' : 'border-[#E5E7EB]'}`}
+                      >
+                        <div>
+                          <p className="mb-1 text-[13px] font-bold text-[#1F2328]">
+                            {activity.activityName ?? activity.activityCode ?? '마일리지 활동'}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-black text-[#D97706]">
+                              +{formatPoints(activity.points)}점
+                            </span>
+                            {activity.maximumPoints != null && (
+                              <span className="text-[10px] text-[#9AA0A6]">
+                                최대 {formatPoints(activity.maximumPoints)}점
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {selected && (
+                          <label className="flex items-center gap-2 text-[11px] text-[#656D76]">
+                            수량
+                            <input
+                              type="number"
+                              min="1"
+                              value={selectedActivity.quantity}
+                              disabled={simulationLoading}
+                              onChange={(event) =>
+                                updateSimulationActivityQuantity(
+                                  activity.mileagePolicyId,
+                                  event.target.value,
+                                )
+                              }
+                              className="h-7 w-16 rounded-[6px] border border-[#E5E7EB] px-2 text-center text-[12px] text-[#1F2328] focus:border-[#D97706] focus:outline-none"
+                            />
+                          </label>
+                        )}
+                        <button
+                          type="button"
+                          disabled={simulationLoading}
+                          onClick={() => toggleSimulationActivity(activity.mileagePolicyId)}
+                          className="h-8 rounded-[6px] text-[12px] font-bold text-white transition-colors"
+                          style={{ background: selected ? '#656D76' : ACCENT }}
+                        >
+                          {selected ? '선택 해제' : '활동 선택'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {simulationResult && (
+            <div className="rounded-[8px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
+              <div className="mb-4 flex items-center gap-2">
+                <div className="h-4 w-1 rounded-full bg-[#D97706]" />
+                <h3 className="text-[14px] font-bold text-[#1F2328]">시뮬레이션 결과</h3>
+                <span
+                  className={`ml-auto rounded-full px-2.5 py-1 text-[11px] font-black ${simulationResult.achieved ? 'bg-[#DCFCE7] text-[#1A7F37]' : 'bg-[#FEF2F2] text-[#CF222E]'}`}
+                >
+                  {simulationResult.achieved ? '목표 달성' : '목표 미달성'}
+                </span>
               </div>
-              <div>
-                <p className="text-[14px] font-bold text-[#14532D]">목표 달성 완료!</p>
-                <p className="text-[12px] text-[#1A7F37]">
-                  현재 마일리지로 선택한 기준을 충족합니다. 장학금 신청 또는 인증서를 발급받으세요.
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[
+                  ['현재 마일리지', simulationResult.currentPoints],
+                  ['계획 활동 점수', simulationResult.plannedPoints],
+                  ['예상 마일리지', simulationResult.projectedPoints],
+                  ['부족 점수', simulationResultShortage],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-[8px] bg-[#F9FAFB] p-3">
+                    <p className="text-[11px] text-[#9AA0A6]">{label}</p>
+                    <p className="mt-1 text-[16px] font-black text-[#D97706]">
+                      {formatPoints(value)}점
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {simulationResult.target && (
+                <p className="mt-4 text-[12px] text-[#656D76]">
+                  목표 기준: {simulationResult.target.benefitName ?? '직접 입력 목표'}{' '}
+                  {formatPoints(simulationResult.target.targetPoints)}점
                 </p>
-              </div>
+              )}
+              {simulationResultActivities.length > 0 && (
+                <div className="mt-4 border-t border-[#F3F4F6] pt-4">
+                  <p className="mb-2 text-[12px] font-bold text-[#1F2328]">반영된 계획 활동</p>
+                  <div className="flex flex-col gap-2">
+                    {simulationResultActivities.map((plannedActivity) => {
+                      const activity = simulationActivities.find(
+                        (item) => item.mileagePolicyId === plannedActivity.mileagePolicyId,
+                      );
+                      return (
+                        <div
+                          key={plannedActivity.mileagePolicyId}
+                          className="flex items-center justify-between text-[12px]"
+                        >
+                          <span className="text-[#656D76]">
+                            {activity?.activityName ?? `정책 #${plannedActivity.mileagePolicyId}`}
+                          </span>
+                          <span className="font-semibold text-[#1F2328]">
+                            {plannedActivity.quantity}개
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
