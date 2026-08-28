@@ -485,6 +485,51 @@ export const fetchAssessmentHistory = async (params) => {
 };
 
 /**
+ * @typedef {Object} AssessmentComparisonSide
+ * @property {number} attemptId
+ * @property {number} roundId
+ * @property {string} assessmentName
+ * @property {'PRE'|'POST'} assessmentType
+ * @property {number} academicYear
+ * @property {string} semesterCode 공통코드 SEMESTER의 code
+ * @property {string} submittedAt ISO-8601
+ * @property {number} overallAverageScore 방사형 차트 전체 평균 오버레이용
+ * @property {boolean} percentileAvailable
+ * @property {Array<{competencyId: number, competencyName: string, displayOrder: number,
+ *   convertedScore: number, percentile: number|null}>} scores 결과 조회와 동일 구조
+ */
+
+/**
+ * 사전·사후 비교 조회. 선택한 두 응시(attemptId)를 사전 → 사후 순으로 정렬해 겹친 방사형
+ * 차트용 점수(before/after)와 역량별 변화량(delta = afterScore - beforeScore, 하락도 그대로
+ * 음수로)을 반환한다. 두 attemptId의 전달 순서는 무관하며 서버가 회차 구분(PRE/POST)으로
+ * 방향을 정한다. 같은 응시를 두 번 지정하면 ApiError(코드 Q022), 같은 학년도의 사전·사후
+ * 한 쌍이 아니면 ApiError(코드 Q023)가 throw된다. 각 응시의 점수 계산·미채점 차단(Q018)·
+ * 소유권 검증은 결과 조회 API와 동일하다.
+ *
+ * @param {number} firstAttemptId
+ * @param {number} secondAttemptId
+ * @returns {Promise<{
+ *   before: AssessmentComparisonSide,
+ *   after: AssessmentComparisonSide,
+ *   deltas: Array<{
+ *     competencyId: number,
+ *     competencyName: string,
+ *     displayOrder: number,
+ *     beforeScore: number|null,
+ *     afterScore: number|null,
+ *     delta: number|null,
+ *   }>,
+ * }>}
+ */
+export const fetchAssessmentComparison = async (firstAttemptId, secondAttemptId) => {
+  const { data } = await apiClient.get('/students/assessment-comparison', {
+    params: { firstAttemptId, secondAttemptId },
+  });
+  return data;
+};
+
+/**
  * 진단 안내 조회. 진단명·응시기간·문항수·예상 소요시간과 함께, 이미 응시를
  * 시작한 적이 있으면 기존 attemptId/attemptStatus를 내려준다(없으면 둘 다 null).
  *
