@@ -87,7 +87,12 @@ export default function CompetencyPage() {
 
       {view === 'history' && (
         <DiagnosisHistory
-          onViewResult={() => setView('result')}
+          onViewResult={(id) => {
+            setAttemptId(id);
+            setView('result');
+          }}
+          // DiagnosisHistory가 고른 두 회차를 넘겨주지만, 그 데이터를 비교 화면에 연결하는
+          // 작업은 아직 범위 밖이라 여기서는 화면 전환만 한다.
           onCompare={() => setView('compare')}
         />
       )}
