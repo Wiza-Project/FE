@@ -310,6 +310,43 @@ export const notifyAssessmentNonParticipants = async (roundId, userIds) => {
 };
 
 /**
+ * @typedef {Object} DistributionCompetencyAverage
+ * @property {number} competencyId
+ * @property {string} competencyName
+ * @property {number} displayOrder 방사형 차트(SCR-S02)와 축 순서를 맞추기 위한 값
+ * @property {number} averageScore 100점 환산 평균
+ */
+
+/**
+ * @typedef {Object} DistributionGroup
+ * @property {string} groupKey 학년이면 "1"~"4", 전공이면 학과 공통코드 codeId 문자열
+ * @property {string} groupLabel 화면 표시용 라벨 ("3학년", 학과명 등)
+ * @property {number} respondentCount 이 집단에서 제출을 완료한 학생 수
+ * @property {DistributionCompetencyAverage[]} competencyAverages
+ */
+
+/**
+ * 진단 결과 통계 - 역량별 분포·집단별 비교 조회 (SCR-A06). 회차의 역량별 평균 환산점수를
+ * 집단 축(GRADE: 학년 / MAJOR: 전공)으로 나눠 집계한다. 역량별 분포 그래프와 집단별 비교
+ * 그래프가 같은 응답 구조를 재사용하며, 역량별 분포는 groups를 역량 축으로 다시 묶어 그린다.
+ * 단과대 축은 지원하지 않는다(학적 데이터에 단과대 계층 없음). GRADE/MAJOR가 아니면 ApiError(Q021).
+ *
+ * @param {number} roundId
+ * @param {'GRADE'|'MAJOR'} groupBy
+ * @returns {Promise<{
+ *   assessmentRoundId: number,
+ *   groupAxis: 'GRADE'|'MAJOR',
+ *   groups: DistributionGroup[],
+ * }>}
+ */
+export const fetchAssessmentDistribution = async (roundId, groupBy) => {
+  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/stats/distribution`, {
+    params: { groupBy },
+  });
+  return data;
+};
+
+/**
  * @typedef {Object} AssessmentResumeItem
  * @property {number} questionId
  * @property {number} competencyId
@@ -409,6 +446,41 @@ export const submitAssessment = async (attemptId) => {
  */
 export const fetchAssessmentResult = async (attemptId) => {
   const { data } = await apiClient.get(`/students/assessment-attempts/${attemptId}/result`);
+  return data;
+};
+
+/**
+ * @typedef {Object} AssessmentHistoryItem
+ * @property {number} attemptId 결과 조회(fetchAssessmentResult)·사전·사후 비교에 그대로 재사용하는 키
+ * @property {number} roundId
+ * @property {string} assessmentName
+ * @property {number} academicYear
+ * @property {string} semesterCode 공통코드 SEMESTER의 code
+ * @property {'PRE'|'POST'} assessmentType
+ * @property {string} submittedAt ISO-8601
+ */
+
+/**
+ * 과거 진단 결과 목록 조회. 본인이 응시완료(제출)한 회차를 제출일 최신순으로 페이지 단위
+ * 조회한다. 응답에 역량 점수는 없으므로, 회차를 고르면 결과 조회 API(fetchAssessmentResult)를
+ * attemptId로 재호출해 상세를 채운다.
+ *
+ * @param {Object} [params]
+ * @param {string} [params.keyword] 진단명 부분일치 검색
+ * @param {number} [params.page] 0-base 페이지 번호
+ * @param {number} [params.size] 페이지당 건수 (서버 기본 10)
+ * @returns {Promise<{
+ *   content: AssessmentHistoryItem[],
+ *   page: number,
+ *   size: number,
+ *   totalElements: number,
+ *   totalPages: number,
+ *   first: boolean,
+ *   last: boolean,
+ * }>}
+ */
+export const fetchAssessmentHistory = async (params) => {
+  const { data } = await apiClient.get('/students/assessment-history', { params });
   return data;
 };
 

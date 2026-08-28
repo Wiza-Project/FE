@@ -545,3 +545,165 @@ export const counselingPrivateRecordQueryKey = (sessionId) => [
   'counselingPrivateRecord',
   sessionId,
 ];
+
+/**
+ * @typedef {Object} CounselorCounselingPublicResultResponse
+ * @property {number} sessionId
+ * @property {number} reservationId
+ * @property {number} assignmentId 회기에 고정된 배정 ID
+ * @property {number|null} publicResultId resultStatus가 EMPTY이면 null
+ * @property {number|null} versionNo 체크리스트 9번 최초 버전은 1, EMPTY이면 null
+ * @property {string|null} resultSummary 공개 요약, EMPTY이면 null
+ * @property {string|null} actionPlan 선택 실행 계획, 값이 없으면 null(배열 아님)
+ * @property {'EMPTY'|'DRAFT'|'PUBLISHED'} resultStatus 서버 계산값. DB 상태 컬럼이 아니다
+ * @property {string|null} createdByName 초안 작성 상담사 표시명, EMPTY이면 null
+ * @property {string|null} publishedAt UTC ISO-8601 Instant, 공개 전에는 null
+ * @property {string} reservationStatus 예약의 현재 상태
+ * @property {boolean} assignmentActive 이 회기가 속한 배정의 활성 여부
+ * @property {boolean} privateRecordConfirmed 같은 회기의 비공개 기록 확정 여부(원문 미포함)
+ * @property {boolean} finalResult 예약 완료 + 마지막 출석 완료 회기 여부로 계산한 최종 결과 여부
+ * @property {boolean} canSaveDraft 현재 사용자·배정·회기·결과 상태에서 저장 가능 여부
+ * @property {boolean} canPublish 일반 공개 가능 여부
+ * @property {boolean} canCompleteReservation 이 결과로 최종 완료 가능 여부
+ */
+
+/**
+ * 회기별 공개 결과를 조회한다. 결과가 없어도 200과 resultStatus=EMPTY로 응답한다(정상 상태).
+ * 현재 또는 과거 담당 상담사 본인만 조회할 수 있다.
+ *
+ * @param {number} sessionId
+ * @returns {Promise<CounselorCounselingPublicResultResponse>}
+ */
+export const getCounselorPublicResult = async (sessionId) => {
+  const { data } = await apiClient.get(
+    `/counselors/counseling-sessions/${sessionId}/public-result`,
+  );
+  return data;
+};
+
+/**
+ * @typedef {Object} SaveCounselorPublicResultRequest
+ * @property {string} resultSummary 호출부 검증 후 1~3,000자 필수. 함수 경계에서 다시 trim한다.
+ * @property {string|null} [actionPlan] 함수 경계에서 trim한 값이 비어 있으면 null로 보낸다.
+ */
+
+/**
+ * 공개 결과 초안을 생성하거나 수정한다(회기당 미공개 행 한 개). 이미 공개된 행은 이 API로
+ * 수정할 수 없다(서버가 409 S010으로 거절).
+ *
+ * @param {number} sessionId
+ * @param {SaveCounselorPublicResultRequest} request
+ * @returns {Promise<CounselorCounselingPublicResultResponse>}
+ */
+export const saveCounselorPublicResult = async (sessionId, request) => {
+  // 호출부 검증과 별개로 함수 경계에서 trim한다. nullish 값은 TypeError 대신 서버 검증이
+  // 처리할 수 있는 빈 문자열 또는 null로 바꿔, 의미 없는 공백을 저장하지 않는다.
+  const normalized = {
+    resultSummary: request?.resultSummary?.trim?.() ?? '',
+    actionPlan: request?.actionPlan?.trim?.() || null,
+  };
+  const { data } = await apiClient.put(
+    `/counselors/counseling-sessions/${sessionId}/public-result`,
+    normalized,
+  );
+  return data;
+};
+
+/**
+ * 저장된 초안을 학생에게 일반 공개한다. 요청 본문은 없다. 예약 상태와 활성 배정은 바꾸지
+ * 않는다(최종 완료와 분리된 별도 행위). 이미 공개된 결과의 재공개는 409 S010이다.
+ *
+ * @param {number} sessionId
+ * @returns {Promise<CounselorCounselingPublicResultResponse>}
+ */
+export const publishCounselorPublicResult = async (sessionId) => {
+  const { data } = await apiClient.patch(
+    `/counselors/counseling-sessions/${sessionId}/public-result/publish`,
+  );
+  return data;
+};
+
+/**
+ * 현재 활성 배정의 마지막 출석 완료 회기 결과로 최종 완료 처리한다. 요청 본문은 없다. 초안이면
+ * 공개 후, 이미 공개된 결과면 내용을 바꾸지 않고 예약을 COMPLETED로 만들고 활성 배정을
+ * 종료한다. nextSessionAt은 조건에 쓰지 않고 응답에도 포함하지 않는다.
+ *
+ * @param {number} sessionId
+ * @returns {Promise<CounselorCounselingPublicResultResponse>}
+ */
+export const completeCounselingWithPublicResult = async (sessionId) => {
+  const { data } = await apiClient.patch(
+    `/counselors/counseling-sessions/${sessionId}/public-result/complete`,
+  );
+  return data;
+};
+
+// 상담사 공개 결과 전용 query key. 회기 목록·상세, 비공개 기록 캐시와 분리한다.
+export const counselorPublicResultQueryKey = (sessionId) => ['counselorPublicResult', sessionId];
+
+/**
+ * @typedef {Object} StudentCounselingPublicResultResponse
+ * @property {number} publicResultId
+ * @property {number} sessionId
+ * @property {number} reservationId 본인 예약 ID
+ * @property {number} sessionNo 배정 내 회기 번호
+ * @property {string} counselingTypeName
+ * @property {string} counselorName 해당 회기의 담당 상담사 표시명
+ * @property {string} startsAt UTC ISO-8601 Instant. 회기 시작 시각
+ * @property {string} publishedAt UTC ISO-8601 Instant. 공개 시각
+ * @property {string} resultSummary 공개 요약
+ * @property {string|null} actionPlan 실행 계획. 값이 없으면 null(배열 아님)
+ * @property {boolean} finalResult 예약의 최종 완료 결과 여부
+ */
+
+/**
+ * @typedef {Object} StudentCounselingPublicResultPage
+ * @property {StudentCounselingPublicResultResponse[]} content
+ * @property {number} page 0부터 시작
+ * @property {number} size
+ * @property {number} totalElements
+ * @property {number} totalPages
+ * @property {boolean} first
+ * @property {boolean} last
+ */
+
+/**
+ * 로그인한 학생 본인 예약에 속한 공개 결과를 회기별 최신 공개 버전만, publishedAt DESC로
+ * 조회한다. 공개 결과가 없으면 content=[]인 정상 응답이다.
+ *
+ * @param {Object} [params]
+ * @param {number} [params.page=0]
+ * @param {number} [params.size=20]
+ * @returns {Promise<StudentCounselingPublicResultPage>}
+ */
+export const getStudentCounselingResults = async ({ page = 0, size = 20 } = {}) => {
+  const { data } = await apiClient.get('/students/counseling-results', {
+    params: { page, size },
+  });
+  return data;
+};
+
+/**
+ * 학생 본인 예약에 속한 회기의 최신 공개 버전 상세를 조회한다. 다른 학생의 결과, 미공개
+ * 초안, 존재하지 않는 결과는 모두 404 S011로 동일하게 처리된다(소유권 세부 노출 금지).
+ *
+ * @param {number} sessionId
+ * @returns {Promise<StudentCounselingPublicResultResponse>}
+ */
+export const getStudentCounselingPublicResult = async (sessionId) => {
+  const { data } = await apiClient.get(
+    `/students/counseling-sessions/${sessionId}/public-result`,
+  );
+  return data;
+};
+
+// 학생 공개 결과 목록·상세 전용 query key. 상담사 결과 캐시, 학생 예약 캐시와 분리한다.
+export const studentCounselingResultsQueryKey = (page, size = 20) => [
+  'studentCounselingResults',
+  page,
+  size,
+];
+export const studentCounselingResultDetailQueryKey = (sessionId) => [
+  'studentCounselingResultDetail',
+  sessionId,
+];
