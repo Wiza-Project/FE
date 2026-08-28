@@ -827,6 +827,7 @@ export default function MileageDashboard({ onExternal }) {
                         <button
                           key={target.benefitPolicyId}
                           type="button"
+                          disabled={simulationLoading}
                           onClick={() => selectSimulationTarget(target)}
                           className={`h-8 rounded-[20px] border px-3 text-[11px] font-bold transition-colors ${selected ? 'border-[#D97706] bg-[#FEF3C7] text-[#D97706]' : 'border-[#E5E7EB] text-[#656D76] hover:border-[#D97706] hover:text-[#D97706]'}`}
                         >
@@ -843,11 +844,15 @@ export default function MileageDashboard({ onExternal }) {
                 </div>
 
                 <div className="mb-4 flex items-center gap-4">
-                  <span className="w-24 flex-shrink-0 text-[13px] text-[#656D76]">목표 점수</span>
+                  <label htmlFor="simulation-target-points" className="w-24 flex-shrink-0 text-[13px] text-[#656D76]">
+                    목표 점수
+                  </label>
                   <input
+                    id="simulation-target-points"
                     type="number"
                     min="0"
                     value={simTarget}
+                    disabled={simulationLoading}
                     onChange={(event) => selectCustomSimulationTarget(event.target.value)}
                     className="h-9 w-28 rounded-[6px] border-2 border-[#D97706] px-2 text-center text-[14px] font-black text-[#D97706] focus:outline-none"
                   />
@@ -873,7 +878,7 @@ export default function MileageDashboard({ onExternal }) {
           </div>
 
           {simulationError && (
-            <div className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
+            <div role="alert" className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
               {simulationError}
             </div>
           )}
@@ -919,6 +924,7 @@ export default function MileageDashboard({ onExternal }) {
                               type="number"
                               min="1"
                               value={selectedActivity.quantity}
+                              disabled={simulationLoading}
                               onChange={(event) =>
                                 updateSimulationActivityQuantity(
                                   activity.mileagePolicyId,
@@ -931,6 +937,7 @@ export default function MileageDashboard({ onExternal }) {
                         )}
                         <button
                           type="button"
+                          disabled={simulationLoading}
                           onClick={() => toggleSimulationActivity(activity.mileagePolicyId)}
                           className="h-8 rounded-[6px] text-[12px] font-bold text-white transition-colors"
                           style={{ background: selected ? '#656D76' : ACCENT }}
