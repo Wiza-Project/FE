@@ -71,12 +71,13 @@ export const fetchMyAttendance = async (programId) => {
 };
 
 /**
- * 프로그램 등록 폼의 "연계 핵심역량" select용 목록 조회. GET /api/admin/programs/competencies
- * 최상위(상위역량 없음) + 사용 중인 역량만 displayOrder 순으로 내려온다.
+ * 프로그램 등록 폼의 "연계 핵심역량" select용 목록 조회. GET /api/admin/competencies
+ * (핵심역량 도메인 공용 조회 API, WP-230) 최상위(상위역량 없음) + 사용 중인 역량만
+ * displayOrder 순으로 내려온다.
  * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number}[]>}
  */
 export const fetchCompetencyOptions = async () => {
-  const { data } = await apiClient.get('/admin/programs/competencies');
+  const { data } = await apiClient.get('/admin/competencies');
   return data;
 };
 
