@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, ConfirmDialog, Modal, Pagination, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
 import {
@@ -243,7 +243,8 @@ export default function SessionResult() {
     queryFn: () =>
       fetchCounselingSessions({ page, size: PAGE_SIZE, sessionStatus: statusFilter || undefined }),
     retry: false,
-    placeholderData: keepPreviousData,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[2] === statusFilter ? previousData : undefined,
   });
 
   // 사용자가 목록에서 선택한 회기의 공개 결과만 조회한다. gcTime: 0 — 화면을 벗어나면 즉시

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, ConfirmDialog, Modal, Pagination, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
 import {
@@ -188,7 +188,8 @@ export default function SessionRecord() {
     queryKey: counselingSessionsQueryKey(page, statusFilter),
     queryFn: () =>
       fetchCounselingSessions({ page, size: PAGE_SIZE, sessionStatus: statusFilter || undefined }),
-    placeholderData: keepPreviousData,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[2] === statusFilter ? previousData : undefined,
   });
 
   const {
