@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { PageHeader, StatusBadge, Button, ConfirmDialog, toast } from '@/components/common';
 import { fetchProgramDetail, downloadProgramOperationPlan } from '@/api/programs';
 import { applyToProgram } from '@/api/programApplications';
-import { formatDate, formatDateTime } from '@/utils/date';
+import { formatDate, formatDateTime, formatTime } from '@/utils/date';
 import { useProgramConsent } from '@/hooks/useProgramConsent';
 import { PROGRAM_APPLICATION_ERROR_CODE, CONSENT_MODULE_CODE } from '@/constants/domain';
 import { useQueryClient } from '@tanstack/react-query';
@@ -142,6 +142,12 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
   const dDay = Math.ceil(
     (new Date(p.recruitmentEndsAt).getTime() - Date.now()) / 86400000,
   );
+  const formatSessionPeriod = (startsAt, endsAt) => {
+    if (formatDate(startsAt) === formatDate(endsAt)) {
+      return `${formatDate(startsAt)} ${formatTime(startsAt)} ~ ${formatTime(endsAt)}`;
+    }
+    return `${formatDateTime(startsAt)} ~ ${formatDateTime(endsAt)}`;
+  };
 
   return (
     <div>
@@ -173,17 +179,12 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                 <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
                 <h2 className="text-[14px] font-bold text-[#1F2328]">프로그램 정보</h2>
               </div>
-              {p.capacity > 0 && (
-                <span className="text-[12px] font-bold text-[#1F2328]">
-                  신청 현황 {applied}/{p.capacity}명
-                </span>
-              )}
             </div>
             <div className="divide-y divide-[#F3F4F6]">
               {[
                 { label: '주관부서', value: p.operatingUnitCodeName || '-' },
                 { label: '프로그램유형', value: p.programTypeCodeName || '-' },
-                { label: '운영기간', value: `${period} (${sessionCount}회차)` },
+                { label: '운영기간', value: period },
                 { label: '장소', value: location },
                 { label: '모집기간', value: recruitPeriod },
                 { label: '정원', value: `${p.capacity}명 (현재 ${applied}명 신청)` },
@@ -225,7 +226,7 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                     onClick={() => setSessionsOpen((v) => !v)}
                     className="text-[12px] font-semibold text-[#2563EB] hover:underline"
                   >
-                    회차 상세 {sessionsOpen ? '접기' : `보기 (${sessionCount}회차)`}
+                    회차 상세 {sessionsOpen ? '접기' : `보기 (총 ${sessionCount}회차)`}
                   </button>
                   {sessionsOpen && (
                     <div className="mt-2 flex flex-col gap-2">
@@ -236,10 +237,8 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                         >
                           <span className="font-semibold text-[#1F2328]">{i + 1}회차</span>
                           {s.sessionName && <span> · {s.sessionName}</span>}
-                          <div>
-                            {formatDateTime(s.startsAt)} ~ {formatDateTime(s.endsAt)}
-                            {s.location ? ` · ${s.location}` : ''}
-                          </div>
+                          <div>{formatSessionPeriod(s.startsAt, s.endsAt)}</div>
+                          {s.location && <div>{s.location}</div>}
                         </div>
                       ))}
                     </div>
