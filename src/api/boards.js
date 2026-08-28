@@ -7,8 +7,10 @@ import { apiClient, downloadFile } from './client';
  * (boardType 값: 'NOTICE', 'FAQ'). 조회(GET)는 학생·교직원이 함께 쓰는 공용 엔드포인트이고,
  * 등록/수정/삭제만 /admin 하위 전용 엔드포인트로 분리되어 있다 — 그래서 이 파일에서도 조회 함수를
  * 학생 화면(NoticePage 등)과 교직원 관리 화면(StaffBoardsPage 등) 양쪽에서 그대로 재사용한다.
- * 게시판 쪽에는 카테고리
- * 등록/수정/삭제 API가 없다(§ fetchFaqCategories 참고).
+ *
+ * FAQ 카테고리는 게시판 API가 아니라 공통코드(FAQ_CATEGORY
+ * 그룹)로 관리되고, 게시판 쪽에 카테고리 등록/수정/삭제 API는 없다 
+ * 카테고리 추가·변경은 백엔드가 배포 시 시드로만 반영한다
  */
 
 // ─── 게시글 조회 (학생·교직원 공용) ───────────────────────────────────────────
@@ -129,12 +131,8 @@ export const fetchBoardPost = async (boardType, postId) => {
  * FAQ에서만 의미가 있다 — NOTICE로 부르면 항상 빈 배열이라 이 함수는 boardType을
  * 받지 않고 항상 'FAQ'로 고정 호출한다.
  *
- * 이 목록은 common_code(code_group=FAQ_CATEGORY)를 그대로 노출하는 읽기 전용
- * 뷰이며, 게시판 API에는 카테고리 등록/수정/삭제 엔드포인트가 없다 — 카테고리
- * 추가·수정·비활성화는 공통코드 관리 화면/API로 해야 하는데, 이 프로젝트에는 아직
- * 그 화면/API가 없다(src/api/commonCode.js는 조회(GET)만 제공). 백엔드팀 확인이
- * 필요한 상태다(FaqCategoryManager.jsx 참고).
- *
+ * 이 목록은 common_code(code_group=FAQ_CATEGORY)를 그대로 노출하는 읽기 전용 뷰
+ 
  * @returns {Promise<FaqCategory[]>}
  */
 export const fetchFaqCategories = async () => {
