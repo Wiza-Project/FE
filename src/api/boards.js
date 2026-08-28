@@ -7,11 +7,7 @@ import { apiClient, downloadFile } from './client';
  * (boardType 값: 'NOTICE', 'FAQ'). 조회(GET)는 학생·교직원이 함께 쓰는 공용 엔드포인트이고,
  * 등록/수정/삭제만 /admin 하위 전용 엔드포인트로 분리되어 있다 — 그래서 이 파일에서도 조회 함수를
  * 학생 화면(NoticePage 등)과 교직원 관리 화면(StaffBoardsPage 등) 양쪽에서 그대로 재사용한다.
- *
- * 최종 스펙 출처: 백엔드팀 API 문서(WP-220, 공통 게시판 엔진, scms-be
- * feat/WP-220-notice-board). 이전에 "가정"으로 채워 넣었던 boardCode/categoryId 기반
- * 스펙(구 버전)은 전부 boardType/categoryCode 기반으로 교체됐다 — FAQ 카테고리는
- * 게시판 API가 아니라 공통코드(FAQ_CATEGORY 그룹)로 관리되며, 게시판 쪽에는 카테고리
+ * 게시판 쪽에는 카테고리
  * 등록/수정/삭제 API가 없다(§ fetchFaqCategories 참고).
  */
 
