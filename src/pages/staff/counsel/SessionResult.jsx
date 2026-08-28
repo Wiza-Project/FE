@@ -109,6 +109,12 @@ function updateQueryIfPresent(queryClient, queryKey, data) {
   return true;
 }
 
+// 서버 쓰기 성공 응답을 반영하기 전에 같은 query의 진행 중인 조회를 취소한다.
+// 먼저 시작된 오래된 GET 응답이 성공 응답을 덮어쓰지 않게 하는 순서다.
+async function cancelQueryBeforeUpdate(queryClient, queryKey) {
+  await queryClient.cancelQueries({ queryKey, exact: true });
+}
+
 function handleResultModalKeyDown(event, modalElement, isPending, requestClose) {
   if (event.key === 'Escape') {
     event.preventDefault();
@@ -406,9 +412,12 @@ export default function SessionResult() {
   const saveMutation = useMutation({
     mutationFn: ({ sessionId, resultSummary, actionPlan }) =>
       saveCounselorPublicResult(sessionId, { resultSummary, actionPlan }),
-    onSuccess: (data, { sessionId }) => {
+    onSuccess: async (data, { sessionId }) => {
       if (!isResultScreenFor(sessionId)) return;
-      const updated = updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), data);
+      const queryKey = counselorPublicResultQueryKey(sessionId);
+      await cancelQueryBeforeUpdate(queryClient, queryKey);
+      if (!isResultScreenFor(sessionId)) return;
+      const updated = updateQueryIfPresent(queryClient, queryKey, data);
       if (!updated) return;
       setSummaryInput(data.resultSummary ?? '');
       setPlanInput(data.actionPlan ?? '');
@@ -422,12 +431,15 @@ export default function SessionResult() {
   // 이 결과와(가능하면) 학생 쪽 결과 조회만 무효화한다.
   const publishMutation = useMutation({
     mutationFn: (sessionId) => publishCounselorPublicResult(sessionId),
-    onSuccess: (data, sessionId) => {
+    onSuccess: async (data, sessionId) => {
       // 페이지별로 나뉜 학생 결과 목록 캐시를 접두사만으로 한 번에 무효화한다.
       queryClient.invalidateQueries({ queryKey: ['studentCounselingResults'] });
       queryClient.invalidateQueries({ queryKey: studentCounselingResultDetailQueryKey(sessionId) });
       if (!isResultScreenFor(sessionId)) return;
-      updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), data);
+      const queryKey = counselorPublicResultQueryKey(sessionId);
+      await cancelQueryBeforeUpdate(queryClient, queryKey);
+      if (!isResultScreenFor(sessionId)) return;
+      updateQueryIfPresent(queryClient, queryKey, data);
       setConfirmPublishOpen(false);
       toast('결과를 공개했습니다. 예약은 계속 진행 중입니다.', 'success');
     },
@@ -438,13 +450,16 @@ export default function SessionResult() {
   // 다시 읽어야 한다. 성공 응답을 받은 뒤에만 반영한다(낙관적 업데이트 금지).
   const completeMutation = useMutation({
     mutationFn: (sessionId) => completeCounselingWithPublicResult(sessionId),
-    onSuccess: (data, sessionId) => {
+    onSuccess: async (data, sessionId) => {
       invalidateList();
       // 페이지별로 나뉜 학생 결과 목록 캐시를 접두사만으로 한 번에 무효화한다.
       queryClient.invalidateQueries({ queryKey: ['studentCounselingResults'] });
       queryClient.invalidateQueries({ queryKey: studentCounselingResultDetailQueryKey(sessionId) });
       if (!isResultScreenFor(sessionId)) return;
-      updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), data);
+      const queryKey = counselorPublicResultQueryKey(sessionId);
+      await cancelQueryBeforeUpdate(queryClient, queryKey);
+      if (!isResultScreenFor(sessionId)) return;
+      updateQueryIfPresent(queryClient, queryKey, data);
       setConfirmCompleteOpen(false);
       toast('상담이 완료 처리되었습니다.', 'success');
     },
@@ -473,13 +488,16 @@ export default function SessionResult() {
         actionPlan,
         correctionReason: reason,
     }),
-    onSuccess: (data, { sessionId }) => {
+    onSuccess: async (data, { sessionId }) => {
       // 이력·학생 쪽 캐시도 함께 무효화해 다음 조회에서 정정된 최신 버전을 읽게 한다.
       queryClient.invalidateQueries({ queryKey: counselorPublicResultHistoryQueryKey(sessionId) });
       queryClient.invalidateQueries({ queryKey: ['studentCounselingResults'] });
       queryClient.invalidateQueries({ queryKey: studentCounselingResultDetailQueryKey(sessionId) });
       if (!isResultScreenFor(sessionId)) return;
-      updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), data);
+      const queryKey = counselorPublicResultQueryKey(sessionId);
+      await cancelQueryBeforeUpdate(queryClient, queryKey);
+      if (!isResultScreenFor(sessionId)) return;
+      updateQueryIfPresent(queryClient, queryKey, data);
       resetCorrectionModal();
       toast('결과를 정정했습니다.', 'success');
     },
@@ -502,7 +520,10 @@ export default function SessionResult() {
         try {
           const latest = await getCounselorPublicResult(sessionId);
           if (!isResultScreenFor(sessionId)) return;
-          updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), latest);
+          const queryKey = counselorPublicResultQueryKey(sessionId);
+          await cancelQueryBeforeUpdate(queryClient, queryKey);
+          if (!isResultScreenFor(sessionId)) return;
+          updateQueryIfPresent(queryClient, queryKey, latest);
           setConflictLatest(latest);
           setCorrectionError('다른 요청이 먼저 이 결과를 정정했습니다. 최신 내용을 확인한 뒤 계속하세요.');
         } catch (latestError) {
