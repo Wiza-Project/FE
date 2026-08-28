@@ -3,8 +3,6 @@ import RootLayout from '@/components/layout/RootLayout';
 import PortalShell from '@/components/layout/PortalShell';
 import ProtectedRoute from '@/routes/ProtectedRoute';
 import { USER_TYPE } from '@/constants/domain';
-import { ComingSoon } from '@/components/common';
-
 import HomePage from '@/pages/HomePage';
 import MyPage from '@/pages/MyPage';
 import AcademicRecordPage from '@/pages/records/AcademicRecordPage';
@@ -13,12 +11,14 @@ import ExtracurrPage from '@/pages/program/ExtracurrPage';
 import CounselingPage from '@/pages/counsel/CounselingPage';
 import MileagePage from '@/pages/mileage/MileagePage';
 import CareerPage from '@/pages/career/CareerPage';
+import NoticePage from '@/pages/notice/NoticePage';
 import StaffDashboard from '@/pages/staff/StaffDashboard';
 import StaffExtracurrPage from '@/pages/staff/extracurr/StaffExtracurrPage';
 import StaffCompetencyPage from '@/pages/staff/competency/StaffCompetencyPage';
 import StaffMileagePage from '@/pages/staff/mileage/StaffMileagePage';
 import StaffEmploymentPage from '@/pages/staff/career/StaffEmploymentPage';
 import StaffCounselingPage from '@/pages/staff/counsel/StaffCounselingPage';
+import StaffBoardsPage from '@/pages/staff/boards/StaffBoardsPage';
 import StudentRecords from '@/pages/staff/students/StudentRecords';
 import LoginPage from '@/pages/auth/LoginPage';
 import ConsentPage from '@/pages/auth/ConsentPage';
@@ -33,6 +33,7 @@ import NotFoundPage from '@/pages/NotFoundPage';
  *   /counsel       상담관리         P3100
  *   /mileage       마일리지         P4100
  *   /career        취창업관리       P5100
+ *   /notice        공지·FAQ         (Q&A·질문 등록·담당자 답변·비밀글·문의 템플릿은 다음 스코프)
  *   /staff/*       교직원 포털
  *
  * ADMIN 포털은 별도로 만들지 않기로 결정했습니다(2026-08-18). USER_TYPE.ADMIN 값
@@ -77,7 +78,7 @@ export const router = createBrowserRouter([
           { path: '/counsel', element: <CounselingPage /> },
           { path: '/mileage', element: <MileagePage /> },
           { path: '/career', element: <CareerPage /> },
-          { path: '/notice', element: <ComingSoon label="공지·문의" /> },
+          { path: '/notice', element: <NoticePage /> },
         ],
       },
     ],
@@ -98,6 +99,7 @@ export const router = createBrowserRouter([
           { path: '/staff/competency', element: <StaffCompetencyPage /> },
           { path: '/staff/counsel', element: <StaffCounselingPage /> },
           { path: '/staff/students', element: <StudentRecords /> },
+          { path: '/staff/boards', element: <StaffBoardsPage /> },
           { path: '/staff/mileage', element: <StaffMileagePage /> },
           { path: '/staff/career', element: <StaffEmploymentPage /> },
           { path: '/staff/career/statistics', element: <StaffEmploymentPage /> },

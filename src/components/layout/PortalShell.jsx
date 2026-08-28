@@ -149,7 +149,7 @@ const NAV_STUDENT = [
   { key: 'counseling', label: '학생상담', icon: Icon.Chat, accent: '#0891B2', path: '/counsel' },
   { key: 'mileage', label: '마일리지', icon: Icon.Coin, accent: '#D97706', path: '/mileage' },
   { key: 'career', label: '취업·창업', icon: Icon.Briefcase, accent: '#059669', path: '/career' },
-  { key: 'notice', label: '공지·문의', icon: Icon.Notice, accent: '#6B7280', path: '/notice' },
+  { key: 'notice', label: '공지·FAQ', icon: Icon.Notice, accent: '#6B7280', path: '/notice' },
 ];
 
 // 교직원 포털은 업무시스템 톤(무채색 + 단일 포인트컬러)을 따릅니다.
@@ -168,6 +168,7 @@ const NAV_STAFF = [
     icon: Icon.Chart,
     path: '/staff/career/statistics',
   },
+  { key: 'boards', label: '게시판 관리', icon: Icon.Notice, path: '/staff/boards' },
 ];
 
 const PORTAL_NAVS = { student: NAV_STUDENT, staff: NAV_STAFF };
