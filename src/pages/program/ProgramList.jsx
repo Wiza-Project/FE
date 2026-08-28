@@ -4,6 +4,8 @@ import { fetchPrograms, fetchCompetencyOptionsStudent } from '@/api/programs';
 import { applyToProgram } from '@/api/programApplications';
 import { PageHeader, StatusBadge, Pagination, Button, Modal, toast } from '@/components/common';
 import { formatDate } from '@/utils/date';
+import { useProgramConsent } from '@/hooks/useProgramConsent';
+import { PROGRAM_APPLICATION_ERROR_CODE, CONSENT_MODULE_CODE } from '@/constants/domain';
 
 const ACCENT = '#2563EB';
 
@@ -75,10 +77,11 @@ export default function ProgramList({ onDetail, onMyApplications }) {
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [applyTarget, setApplyTarget] = useState(null);
-  const [agreed, setAgreed] = useState(false);
+  const [openContentIds, setOpenContentIds] = useState(() => new Set());
   const [applying, setApplying] = useState(false);
   const PAGE_SIZE = 10;
 
+  const consent = useProgramConsent();
   const queryClient = useQueryClient();
 
   const status = chip === '모집중' ? 'DRAFT' : undefined;
@@ -121,7 +124,8 @@ export default function ProgramList({ onDetail, onMyApplications }) {
   }, [comp, chip, sort]);
 
   const openApply = (p) => {
-    setAgreed(false);
+    setOpenContentIds(new Set());
+    consent.resetChecked();
     setApplyTarget(p);
   };
 
@@ -130,9 +134,25 @@ export default function ProgramList({ onDetail, onMyApplications }) {
     setApplyTarget(null);
   };
 
+  const toggleContent = (consentPolicyId) => {
+    setOpenContentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(consentPolicyId)) next.delete(consentPolicyId);
+      else next.add(consentPolicyId);
+      return next;
+    });
+  };
+
   const handleApplyConfirm = async () => {
     if (!applyTarget) return;
     setApplying(true);
+    try {
+      await consent.ensureAllAgreed();
+    } catch (err) {
+      toast(err.message ?? '약관 동의 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'danger');
+      setApplying(false);
+      return;
+    }
     try {
       const res = await applyToProgram(applyTarget.id);
       if (res.applicationStatus === 'WAITLISTED') {
@@ -143,7 +163,13 @@ export default function ProgramList({ onDetail, onMyApplications }) {
       setApplyTarget(null);
       queryClient.invalidateQueries({ queryKey: ['studentPrograms'] });
     } catch (err) {
-      toast(err.message ?? '신청에 실패했습니다.', 'danger');
+      if (err.code === PROGRAM_APPLICATION_ERROR_CODE.REQUIRED_CONSENT_NOT_AGREED) {
+        toast('필수 동의 항목에 동의해야 신청할 수 있습니다.', 'danger');
+        queryClient.invalidateQueries({ queryKey: ['myConsents'] });
+        queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.PROGRAM] });
+      } else {
+        toast(err.message ?? '신청에 실패했습니다.', 'danger');
+      }
     } finally {
       setApplying(false);
     }
@@ -513,8 +539,7 @@ export default function ProgramList({ onDetail, onMyApplications }) {
         </>
       )}
 
-      {/* 목록에서 바로 신청 — 이용약관 동의 모달.
-          TODO: 공통 약관 동의 컴포넌트 구현되면 아래 체크박스/문구를 그 컴포넌트로 교체. */}
+      {/* 목록에서 바로 신청 — 이용약관 동의 모달. */}
       <Modal
         open={!!applyTarget}
         onClose={closeApply}
@@ -526,9 +551,9 @@ export default function ProgramList({ onDetail, onMyApplications }) {
             </Button>
             <Button
               size="sm"
-              disabled={!agreed}
+              disabled={!consent.canProceed || consent.isLoading || applying}
               loading={applying}
-              style={{ background: agreed ? ACCENT : undefined }}
+              style={{ background: consent.canProceed ? ACCENT : undefined }}
               onClick={handleApplyConfirm}
             >
               신청
@@ -547,17 +572,63 @@ export default function ProgramList({ onDetail, onMyApplications }) {
               </p>
             </div>
           )}
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
-            />
-            <span className="text-[12px] text-[#656D76] leading-snug">
-              프로그램 이용약관 및 개인정보 처리 방침에 동의합니다.
-            </span>
-          </label>
+          {consent.isLoading && (
+            <p className="text-[12px] text-[#9AA0A6]">약관 정보를 불러오는 중...</p>
+          )}
+          {!consent.isLoading && consent.isError && (
+            <p className="text-[12px] text-[#CF222E]">
+              약관 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+            </p>
+          )}
+          {!consent.isLoading && !consent.isError && (
+            <div className="flex flex-col gap-2">
+              {consent.requiredPolicies.map((policy) => {
+                const agreed = consent.isPolicyAgreed(policy.consentPolicyId);
+                const contentOpen = openContentIds.has(policy.consentPolicyId);
+                if (agreed) {
+                  return (
+                    <p
+                      key={policy.consentPolicyId}
+                      className="text-[12px] font-semibold text-[#1A7F37]"
+                    >
+                      ✓ {policy.title}에 동의했습니다.
+                    </p>
+                  );
+                }
+                return (
+                  <div key={policy.consentPolicyId} className="flex flex-col gap-1.5">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={consent.checkedIds.has(policy.consentPolicyId)}
+                        onChange={(e) =>
+                          consent.toggleChecked(policy.consentPolicyId, e.target.checked)
+                        }
+                        className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
+                      />
+                      <span className="text-[12px] text-[#656D76] leading-snug">
+                        {policy.title}에 동의합니다.
+                      </span>
+                    </label>
+                    {/* button을 label 밖으로 분리: label 내부에 두면 클릭 시 체크박스 토글과 버튼 onClick이 동시에 발생하고, interactive element가 중첩됨 */}
+                    <button
+                      type="button"
+                      onClick={() => toggleContent(policy.consentPolicyId)}
+                      aria-expanded={contentOpen}
+                      className="text-[12px] text-[#2563EB] underline self-start ml-[26px]"
+                    >
+                      {contentOpen ? '내용 접기' : '내용 보기'}
+                    </button>
+                    {contentOpen && (
+                      <div className="max-h-32 overflow-y-auto text-[11px] text-[#656D76] whitespace-pre-wrap bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
+                        {policy.content}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </Modal>
     </div>

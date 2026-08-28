@@ -3,6 +3,9 @@ import { PageHeader, StatusBadge, Button, ConfirmDialog, toast } from '@/compone
 import { fetchProgramDetail, downloadProgramOperationPlan } from '@/api/programs';
 import { applyToProgram } from '@/api/programApplications';
 import { formatDate } from '@/utils/date';
+import { useProgramConsent } from '@/hooks/useProgramConsent';
+import { PROGRAM_APPLICATION_ERROR_CODE, CONSENT_MODULE_CODE } from '@/constants/domain';
+import { useQueryClient } from '@tanstack/react-query';
 
 const ACCENT = '#2563EB';
 
@@ -22,10 +25,23 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [agreed, setAgreed] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [openContentIds, setOpenContentIds] = useState(() => new Set());
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+
+  const consent = useProgramConsent();
+  const queryClient = useQueryClient();
+
+  const toggleContent = (consentPolicyId) => {
+    setOpenContentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(consentPolicyId)) next.delete(consentPolicyId);
+      else next.add(consentPolicyId);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!programId) return;
@@ -53,6 +69,13 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
     setConfirmOpen(false);
     setApplying(true);
     try {
+      await consent.ensureAllAgreed();
+    } catch (err) {
+      toast(err.message ?? '약관 동의 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'danger');
+      setApplying(false);
+      return;
+    }
+    try {
       const res = await applyToProgram(programId);
       if (res.applicationStatus === 'WAITLISTED') {
         toast(`정원이 마감되어 대기 ${res.waitlistOrder ?? ''}순번으로 등록되었습니다.`, 'info');
@@ -61,7 +84,13 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
       }
       onApplySuccess();
     } catch (err) {
-      toast(err.message ?? '신청에 실패했습니다.', 'danger');
+      if (err.code === PROGRAM_APPLICATION_ERROR_CODE.REQUIRED_CONSENT_NOT_AGREED) {
+        toast('필수 동의 항목에 동의해야 신청할 수 있습니다.', 'danger');
+        queryClient.invalidateQueries({ queryKey: ['myConsents'] });
+        queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.PROGRAM] });
+      } else {
+        toast(err.message ?? '신청에 실패했습니다.', 'danger');
+      }
     } finally {
       setApplying(false);
     }
@@ -96,7 +125,13 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
   const p = detail;
   const period = `${formatDate(p.operationStartsAt)} ~ ${formatDate(p.operationEndsAt)}`;
   const sessionCount = p.sessions?.length ?? 0;
-  const location = p.sessions?.[0]?.location || '-';
+  const sessionLocations = new Set((p.sessions ?? []).map((s) => s.location).filter(Boolean));
+  const location =
+    sessionLocations.size === 0
+      ? '-'
+      : sessionLocations.size === 1
+        ? [...sessionLocations][0]
+        : '회차별 상이';
   const recruitPeriod = `${formatDate(p.recruitmentStartsAt)} ~ ${formatDate(p.recruitmentEndsAt)}`;
   // 모집기간이 끝나면(OPERATING/CLOSED) 신청을 받지 않는다 — 백엔드 apply()도 모집종료 시각 기준으로
   // 이미 거부하지만(APPLICATION_PERIOD_CLOSED), 버튼도 미리 막아 불필요한 실패 요청을 없앤다.
@@ -140,6 +175,7 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
             <div className="divide-y divide-[#F3F4F6]">
               {[
                 { label: '주관부서', value: p.operatingUnitCodeName || '-' },
+                { label: '프로그램유형', value: p.programTypeCodeName || '-' },
                 { label: '운영기간', value: `${period} (${sessionCount}회차)` },
                 { label: '장소', value: location },
                 { label: '모집기간', value: recruitPeriod },
@@ -152,6 +188,34 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                   <span className="text-[13px] text-[#1F2328]">{row.value}</span>
                 </div>
               ))}
+              {sessionCount > 0 && (
+                <div className="px-5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setSessionsOpen((v) => !v)}
+                    className="text-[12px] font-semibold text-[#2563EB] hover:underline"
+                  >
+                    회차 상세 {sessionsOpen ? '접기' : `보기 (${sessionCount}회차)`}
+                  </button>
+                  {sessionsOpen && (
+                    <div className="mt-2 flex flex-col gap-2">
+                      {p.sessions.map((s, i) => (
+                        <div
+                          key={s.programSessionId ?? i}
+                          className="text-[12px] text-[#656D76] bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2"
+                        >
+                          <span className="font-semibold text-[#1F2328]">{i + 1}회차</span>
+                          {s.sessionName && <span> · {s.sessionName}</span>}
+                          <div>
+                            {formatDate(s.startsAt)} ~ {formatDate(s.endsAt)}
+                            {s.location ? ` · ${s.location}` : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {p.competencyName && (
                 <div className="flex px-5 py-3">
                   <span className="w-24 flex-shrink-0 text-[13px] font-semibold text-[#656D76]">
@@ -285,17 +349,62 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
 
                 {/* Agreement */}
                 {!isClosed && (
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={agreed}
-                      onChange={(e) => setAgreed(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
-                    />
-                    <span className="text-[12px] text-[#656D76] leading-snug">
-                      프로그램 이용약관 및 개인정보 처리 방침에 동의합니다.
-                    </span>
-                  </label>
+                  <div className="flex flex-col gap-2">
+                    {consent.isLoading && (
+                      <p className="text-[12px] text-[#9AA0A6]">약관 정보를 불러오는 중...</p>
+                    )}
+                    {!consent.isLoading && consent.isError && (
+                      <p className="text-[12px] text-[#CF222E]">
+                        약관 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+                      </p>
+                    )}
+                    {!consent.isLoading &&
+                      !consent.isError &&
+                      consent.requiredPolicies.map((policy) => {
+                        const policyAgreed = consent.isPolicyAgreed(policy.consentPolicyId);
+                        const contentOpen = openContentIds.has(policy.consentPolicyId);
+                        if (policyAgreed) {
+                          return (
+                            <p
+                              key={policy.consentPolicyId}
+                              className="text-[12px] font-semibold text-[#1A7F37]"
+                            >
+                              ✓ {policy.title}에 동의했습니다.
+                            </p>
+                          );
+                        }
+                        return (
+                          <div key={policy.consentPolicyId} className="flex flex-col gap-1.5">
+                            <label className="flex items-start gap-2.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={consent.checkedIds.has(policy.consentPolicyId)}
+                                onChange={(e) =>
+                                  consent.toggleChecked(policy.consentPolicyId, e.target.checked)
+                                }
+                                className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
+                              />
+                              <span className="text-[12px] text-[#656D76] leading-snug">
+                                {policy.title}에 동의합니다.
+                              </span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => toggleContent(policy.consentPolicyId)}
+                              aria-expanded={contentOpen}
+                              className="text-[12px] text-[#2563EB] underline self-start ml-[26px]"
+                            >
+                              {contentOpen ? '내용 접기' : '내용 보기'}
+                            </button>
+                            {contentOpen && (
+                              <div className="max-h-32 overflow-y-auto text-[11px] text-[#656D76] whitespace-pre-wrap bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
+                                {policy.content}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
                 )}
 
                 {/* Action buttons */}
@@ -308,9 +417,9 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                     <Button
                       size="md"
                       className="w-full justify-center"
-                      disabled={!agreed}
+                      disabled={!consent.canProceed || consent.isLoading}
                       loading={applying}
-                      style={{ background: agreed ? ACCENT : undefined }}
+                      style={{ background: consent.canProceed ? ACCENT : undefined }}
                       onClick={() => setConfirmOpen(true)}
                     >
                       {isFull ? '대기 신청' : '신청하기'}

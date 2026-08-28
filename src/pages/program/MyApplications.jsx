@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   fetchMyApplications,
   cancelMyApplication,
@@ -15,6 +16,8 @@ import {
   toast,
 } from '@/components/common';
 import { formatDate } from '@/utils/date';
+import { useProgramConsent } from '@/hooks/useProgramConsent';
+import { PROGRAM_APPLICATION_ERROR_CODE, CONSENT_MODULE_CODE } from '@/constants/domain';
 
 const ACCENT = '#2563EB';
 
@@ -78,8 +81,13 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [reapplyingIds, setReapplyingIds] = useState(new Set());
+  const [reapplyTarget, setReapplyTarget] = useState(null);
+  const [openContentIds, setOpenContentIds] = useState(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const PAGE_SIZE = 8;
+
+  const consent = useProgramConsent();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30000);
@@ -131,9 +139,45 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
     }
   };
 
-  const runReapply = async (app) => {
+  const clearReapplying = (programId) =>
+    setReapplyingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(programId);
+      return next;
+    });
+
+  const openReapply = (app) => {
     if (reapplyingIds.has(app.programId)) return;
+    consent.resetChecked();
+    setOpenContentIds(new Set());
+    setReapplyTarget(app);
+  };
+
+  const closeReapply = () => {
+    if (reapplyTarget && reapplyingIds.has(reapplyTarget.programId)) return;
+    setReapplyTarget(null);
+  };
+
+  const toggleContent = (consentPolicyId) => {
+    setOpenContentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(consentPolicyId)) next.delete(consentPolicyId);
+      else next.add(consentPolicyId);
+      return next;
+    });
+  };
+
+  const handleReapplyConfirm = async () => {
+    if (!reapplyTarget) return;
+    const app = reapplyTarget;
     setReapplyingIds((prev) => new Set(prev).add(app.programId));
+    try {
+      await consent.ensureAllAgreed();
+    } catch (err) {
+      toast(err.message ?? '약관 동의 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'danger');
+      clearReapplying(app.programId);
+      return;
+    }
     try {
       const res = await applyToProgram(app.programId);
       if (res.applicationStatus === 'WAITLISTED') {
@@ -141,15 +185,18 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
       } else {
         toast('재신청이 완료되었습니다.', 'success');
       }
+      setReapplyTarget(null);
       setReloadKey((k) => k + 1);
     } catch (err) {
-      toast(err.message ?? '재신청에 실패했습니다.', 'danger');
+      if (err.code === PROGRAM_APPLICATION_ERROR_CODE.REQUIRED_CONSENT_NOT_AGREED) {
+        toast('필수 동의 항목에 동의해야 재신청할 수 있습니다.', 'danger');
+        queryClient.invalidateQueries({ queryKey: ['myConsents'] });
+        queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.PROGRAM] });
+      } else {
+        toast(err.message ?? '재신청에 실패했습니다.', 'danger');
+      }
     } finally {
-      setReapplyingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(app.programId);
-        return next;
-      });
+      clearReapplying(app.programId);
     }
   };
 
@@ -173,7 +220,7 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
 
   const handleBtn = (app) => {
     if (app.status === '취소') {
-      runReapply(app);
+      openReapply(app);
       return;
     }
     if (app.status === '수료') {
@@ -459,6 +506,100 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
           <p className="text-[13px] text-[#1F2328]">
             {rejectTarget?.decisionReason || '등록된 반려 사유가 없습니다.'}
           </p>
+        </div>
+      </Modal>
+
+      {/* 재신청 — 이용약관 동의 모달 (ProgramList.jsx의 신청 모달과 동일한 패턴). */}
+      <Modal
+        open={!!reapplyTarget}
+        onClose={closeReapply}
+        title="재신청 확인"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={closeReapply}
+              disabled={reapplyTarget && reapplyingIds.has(reapplyTarget.programId)}
+            >
+              취소
+            </Button>
+            <Button
+              size="sm"
+              disabled={
+                !consent.canProceed ||
+                consent.isLoading ||
+                (reapplyTarget && reapplyingIds.has(reapplyTarget.programId))
+              }
+              loading={reapplyTarget && reapplyingIds.has(reapplyTarget.programId)}
+              style={{ background: consent.canProceed ? ACCENT : undefined }}
+              onClick={handleReapplyConfirm}
+            >
+              재신청
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-[13px] text-[#1F2328]">
+            {reapplyTarget && `[${reapplyTarget.name}]에 재신청하시겠습니까?`}
+          </p>
+          {consent.isLoading && (
+            <p className="text-[12px] text-[#9AA0A6]">약관 정보를 불러오는 중...</p>
+          )}
+          {!consent.isLoading && consent.isError && (
+            <p className="text-[12px] text-[#CF222E]">
+              약관 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+            </p>
+          )}
+          {!consent.isLoading && !consent.isError && (
+            <div className="flex flex-col gap-2">
+              {consent.requiredPolicies.map((policy) => {
+                const agreed = consent.isPolicyAgreed(policy.consentPolicyId);
+                const contentOpen = openContentIds.has(policy.consentPolicyId);
+                if (agreed) {
+                  return (
+                    <p
+                      key={policy.consentPolicyId}
+                      className="text-[12px] font-semibold text-[#1A7F37]"
+                    >
+                      ✓ {policy.title}에 동의했습니다.
+                    </p>
+                  );
+                }
+                return (
+                  <div key={policy.consentPolicyId} className="flex flex-col gap-1.5">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={consent.checkedIds.has(policy.consentPolicyId)}
+                        onChange={(e) =>
+                          consent.toggleChecked(policy.consentPolicyId, e.target.checked)
+                        }
+                        className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
+                      />
+                      <span className="text-[12px] text-[#656D76] leading-snug">
+                        {policy.title}에 동의합니다.
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => toggleContent(policy.consentPolicyId)}
+                      aria-expanded={contentOpen}
+                      className="text-[12px] text-[#2563EB] underline self-start ml-[26px]"
+                    >
+                      {contentOpen ? '내용 접기' : '내용 보기'}
+                    </button>
+                    {contentOpen && (
+                      <div className="max-h-32 overflow-y-auto text-[11px] text-[#656D76] whitespace-pre-wrap bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
+                        {policy.content}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </Modal>
     </div>
