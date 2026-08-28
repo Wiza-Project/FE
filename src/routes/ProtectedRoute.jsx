@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useIdleLogout } from '@/hooks/useIdleLogout';
+import { IdleWarningModal } from '@/components/auth/IdleWarningModal';
 
 /**
  * 로그인 여부, 사용자 유형, role_code로 라우트를 막습니다.
@@ -21,7 +22,7 @@ export default function ProtectedRoute({ allow, allowRole }) {
   const { isAuthenticated, user, logoutReason } = useAuthStore();
   const location = useLocation();
 
-  useIdleLogout();
+  const { warningOpen, extendSession, logoutNow } = useIdleLogout();
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" state={{ from: location, reason: logoutReason }} replace />;
@@ -35,5 +36,10 @@ export default function ProtectedRoute({ allow, allowRole }) {
     return <Navigate to="/forbidden" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <IdleWarningModal open={warningOpen} onExtend={extendSession} onLogout={logoutNow} />
+    </>
+  );
 }
