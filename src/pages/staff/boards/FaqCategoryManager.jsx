@@ -13,11 +13,11 @@ function getErrorMessage(error, fallback) {
 /**
  * FAQ 카테고리 목록(읽기 전용) 모달. GET /api/boards/FAQ/categories.
  *
- * 백엔드 API 문서(WP-220)에 따르면 FAQ 카테고리는 게시판 API가 아니라 공통코드
- * (common_code, code_group=FAQ_CATEGORY)로 관리되며, 게시판 쪽에는 카테고리
- * 등록/수정/삭제 엔드포인트가 없다. 이 프로젝트에는 아직 공통코드 등록/수정 화면·API
- * 자체가 없어(src/api/commonCode.js는 조회만 제공) 이 모달에서 추가·수정·비활성화를
- * 제공하지 못한다 — 백엔드팀에 공통코드 관리 수단을 확인해야 한다.
+ * 확정: 카테고리는 게시판 API가 아니라 공통코드(common_code, code_group=FAQ_CATEGORY)로
+ * 관리되고, 등록/수정/비활성화는 화면 기능 없이 백엔드가 시드(CommonCodeSeeder)를 고쳐
+ * 배포할 때 반영하는 방식으로 최종 확정됐다(백엔드팀 확인 회신, WP-220/229) — 별도
+ * 관리자 CRUD API를 만들 계획은 없다. 이 화면은 임시가 아니라 최종 형태이며, 카테고리
+ * 추가·변경이 필요하면 화면이 아니라 백엔드 채널로 요청해야 한다.
  *
  * @param {Object} props
  * @param {boolean} props.open
@@ -61,8 +61,8 @@ export default function FaqCategoryManager({ open, onClose }) {
           </div>
 
           <p className="text-[11px] text-[#9AA0A6]">
-            카테고리 추가·수정·비활성화는 이 화면에서 아직 지원하지 않습니다 — 공통코드
-            (FAQ_CATEGORY) 관리 수단이 준비되면 이어서 연동합니다.
+            카테고리는 백엔드에서 관리합니다. 추가·수정·비활성화가 필요하면 이 화면이 아니라
+            담당팀에 요청해 주세요.
           </p>
         </>
       )}

@@ -29,8 +29,9 @@ function getErrorMessage(error, fallback) {
 /**
  * 교직원 FAQ 관리 목록. GET /api/boards/FAQ/posts 재사용 + 카테고리 필터 +
  * DELETE /api/admin/boards/FAQ/posts/{postId}. 카테고리 자체는 게시판 API가 아니라
- * 공통코드(FAQ_CATEGORY)로 관리되고 이 프로젝트에는 아직 그 관리 화면이 없어,
- * FaqCategoryManager 모달은 읽기 전용 목록만 보여준다.
+ * 공통코드(FAQ_CATEGORY)로 관리되며, 관리자 CRUD 화면·API는 만들지 않고 배포 시
+ * 시드로만 반영하기로 확정됐다 — FaqCategoryManager 모달은 읽기
+ * 전용 목록이 최종 형태다.
  *
  * @param {Object} props
  * @param {() => void} props.onNew
