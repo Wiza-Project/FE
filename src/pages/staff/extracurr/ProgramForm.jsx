@@ -64,7 +64,7 @@ function Field({ label, required, error, htmlFor, children }) {
   );
 }
 
-function TextInput({ id, value, onChange, placeholder = '', error, maxLength }) {
+function TextInput({ id, value, onChange, placeholder = '', error, maxLength, disabled }) {
   return (
     <input
       id={id}
@@ -72,7 +72,8 @@ function TextInput({ id, value, onChange, placeholder = '', error, maxLength }) 
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       maxLength={maxLength}
-      className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+      disabled={disabled}
+      className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors disabled:bg-[#F3F4F6] disabled:text-[#9AA0A6] disabled:cursor-not-allowed ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
 }
@@ -139,17 +140,54 @@ function DateInput({ id, value, onChange, error, ariaLabel }) {
   );
 }
 
+function TimeInput({ id, value, onChange, ariaLabel }) {
+  return (
+    <input
+      id={id}
+      type="time"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+      className="h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors"
+    />
+  );
+}
+
+/** 2택 라디오 그룹. 옵션이 항상 2개뿐인 날짜/장소 입력 방식 선택에 사용한다. */
+function SessionRadioGroup({ name, options, value, onChange, ariaLabel }) {
+  return (
+    <div role="radiogroup" aria-label={ariaLabel} className="flex items-center gap-4">
+      {options.map((opt) => (
+        <label
+          key={opt.value}
+          className="flex items-center gap-1.5 text-[12px] text-[#1F2328] cursor-pointer"
+        >
+          <input
+            type="radio"
+            name={name}
+            checked={value === opt.value}
+            onChange={() => onChange(opt.value)}
+            className="w-3.5 h-3.5 accent-[#374151]"
+          />
+          {opt.label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 // ─── 회차(세션) 카드 ──────────────────────────────────────────────────────────
 
 /**
  * @param {Object} props
  * @param {number} props.index 0-based 배열 위치. 표시 라벨("n회차")과 sessionNo는 여기서 파생된다.
- * @param {{localId: string|number, sessionName: string, startsAt: string, endsAt: string, location: string}} props.session
+ * @param {{localId: string|number, sessionName: string, dateMode: 'RANGE'|'SINGLE', startsAt: string, startsAtTime: string, endsAt: string, endsAtTime: string, locationType: 'DIRECT_INPUT'|'SAME_AS_PREVIOUS', location: string}} props.session
  * @param {(patch: Object) => void} props.onChange
  * @param {() => void} props.onRemove
  * @param {boolean} props.removable
  * @param {boolean} [props.startsAtError]
  * @param {boolean} [props.endsAtError]
+ * @param {boolean} [props.locationError]
  */
 function SessionCard({
   index,
@@ -159,7 +197,9 @@ function SessionCard({
   removable,
   startsAtError,
   endsAtError,
+  locationError,
 }) {
+  const isSingle = session.dateMode === 'SINGLE';
   return (
     <div className="border border-[#E5E7EB] rounded-[8px] p-4 bg-white">
       <div className="flex items-center justify-between mb-3">
@@ -174,42 +214,113 @@ function SessionCard({
           </button>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
-          <Field label="회차명" htmlFor={`session-${session.localId}-name`}>
-            <TextInput
-              id={`session-${session.localId}-name`}
-              value={session.sessionName}
-              onChange={(v) => onChange({ sessionName: v })}
-              placeholder="예) 1주차 오리엔테이션"
-              maxLength={200}
-            />
-          </Field>
-        </div>
-        <Field label="시작 ~ 종료" required>
-          <div className="flex items-center gap-2">
-            <DateInput
-              value={session.startsAt}
-              onChange={(v) => onChange({ startsAt: v })}
-              ariaLabel={`${index + 1}회차 시작일`}
-              error={startsAtError}
-            />
-            <span className="text-[12px] text-[#9AA0A6]">~</span>
-            <DateInput
-              value={session.endsAt}
-              onChange={(v) => onChange({ endsAt: v })}
-              ariaLabel={`${index + 1}회차 종료일`}
-              error={endsAtError}
-            />
-          </div>
+      <div className="flex flex-col gap-4">
+        <Field label="회차명" htmlFor={`session-${session.localId}-name`}>
+          <TextInput
+            id={`session-${session.localId}-name`}
+            value={session.sessionName}
+            onChange={(v) => onChange({ sessionName: v })}
+            placeholder="예) 1주차 오리엔테이션"
+            maxLength={200}
+          />
         </Field>
-        <Field label="장소" htmlFor={`session-${session.localId}-location`}>
+
+        <Field label="날짜 설정" required>
+          <SessionRadioGroup
+            name={`date-mode-${session.localId}`}
+            ariaLabel={`${index + 1}회차 날짜 설정`}
+            value={session.dateMode}
+            onChange={(v) =>
+              onChange(v === 'SINGLE' ? { dateMode: v, endsAt: session.startsAt } : { dateMode: v })
+            }
+            options={[
+              { value: 'RANGE', label: '기간설정' },
+              { value: 'SINGLE', label: '단일일자설정' },
+            ]}
+          />
+        </Field>
+
+        {isSingle ? (
+          <Field label="날짜" required htmlFor={`session-${session.localId}-date`}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <DateInput
+                id={`session-${session.localId}-date`}
+                value={session.startsAt}
+                onChange={(v) => onChange({ startsAt: v, endsAt: v })}
+                ariaLabel={`${index + 1}회차 날짜`}
+                error={startsAtError}
+              />
+              <TimeInput
+                value={session.startsAtTime}
+                onChange={(v) => onChange({ startsAtTime: v })}
+                ariaLabel={`${index + 1}회차 시작 시각`}
+              />
+              <span className="text-[12px] text-[#9AA0A6]">~</span>
+              <TimeInput
+                value={session.endsAtTime}
+                onChange={(v) => onChange({ endsAtTime: v })}
+                ariaLabel={`${index + 1}회차 종료 시각`}
+              />
+            </div>
+          </Field>
+        ) : (
+          <Field label="시작 ~ 종료" required>
+            <div className="flex items-center gap-2 flex-wrap">
+              <DateInput
+                value={session.startsAt}
+                onChange={(v) => onChange({ startsAt: v })}
+                ariaLabel={`${index + 1}회차 시작일`}
+                error={startsAtError}
+              />
+              <TimeInput
+                value={session.startsAtTime}
+                onChange={(v) => onChange({ startsAtTime: v })}
+                ariaLabel={`${index + 1}회차 시작 시각`}
+              />
+              <span className="text-[12px] text-[#9AA0A6]">~</span>
+              <DateInput
+                value={session.endsAt}
+                onChange={(v) => onChange({ endsAt: v })}
+                ariaLabel={`${index + 1}회차 종료일`}
+                error={endsAtError}
+              />
+              <TimeInput
+                value={session.endsAtTime}
+                onChange={(v) => onChange({ endsAtTime: v })}
+                ariaLabel={`${index + 1}회차 종료 시각`}
+              />
+            </div>
+          </Field>
+        )}
+
+        <Field label="장소" htmlFor={`session-${session.localId}-location`} error={locationError}>
+          {index > 0 && (
+            <div className="mb-2">
+              <SessionRadioGroup
+                name={`location-type-${session.localId}`}
+                ariaLabel={`${index + 1}회차 장소 입력 방식`}
+                value={session.locationType}
+                onChange={(v) =>
+                  onChange({
+                    locationType: v,
+                    location: v === 'SAME_AS_PREVIOUS' ? '' : session.location,
+                  })
+                }
+                options={[
+                  { value: 'DIRECT_INPUT', label: '직접입력' },
+                  { value: 'SAME_AS_PREVIOUS', label: '전회차와 동일' },
+                ]}
+              />
+            </div>
+          )}
           <TextInput
             id={`session-${session.localId}-location`}
             value={session.location}
             onChange={(v) => onChange({ location: v })}
             placeholder="예) 학생회관 3층 세미나실"
             maxLength={300}
+            error={locationError}
+            disabled={session.locationType === 'SAME_AS_PREVIOUS'}
           />
         </Field>
       </div>
@@ -218,16 +329,27 @@ function SessionCard({
 }
 
 function emptySession(localId) {
-  return { localId, sessionName: '', startsAt: '', endsAt: '', location: '' };
+  return {
+    localId,
+    sessionName: '',
+    dateMode: 'RANGE',
+    startsAt: '',
+    startsAtTime: '',
+    endsAt: '',
+    endsAtTime: '',
+    locationType: 'DIRECT_INPUT',
+    location: '',
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** 'YYYY-MM-DD' → 자정 기준 UTC ISO 문자열(Instant). 4개 날짜를 모두 같은 기준으로 변환해야
- * 백엔드의 "모집종료 ≤ 운영시작" 규칙이 같은 날짜 입력에서도 자연스럽게 성립한다. */
-function toInstant(dateStr) {
+/** 'YYYY-MM-DD' (+ 선택적 'HH:mm') → UTC ISO 문자열(Instant). 시각을 생략하면 자정으로 채운다.
+ * 4개 날짜를 모두 같은 기준으로 변환해야 백엔드의 "모집종료 ≤ 운영시작" 규칙이 같은 날짜
+ * 입력에서도 자연스럽게 성립한다. */
+function toInstant(dateStr, timeStr) {
   if (!dateStr) return null;
-  return new Date(`${dateStr}T00:00:00Z`).toISOString();
+  return new Date(`${dateStr}T${timeStr || '00:00'}:00Z`).toISOString();
 }
 
 function getDetailErrorMessage(error) {
@@ -315,6 +437,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const [sessions, setSessions] = useState(() => (isEdit ? [] : [emptySession('new-1')]));
   // 시작/종료일이 비어있는 카드의 localId — SessionCard에 빨간 테두리로 표시하기 위함
   const [sessionFieldErrors, setSessionFieldErrors] = useState(new Set());
+  // 직접입력인데 장소가 비어있는 카드의 localId
+  const [sessionLocationErrors, setSessionLocationErrors] = useState(new Set());
 
   // 역량·정책
   const [competencyId, setCompetencyId] = useState('');
@@ -448,13 +572,27 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     const existingSessions = Array.isArray(detailData.sessions) ? detailData.sessions : [];
     setSessions(
       existingSessions.length > 0
-        ? existingSessions.map((s, i) => ({
-            localId: s.programSessionId ?? `existing-${i}`,
-            sessionName: s.sessionName ?? '',
-            startsAt: formatDate(s.startsAt),
-            endsAt: formatDate(s.endsAt),
-            location: s.location ?? '',
-          }))
+        ? existingSessions.map((s, i) => {
+            const startDate = formatDate(s.startsAt);
+            const endDate = formatDate(s.endsAt);
+            // 시각이 정확히 00:00이면 과거 데이터가 시간 미입력(자정 디폴트)이었을 가능성이 높아
+            // 빈 값으로 프리필해 불필요한 "00:00" 노출을 피한다.
+            const extractTime = (iso) => {
+              const time = iso ? iso.slice(11, 16) : '';
+              return time === '00:00' ? '' : time;
+            };
+            return {
+              localId: s.programSessionId ?? `existing-${i}`,
+              sessionName: s.sessionName ?? '',
+              dateMode: startDate === endDate ? 'SINGLE' : 'RANGE',
+              startsAt: startDate,
+              startsAtTime: extractTime(s.startsAt),
+              endsAt: endDate,
+              endsAtTime: extractTime(s.endsAt),
+              locationType: 'DIRECT_INPUT',
+              location: s.location ?? '',
+            };
+          })
         : [emptySession('new-1')],
     );
 
@@ -546,16 +684,34 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       toast('최소 1회차는 입력해야합니다.', 'error');
       return false;
     }
-    const invalidSessions = sessions.filter(
-      (s) => !s.startsAt || !s.endsAt || (s.startsAt && s.endsAt && s.startsAt > s.endsAt),
-    );
+    const invalidSessions = sessions.filter((s) => {
+      const endDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
+      if (!s.startsAt || !endDate) return true;
+      if (s.startsAt > endDate) return true;
+      if (s.startsAt === endDate && s.startsAtTime && s.endsAtTime && s.startsAtTime > s.endsAtTime) {
+        return true;
+      }
+      return false;
+    });
     if (invalidSessions.length > 0) {
       setSessionFieldErrors(new Set(invalidSessions.map((s) => s.localId)));
       setActiveTab('sessions');
-      toast('모든 회차의 시작일과 종료일을 확인해 주세요.', 'error');
+      toast('모든 회차의 날짜(및 시각)를 확인해 주세요.', 'error');
       return false;
     }
     setSessionFieldErrors(new Set());
+
+    const missingLocationSessions = sessions.filter(
+      (s) => s.locationType === 'DIRECT_INPUT' && !s.location.trim(),
+    );
+    if (missingLocationSessions.length > 0) {
+      setSessionLocationErrors(new Set(missingLocationSessions.map((s) => s.localId)));
+      setActiveTab('sessions');
+      toast('모든 회차의 장소를 입력하거나 "전회차와 동일"을 선택해 주세요.', 'error');
+      return false;
+    }
+    setSessionLocationErrors(new Set());
+
     if (newErrors.competencyId) {
       setActiveTab('policy');
       toast('연계 핵심역량을 선택해 주세요.', 'error');
@@ -597,13 +753,17 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     operationEndsAt: toInstant(operEnd),
     capacity: Number(capacity),
     completionRate,
-    sessions: sessions.map((s, i) => ({
-      sessionNo: i + 1,
-      sessionName: s.sessionName.trim() || null,
-      startsAt: toInstant(s.startsAt),
-      endsAt: toInstant(s.endsAt),
-      location: s.location.trim() || null,
-    })),
+    sessions: sessions.map((s, i) => {
+      const endsAtDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
+      return {
+        sessionNo: i + 1,
+        sessionName: s.sessionName.trim() || null,
+        startsAt: toInstant(s.startsAt, s.startsAtTime),
+        endsAt: toInstant(endsAtDate, s.endsAtTime),
+        locationType: s.locationType,
+        location: s.locationType === 'DIRECT_INPUT' ? s.location.trim() || null : null,
+      };
+    }),
   });
 
   const handleRegister = () => {
@@ -883,6 +1043,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                 removable={sessions.length > 1}
                 startsAtError={sessionFieldErrors.has(s.localId)}
                 endsAtError={sessionFieldErrors.has(s.localId)}
+                locationError={sessionLocationErrors.has(s.localId)}
               />
             ))}
             <button
