@@ -361,7 +361,10 @@ export default function MileageDashboard({ onExternal }) {
   };
 
   const updateSimulationActivityQuantity = (mileagePolicyId, quantity) => {
-    const nextQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
+    const parsedQuantity = Number(quantity);
+    const nextQuantity = Number.isFinite(parsedQuantity)
+      ? Math.max(1, Math.floor(parsedQuantity))
+      : 1;
     setSelectedActivities((current) =>
       current.map((item) =>
         item.mileagePolicyId === mileagePolicyId ? { ...item, quantity: nextQuantity } : item,
