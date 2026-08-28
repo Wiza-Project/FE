@@ -241,6 +241,36 @@ export const ASSESSMENT_ATTEMPT_STATUS = {
 };
 
 /**
+ * 회기별 공개 상담 결과의 상태 — CounselorCounselingPublicResultResponse.resultStatus.
+ * DB 상태 컬럼이 아니라 서버가 계산해 내려준다(행 없음=EMPTY, 미공개=DRAFT, 공개=PUBLISHED).
+ * 학생 응답에는 이 필드가 없다(학생은 PUBLISHED만 조회하므로 항상 공개 상태).
+ */
+export const COUNSELING_PUBLIC_RESULT_STATUS = {
+  EMPTY: 'EMPTY',
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+};
+
+export const COUNSELING_PUBLIC_RESULT_STATUS_LABEL = {
+  [COUNSELING_PUBLIC_RESULT_STATUS.EMPTY]: '결과 없음',
+  [COUNSELING_PUBLIC_RESULT_STATUS.DRAFT]: '초안(비공개)',
+  [COUNSELING_PUBLIC_RESULT_STATUS.PUBLISHED]: '공개됨',
+};
+
+/** 공개 상담 결과·예약 완료 6개 API가 공통으로 반환하는 업무 오류 코드. */
+export const COUNSELING_PUBLIC_RESULT_ERROR_CODE = {
+  INVALID_INPUT: 'C001',
+  /** 비활성 계정 또는 역할 없음 */
+  FORBIDDEN: 'A004',
+  /** 상담사 기준 없는 회기 또는 다른 상담사의 회기 */
+  SESSION_NOT_FOUND: 'S007',
+  /** 허용되지 않은 회기·결과·예약·배정 상태, 비공개 기록 미확정, 최종 대상 불일치, 남은 PLANNED 회기 */
+  STATE_CONFLICT: 'S010',
+  /** 학생 기준 없는·다른 학생의·미공개 결과 */
+  RESULT_NOT_FOUND: 'S011',
+};
+
+/**
  * 백엔드 응답 형태 참고 (JSDoc — 에디터 자동완성용)
  *
  * @typedef {Object} ApiResponse
