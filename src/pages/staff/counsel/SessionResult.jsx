@@ -502,10 +502,20 @@ export default function SessionResult() {
         try {
           const latest = await getCounselorPublicResult(sessionId);
           if (!isResultScreenFor(sessionId)) return;
+          updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), latest);
           setConflictLatest(latest);
           setCorrectionError('다른 요청이 먼저 이 결과를 정정했습니다. 최신 내용을 확인한 뒤 계속하세요.');
-        } catch {
+        } catch (latestError) {
           if (!isResultScreenFor(sessionId)) return;
+          if (
+            latestError instanceof ApiError &&
+            (latestError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.FORBIDDEN ||
+              latestError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.SESSION_NOT_FOUND)
+          ) {
+            setCorrectionOpen(false);
+            onMutationError(latestError, sessionId, 'correct');
+            return;
+          }
           setCorrectionError('최신 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
         }
         return;
@@ -953,7 +963,11 @@ export default function SessionResult() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={(event) => openCorrectionModal(event.currentTarget)}
+                      disabled={correctMutation.isPending}
+                      onClick={(event) => {
+                        if (correctMutation.isPending) return;
+                        openCorrectionModal(event.currentTarget);
+                      }}
                     >
                       결과 정정
                     </Button>
@@ -961,7 +975,9 @@ export default function SessionResult() {
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={correctMutation.isPending}
                     onClick={(event) => {
+                      if (correctMutation.isPending) return;
                       historyTriggerRef.current = event.currentTarget;
                       setHistoryOpen(true);
                     }}
@@ -973,9 +989,12 @@ export default function SessionResult() {
                 {publicResult.canCompleteReservation && (
                   <Button
                     size="sm"
-                    disabled={completeMutation.isPending}
+                    disabled={completeMutation.isPending || correctMutation.isPending}
                     loading={completeMutation.isPending}
-                    onClick={() => setConfirmCompleteOpen(true)}
+                    onClick={() => {
+                      if (correctMutation.isPending) return;
+                      setConfirmCompleteOpen(true);
+                    }}
                   >
                     상담 완료
                   </Button>
