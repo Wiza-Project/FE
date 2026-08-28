@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { fetchMileageSimulationOptions, simulateMileage } from '@/api/mileage';
 import {
@@ -182,6 +182,7 @@ export default function MileageDashboard({ onExternal }) {
   const [simulationResult, setSimulationResult] = useState(null);
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [simulationError, setSimulationError] = useState('');
+  const simulationRequestIdRef = useRef(0);
   const [page, setPage] = useState(1);
   const [dashboardData, setDashboardData] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
@@ -221,7 +222,11 @@ export default function MileageDashboard({ onExternal }) {
   }, []);
 
   useEffect(() => {
-    if (tab !== 'simulation') return undefined;
+    if (tab !== 'simulation') {
+      simulationRequestIdRef.current += 1;
+      setSimulationLoading(false);
+      return undefined;
+    }
 
     let mounted = true;
     setSimulationOptionsLoading(true);
@@ -249,6 +254,7 @@ export default function MileageDashboard({ onExternal }) {
 
     return () => {
       mounted = false;
+      simulationRequestIdRef.current += 1;
     };
   }, [tab]);
 
@@ -387,6 +393,8 @@ export default function MileageDashboard({ onExternal }) {
 
     setSimulationLoading(true);
     setSimulationError('');
+    const requestId = simulationRequestIdRef.current + 1;
+    simulationRequestIdRef.current = requestId;
 
     try {
       const data = await simulateMileage({
@@ -396,12 +404,14 @@ export default function MileageDashboard({ onExternal }) {
         targetPoints: hasBenefitTarget ? null : targetPoints,
         plannedActivities: selectedActivities,
       });
-      setSimulationResult(data);
+      if (requestId === simulationRequestIdRef.current) setSimulationResult(data);
     } catch (error) {
-      setSimulationError(error.message);
-      setSimulationResult(null);
+      if (requestId === simulationRequestIdRef.current) {
+        setSimulationError(error.message);
+        setSimulationResult(null);
+      }
     } finally {
-      setSimulationLoading(false);
+      if (requestId === simulationRequestIdRef.current) setSimulationLoading(false);
     }
   };
 
@@ -812,7 +822,7 @@ export default function MileageDashboard({ onExternal }) {
               </div>
             )}
             {!simulationOptionsLoading && simulationOptionsError && (
-              <div className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
+              <div role="alert" className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
                 시뮬레이션 선택지를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
               </div>
             )}
