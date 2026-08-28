@@ -268,6 +268,8 @@ export const COUNSELING_PUBLIC_RESULT_ERROR_CODE = {
   STATE_CONFLICT: 'S010',
   /** 학생 기준 없는·다른 학생의·미공개 결과 */
   RESULT_NOT_FOUND: 'S011',
+  /** 정정 전용. 정규화한 요약·실행계획이 최신 버전과 완전히 같아 거절됨(기본 메시지: 수정한 내역이 없습니다.) */
+  NO_CHANGES: 'S012',
 };
 
 /**

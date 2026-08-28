@@ -183,10 +183,13 @@ export default function SessionRecord() {
     isLoading,
     isError,
     error: listError,
+    isPlaceholderData,
   } = useQuery({
     queryKey: counselingSessionsQueryKey(page, statusFilter),
     queryFn: () =>
       fetchCounselingSessions({ page, size: PAGE_SIZE, sessionStatus: statusFilter || undefined }),
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[2] === statusFilter ? previousData : undefined,
   });
 
   const {
@@ -560,6 +563,17 @@ export default function SessionRecord() {
   const content = sessionPage?.content ?? [];
   const totalElements = sessionPage?.totalElements ?? 0;
   const totalPages = sessionPage?.totalPages ?? 0;
+
+  useEffect(() => {
+    if (isPlaceholderData || isError || !sessionPage) return;
+    if (totalPages === 0 && page !== 0) {
+      setPage(0);
+      return;
+    }
+    if (totalPages > 0 && page >= totalPages) {
+      setPage(totalPages - 1);
+    }
+  }, [isError, isPlaceholderData, page, sessionPage, totalPages]);
 
   return (
     <div>
