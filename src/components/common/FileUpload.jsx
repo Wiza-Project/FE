@@ -40,8 +40,9 @@ export function FileUpload({
     setRejectedNames(rejected.map((f) => f.name));
     if (valid.length === 0) return;
     const filesToUse = multiple ? valid : valid.slice(0, 1);
-    setFiles((prev) => (multiple ? [...prev, ...filesToUse] : filesToUse));
-    onFiles?.(filesToUse);
+    const next = multiple ? [...files, ...filesToUse] : filesToUse;
+    setFiles(next);
+    onFiles?.(next);
   };
 
   const removeFile = (i) => {

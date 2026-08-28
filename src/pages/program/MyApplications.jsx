@@ -81,6 +81,7 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [reapplyingIds, setReapplyingIds] = useState(new Set());
+  const [cancelingIds, setCancelingIds] = useState(new Set());
   const [reapplyTarget, setReapplyTarget] = useState(null);
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [openContentIds, setOpenContentIds] = useState(() => new Set());
@@ -131,17 +132,27 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
   );
 
   const runCancel = async (app) => {
+    setCancelingIds((prev) => new Set(prev).add(app.programId));
     try {
       await cancelMyApplication(app.programId, app.applicationId);
       toast('취소 처리되었습니다.', 'success');
       setReloadKey((k) => k + 1);
     } catch (err) {
       toast(err.message ?? '취소에 실패했습니다.', 'danger');
+    } finally {
+      clearCanceling(app.programId);
     }
   };
 
   const clearReapplying = (programId) =>
     setReapplyingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(programId);
+      return next;
+    });
+
+  const clearCanceling = (programId) =>
+    setCancelingIds((prev) => {
       const next = new Set(prev);
       next.delete(programId);
       return next;
@@ -450,9 +461,10 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                             </button>
                             <button
                               onClick={() => handleBtn(app)}
-                              className="h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]"
+                              disabled={reapplyingIds.has(app.programId) || cancelingIds.has(app.programId)}
+                              className="h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]"
                             >
-                              {btn?.label ?? '취소'}
+                              {cancelingIds.has(app.programId) ? '처리 중...' : (btn?.label ?? '취소')}
                             </button>
                           </>
                         ) : app.status === '취소' ? (
@@ -488,6 +500,7 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                             </button>
                             <button
                               onClick={() => handleBtn(app)}
+                              disabled={cancelingIds.has(app.programId)}
                               className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                                 app.status === '반려'
                                   ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
@@ -497,7 +510,7 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                                 app.status === '수료' ? { background: '#7C3AED', color: 'white' } : {}
                               }
                             >
-                              {btn?.label ?? app.status}
+                              {cancelingIds.has(app.programId) ? '처리 중...' : (btn?.label ?? app.status)}
                             </button>
                           </>
                         )}

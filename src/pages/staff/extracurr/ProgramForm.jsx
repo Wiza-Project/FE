@@ -347,6 +347,14 @@ function emptySession(localId) {
   };
 }
 
+// 1회차는 "전회차와 동일"을 선택할 대상이 없으므로 항상 DIRECT_INPUT이어야 한다.
+// 프리페치 데이터나 회차 삭제로 인덱스 0이 바뀌는 경우 모두 이 정규화를 거친다.
+function normalizeFirstSession(list) {
+  if (list.length === 0 || list[0].locationType === 'DIRECT_INPUT') return list;
+  const [first, ...rest] = list;
+  return [{ ...first, locationType: 'DIRECT_INPUT' }, ...rest];
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** 'YYYY-MM-DD' (+ 선택적 'HH:mm') → UTC ISO 문자열(Instant). 시각을 생략하면 자정으로 채운다.
@@ -575,31 +583,32 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
 
     // 기존 회차가 없는 프로그램(과거 이력)도 화면은 항상 최소 1장으로 시작한다.
     const existingSessions = Array.isArray(detailData.sessions) ? detailData.sessions : [];
-    setSessions(
+    const nextSessions =
       existingSessions.length > 0
         ? existingSessions.map((s, i) => {
             const startDate = formatDate(s.startsAt);
             const endDate = formatDate(s.endsAt);
             // 시각이 정확히 00:00이면 과거 데이터가 시간 미입력(자정 디폴트)이었을 가능성이 높아
-            // 빈 값으로 프리필해 불필요한 "00:00" 노출을 피한다.
-            const extractTime = (iso) => {
-              const time = iso ? iso.slice(11, 16) : '';
-              return time === '00:00' ? '' : time;
-            };
+            // 빈 값으로 프리필해 불필요한 "00:00" 노출을 피한다. 단, 한쪽만 자정이고
+            // 다른 쪽은 실제 시각이 있다면 자정 쪽도 사용자가 명시적으로 입력한 값일 수 있으므로
+            // 두 값이 모두 자정일 때만 지운다.
+            const startTime = s.startsAt ? s.startsAt.slice(11, 16) : '';
+            const endTime = s.endsAt ? s.endsAt.slice(11, 16) : '';
+            const bothMidnight = startTime === '00:00' && endTime === '00:00';
             return {
               localId: s.programSessionId ?? `existing-${i}`,
               sessionName: s.sessionName ?? '',
               dateMode: startDate === endDate ? 'SINGLE' : 'RANGE',
               startsAt: startDate,
-              startsAtTime: extractTime(s.startsAt),
+              startsAtTime: bothMidnight ? '' : startTime,
               endsAt: endDate,
-              endsAtTime: extractTime(s.endsAt),
+              endsAtTime: bothMidnight ? '' : endTime,
               locationType: s.locationType ?? 'DIRECT_INPUT',
               location: s.location ?? '',
             };
           })
-        : [emptySession('new-1')],
-    );
+        : [emptySession('new-1')];
+    setSessions(normalizeFirstSession(nextSessions));
 
     setPrefilled(true);
   }, [isEdit, prefilled, detailData, competencyOptions, programTypeOptions, departmentOptions]);
@@ -791,7 +800,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   };
 
   const removeSession = (localId) => {
-    setSessions((prev) => (prev.length <= 1 ? prev : prev.filter((s) => s.localId !== localId)));
+    setSessions((prev) =>
+      prev.length <= 1 ? prev : normalizeFirstSession(prev.filter((s) => s.localId !== localId)),
+    );
   };
 
   // 수정 모드: 상세조회가 끝나고 옵션 목록까지 프리필됐을 때만 폼을 보여준다.
@@ -1173,7 +1184,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               }}
             />
             {uploadMutation.isPending ? (
-              <p className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
+              <p role="status" className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
             ) : (
               isEdit &&
               !existingFileRemoved && (
