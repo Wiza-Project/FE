@@ -126,7 +126,11 @@ export const COUNSELING_RESERVATION_STATUS_LABEL = {
 
 /** 동의 정책 모듈 코드 — 백엔드 ConsentModuleCode enum 기준. 코드 분기용 상수. */
 export const CONSENT_MODULE_CODE = {
+  COMMON: 'COMMON',
+  ASSESSMENT: 'ASSESSMENT',
   COUNSELING: 'COUNSELING',
+  CAREER: 'CAREER',
+  PROGRAM: 'PROGRAM',
 };
 
 /** 동의 정책 유형 — 백엔드 ConsentType enum 기준. 코드 분기용 상수. */
@@ -215,6 +219,44 @@ export const COUNSELING_SESSION_ERROR_CODE = {
   INVALID_STATE: 'S008',
   /** 비공개 기록 전용. 회기·출결·배정·기록 상태가 요청과 맞지 않음(최신 서버 상태 재조회 필요) */
   CONFLICT: 'S009',
+};
+
+/** 학생 진단 응시(attempt)의 서버 상태 — AssessmentAttempt.attemptStatus. */
+export const ASSESSMENT_ATTEMPT_STATUS = {
+  NOT_STARTED: 'NOT_STARTED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+  SCORED: 'SCORED',
+};
+
+/**
+ * 회기별 공개 상담 결과의 상태 — CounselorCounselingPublicResultResponse.resultStatus.
+ * DB 상태 컬럼이 아니라 서버가 계산해 내려준다(행 없음=EMPTY, 미공개=DRAFT, 공개=PUBLISHED).
+ * 학생 응답에는 이 필드가 없다(학생은 PUBLISHED만 조회하므로 항상 공개 상태).
+ */
+export const COUNSELING_PUBLIC_RESULT_STATUS = {
+  EMPTY: 'EMPTY',
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+};
+
+export const COUNSELING_PUBLIC_RESULT_STATUS_LABEL = {
+  [COUNSELING_PUBLIC_RESULT_STATUS.EMPTY]: '결과 없음',
+  [COUNSELING_PUBLIC_RESULT_STATUS.DRAFT]: '초안(비공개)',
+  [COUNSELING_PUBLIC_RESULT_STATUS.PUBLISHED]: '공개됨',
+};
+
+/** 공개 상담 결과·예약 완료 6개 API가 공통으로 반환하는 업무 오류 코드. */
+export const COUNSELING_PUBLIC_RESULT_ERROR_CODE = {
+  INVALID_INPUT: 'C001',
+  /** 비활성 계정 또는 역할 없음 */
+  FORBIDDEN: 'A004',
+  /** 상담사 기준 없는 회기 또는 다른 상담사의 회기 */
+  SESSION_NOT_FOUND: 'S007',
+  /** 허용되지 않은 회기·결과·예약·배정 상태, 비공개 기록 미확정, 최종 대상 불일치, 남은 PLANNED 회기 */
+  STATE_CONFLICT: 'S010',
+  /** 학생 기준 없는·다른 학생의·미공개 결과 */
+  RESULT_NOT_FOUND: 'S011',
 };
 
 /**
