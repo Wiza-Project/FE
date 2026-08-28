@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { fetchMyApplications, cancelMyApplication, applyToProgram } from '@/api/programApplications';
+import {
+  fetchMyApplications,
+  cancelMyApplication,
+  applyToProgram,
+  confirmMyApplication,
+} from '@/api/programApplications';
 import {
   PageHeader,
   StatTile,
@@ -139,6 +144,24 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
       setReloadKey((k) => k + 1);
     } catch (err) {
       toast(err.message ?? '재신청에 실패했습니다.', 'danger');
+    } finally {
+      setReapplyingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(app.programId);
+        return next;
+      });
+    }
+  };
+
+  const runConfirm = async (app) => {
+    if (reapplyingIds.has(app.programId)) return;
+    setReapplyingIds((prev) => new Set(prev).add(app.programId));
+    try {
+      await confirmMyApplication(app.programId, app.applicationId);
+      toast('신청이 확정되었습니다.', 'success');
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      toast(err.message ?? '확정에 실패했습니다.', 'danger');
     } finally {
       setReapplyingIds((prev) => {
         const next = new Set(prev);
@@ -343,6 +366,15 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                             className="h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]"
                           >
                             사유확인
+                          </button>
+                        ) : app.status === '대기' ? (
+                          <button
+                            onClick={() => runConfirm(app)}
+                            disabled={reapplyingIds.has(app.programId)}
+                            className="h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-white"
+                            style={{ background: ACCENT }}
+                          >
+                            {reapplyingIds.has(app.programId) ? '처리 중...' : '신청'}
                           </button>
                         ) : app.status === '취소' ? (
                           isRecruitmentClosed(app.recruitmentEndsAt, now) ? (
