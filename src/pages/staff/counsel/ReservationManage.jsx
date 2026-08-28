@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, Pagination, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
 import {
@@ -69,9 +69,11 @@ export default function ReservationManage() {
     isLoading,
     isError,
     error,
+    isPlaceholderData,
   } = useQuery({
     queryKey: pendingReservationsQueryKey(page),
     queryFn: () => fetchPendingCounselorReservations({ page, size: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
   });
 
   const {
@@ -164,11 +166,16 @@ export default function ReservationManage() {
   useEffect(() => {
     // 승인·반려로 목록이 줄어 현재 페이지가 범위를 벗어나면 마지막 유효 페이지로 보정한다.
     // 보정하지 않으면 백엔드가 범위 밖 페이지에 빈 목록을 돌려줘 앞 페이지에 예약이 남아도
-    // "대기 없음"으로 오인된다. totalPages가 0(전체 비어 있음)이면 빈 상태 표시가 맞으므로 보정하지 않는다.
-    if (totalPages > 0 && page > totalPages - 1) {
+    // "대기 없음"으로 오인된다. 이전 페이지를 표시 중일 때는 그 응답으로 보정하지 않는다.
+    if (isPlaceholderData || isError || !pendingPage) return;
+    if (totalPages === 0 && page !== 0) {
+      setPage(0);
+      return;
+    }
+    if (totalPages > 0 && page >= totalPages) {
       setPage(totalPages - 1);
     }
-  }, [totalPages, page]);
+  }, [isError, isPlaceholderData, pendingPage, totalPages, page]);
 
   return (
     <div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, ConfirmDialog, Modal, Pagination, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
 import {
@@ -169,6 +169,7 @@ export default function SessionResult() {
   const [correctionPlan, setCorrectionPlan] = useState('');
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionError, setCorrectionError] = useState('');
+  const [correctionFieldError, setCorrectionFieldError] = useState('');
   // 모달을 연 시점(또는 충돌 후 사용자가 최신 버전으로 갱신한 시점)의 기준 버전·요약·실행계획.
   // 결과 쿼리가 그 사이 다시 조회돼도 이 값은 자동으로 덮어쓰지 않는다 — 사용자가 명시적으로
   // '최신 버전 기준으로 계속'을 눌렀을 때만 바꾼다.
@@ -195,9 +196,11 @@ export default function SessionResult() {
   const correctionContentRef = useRef(null);
   const correctionTriggerRef = useRef(null);
   const restoreCorrectionTriggerFocus = useCallback(() => {
+    const correctionTrigger = correctionTriggerRef.current;
+    correctionTriggerRef.current = null;
     window.requestAnimationFrame(() => {
-      if (correctionTriggerRef.current?.isConnected) {
-        correctionTriggerRef.current.focus();
+      if (correctionTrigger?.isConnected) {
+        correctionTrigger.focus();
       }
     });
   }, []);
@@ -234,18 +237,14 @@ export default function SessionResult() {
     isError,
     error: listError,
     refetch: refetchSessions,
+    isPlaceholderData,
   } = useQuery({
     queryKey: counselingSessionsQueryKey(page, statusFilter),
     queryFn: () =>
       fetchCounselingSessions({ page, size: PAGE_SIZE, sessionStatus: statusFilter || undefined }),
     retry: false,
+    placeholderData: keepPreviousData,
   });
-
-  useEffect(() => {
-    return () => {
-      queryClient.removeQueries({ queryKey: ['counselingSessions'], type: 'inactive' });
-    };
-  }, [page, statusFilter, queryClient]);
 
   // 사용자가 목록에서 선택한 회기의 공개 결과만 조회한다. gcTime: 0 — 화면을 벗어나면 즉시
   // 캐시에서 제거해 공개 요약·실행계획이 기본 gcTime(5분) 동안 남지 않게 한다.
@@ -310,6 +309,7 @@ export default function SessionResult() {
       setCorrectionPlan('');
       setCorrectionReason('');
       setCorrectionError('');
+      setCorrectionFieldError('');
       setCorrectionBase(null);
       setConflictLatest(null);
       setHistoryOpen(false);
@@ -452,6 +452,18 @@ export default function SessionResult() {
 
   // 정정은 낙관적 업데이트를 하지 않는다 — 서버가 만든 새 버전(v+1)을 성공 응답으로 받은
   // 뒤에만 화면에 반영한다. 실패 코드별 처리는 아래 onError에서 분기한다.
+  const resetCorrectionModal = useCallback(() => {
+    setCorrectionOpen(false);
+    setCorrectionSummary('');
+    setCorrectionPlan('');
+    setCorrectionReason('');
+    setCorrectionError('');
+    setCorrectionFieldError('');
+    setCorrectionBase(null);
+    setConflictLatest(null);
+    restoreCorrectionTriggerFocus();
+  }, [restoreCorrectionTriggerFocus]);
+
   const correctMutation = useMutation({
     mutationFn: ({ sessionId, expectedVersionNo, resultSummary, actionPlan, correctionReason: reason }) =>
       correctCounselorPublicResult(sessionId, {
@@ -467,7 +479,7 @@ export default function SessionResult() {
       queryClient.invalidateQueries({ queryKey: counselorPublicResultHistoryQueryKey(sessionId) });
       queryClient.invalidateQueries({ queryKey: ['studentCounselingResults'] });
       queryClient.invalidateQueries({ queryKey: studentCounselingResultDetailQueryKey(sessionId) });
-      closeCorrectionModal();
+      resetCorrectionModal();
       toast('결과를 정정했습니다.', 'success');
     },
     onError: async (mutationError, { sessionId }) => {
@@ -525,6 +537,7 @@ export default function SessionResult() {
     setCorrectionPlan(publicResult.actionPlan ?? '');
     setCorrectionReason('');
     setCorrectionError('');
+    setCorrectionFieldError('');
     setConflictLatest(null);
     setCorrectionOpen(true);
   };
@@ -535,38 +548,37 @@ export default function SessionResult() {
   // 위 closeHistory와 같은 이유로 useCallback을 쓴다.
   const closeCorrectionModal = useCallback(() => {
     if (correctMutation.isPending) return;
-    setCorrectionOpen(false);
-    setCorrectionSummary('');
-    setCorrectionPlan('');
-    setCorrectionReason('');
-    setCorrectionError('');
-    setCorrectionBase(null);
-    setConflictLatest(null);
-    restoreCorrectionTriggerFocus();
-  }, [correctMutation.isPending, restoreCorrectionTriggerFocus]);
+    resetCorrectionModal();
+  }, [correctMutation.isPending, resetCorrectionModal]);
 
   const submitCorrection = () => {
     if (!correctionBase || selectedSessionId === null) return;
+    setCorrectionFieldError('');
     const trimmedSummary = correctionSummary.trim();
     if (!trimmedSummary) {
+      setCorrectionFieldError('summary');
       setCorrectionError('공개 요약을 입력해 주세요.');
       return;
     }
     if (trimmedSummary.length > SUMMARY_MAX_LENGTH) {
+      setCorrectionFieldError('summary');
       setCorrectionError(`공개 요약은 ${SUMMARY_MAX_LENGTH.toLocaleString()}자 이내로 입력해 주세요.`);
       return;
     }
     const normalizedPlan = normalizeActionPlanForCompare(correctionPlan);
     if (normalizedPlan && normalizedPlan.length > ACTION_PLAN_MAX_LENGTH) {
+      setCorrectionFieldError('plan');
       setCorrectionError(`실행 계획은 ${ACTION_PLAN_MAX_LENGTH.toLocaleString()}자 이내로 입력해 주세요.`);
       return;
     }
     const trimmedReason = correctionReason.trim();
     if (!trimmedReason) {
+      setCorrectionFieldError('reason');
       setCorrectionError('정정 사유를 입력해 주세요.');
       return;
     }
     if (trimmedReason.length > CORRECTION_REASON_MAX_LENGTH) {
+      setCorrectionFieldError('reason');
       setCorrectionError(`정정 사유는 ${CORRECTION_REASON_MAX_LENGTH.toLocaleString()}자 이내로 입력해 주세요.`);
       return;
     }
@@ -578,6 +590,7 @@ export default function SessionResult() {
       setCorrectionError('수정한 내역이 없습니다.');
       return;
     }
+    setCorrectionFieldError('');
     setCorrectionError('');
     correctMutation.mutate({
       sessionId: selectedSessionId,
@@ -716,6 +729,17 @@ export default function SessionResult() {
   const content = sessionPage?.content ?? [];
   const totalElements = sessionPage?.totalElements ?? 0;
   const totalPages = sessionPage?.totalPages ?? 0;
+
+  useEffect(() => {
+    if (isPlaceholderData || isError || !sessionPage) return;
+    if (totalPages === 0 && page !== 0) {
+      setPage(0);
+      return;
+    }
+    if (totalPages > 0 && page >= totalPages) {
+      setPage(totalPages - 1);
+    }
+  }, [isError, isPlaceholderData, page, sessionPage, totalPages]);
 
   return (
     <div>
@@ -1167,10 +1191,17 @@ export default function SessionResult() {
             <textarea
               id="correctionSummary"
               value={correctionSummary}
-              onChange={(e) => setCorrectionSummary(e.target.value)}
+              onChange={(e) => {
+                setCorrectionSummary(e.target.value);
+                if (correctionFieldError === 'summary') {
+                  setCorrectionFieldError('');
+                  setCorrectionError('');
+                }
+              }}
               required
               aria-required="true"
-              aria-invalid={Boolean(correctionError)}
+              aria-invalid={correctionFieldError === 'summary'}
+              aria-describedby={correctionFieldError === 'summary' ? 'correction-error' : undefined}
               rows={5}
               maxLength={SUMMARY_MAX_LENGTH}
               disabled={correctMutation.isPending || Boolean(conflictLatest)}
@@ -1188,8 +1219,16 @@ export default function SessionResult() {
             <textarea
               id="correctionPlan"
               value={correctionPlan}
-              onChange={(e) => setCorrectionPlan(e.target.value)}
+              onChange={(e) => {
+                setCorrectionPlan(e.target.value);
+                if (correctionFieldError === 'plan') {
+                  setCorrectionFieldError('');
+                  setCorrectionError('');
+                }
+              }}
               aria-required="false"
+              aria-invalid={correctionFieldError === 'plan'}
+              aria-describedby={correctionFieldError === 'plan' ? 'correction-error' : undefined}
               rows={4}
               maxLength={ACTION_PLAN_MAX_LENGTH}
               disabled={correctMutation.isPending || Boolean(conflictLatest)}
@@ -1207,10 +1246,17 @@ export default function SessionResult() {
             <textarea
               id="correctionReason"
               value={correctionReason}
-              onChange={(e) => setCorrectionReason(e.target.value)}
+              onChange={(e) => {
+                setCorrectionReason(e.target.value);
+                if (correctionFieldError === 'reason') {
+                  setCorrectionFieldError('');
+                  setCorrectionError('');
+                }
+              }}
               required
               aria-required="true"
-              aria-invalid={Boolean(correctionError)}
+              aria-invalid={correctionFieldError === 'reason'}
+              aria-describedby={correctionFieldError === 'reason' ? 'correction-error' : undefined}
               rows={3}
               maxLength={CORRECTION_REASON_MAX_LENGTH}
               placeholder="학생에게 공개된 내용 중 무엇을 왜 바로잡는지 입력하세요."
@@ -1224,6 +1270,7 @@ export default function SessionResult() {
 
           {correctionError && (
             <p
+              id="correction-error"
               className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]"
               role="alert"
             >

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, ConfirmDialog, Modal, Pagination, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
 import {
@@ -183,10 +183,12 @@ export default function SessionRecord() {
     isLoading,
     isError,
     error: listError,
+    isPlaceholderData,
   } = useQuery({
     queryKey: counselingSessionsQueryKey(page, statusFilter),
     queryFn: () =>
       fetchCounselingSessions({ page, size: PAGE_SIZE, sessionStatus: statusFilter || undefined }),
+    placeholderData: keepPreviousData,
   });
 
   const {
@@ -560,6 +562,17 @@ export default function SessionRecord() {
   const content = sessionPage?.content ?? [];
   const totalElements = sessionPage?.totalElements ?? 0;
   const totalPages = sessionPage?.totalPages ?? 0;
+
+  useEffect(() => {
+    if (isPlaceholderData || isError || !sessionPage) return;
+    if (totalPages === 0 && page !== 0) {
+      setPage(0);
+      return;
+    }
+    if (totalPages > 0 && page >= totalPages) {
+      setPage(totalPages - 1);
+    }
+  }, [isError, isPlaceholderData, page, sessionPage, totalPages]);
 
   return (
     <div>
