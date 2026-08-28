@@ -450,6 +450,41 @@ export const fetchAssessmentResult = async (attemptId) => {
 };
 
 /**
+ * @typedef {Object} AssessmentHistoryItem
+ * @property {number} attemptId 결과 조회(fetchAssessmentResult)·사전·사후 비교에 그대로 재사용하는 키
+ * @property {number} roundId
+ * @property {string} assessmentName
+ * @property {number} academicYear
+ * @property {string} semesterCode 공통코드 SEMESTER의 code
+ * @property {'PRE'|'POST'} assessmentType
+ * @property {string} submittedAt ISO-8601
+ */
+
+/**
+ * 과거 진단 결과 목록 조회. 본인이 응시완료(제출)한 회차를 제출일 최신순으로 페이지 단위
+ * 조회한다. 응답에 역량 점수는 없으므로, 회차를 고르면 결과 조회 API(fetchAssessmentResult)를
+ * attemptId로 재호출해 상세를 채운다.
+ *
+ * @param {Object} [params]
+ * @param {string} [params.keyword] 진단명 부분일치 검색
+ * @param {number} [params.page] 0-base 페이지 번호
+ * @param {number} [params.size] 페이지당 건수 (서버 기본 10)
+ * @returns {Promise<{
+ *   content: AssessmentHistoryItem[],
+ *   page: number,
+ *   size: number,
+ *   totalElements: number,
+ *   totalPages: number,
+ *   first: boolean,
+ *   last: boolean,
+ * }>}
+ */
+export const fetchAssessmentHistory = async (params) => {
+  const { data } = await apiClient.get('/students/assessment-history', { params });
+  return data;
+};
+
+/**
  * 진단 안내 조회. 진단명·응시기간·문항수·예상 소요시간과 함께, 이미 응시를
  * 시작한 적이 있으면 기존 attemptId/attemptStatus를 내려준다(없으면 둘 다 null).
  *
