@@ -140,7 +140,7 @@ function DateInput({ id, value, onChange, error, ariaLabel }) {
   );
 }
 
-function TimeInput({ id, value, onChange, ariaLabel }) {
+function TimeInput({ id, value, onChange, error, ariaLabel }) {
   return (
     <input
       id={id}
@@ -148,7 +148,8 @@ function TimeInput({ id, value, onChange, ariaLabel }) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
-      className="h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors"
+      aria-invalid={!!error}
+      className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
 }
@@ -187,6 +188,8 @@ function SessionRadioGroup({ name, options, value, onChange, ariaLabel }) {
  * @param {boolean} props.removable
  * @param {boolean} [props.startsAtError]
  * @param {boolean} [props.endsAtError]
+ * @param {boolean} [props.startsAtTimeError]
+ * @param {boolean} [props.endsAtTimeError]
  * @param {boolean} [props.locationError]
  */
 function SessionCard({
@@ -197,6 +200,8 @@ function SessionCard({
   removable,
   startsAtError,
   endsAtError,
+  startsAtTimeError,
+  endsAtTimeError,
   locationError,
 }) {
   const isSingle = session.dateMode === 'SINGLE';
@@ -254,12 +259,14 @@ function SessionCard({
                 value={session.startsAtTime}
                 onChange={(v) => onChange({ startsAtTime: v })}
                 ariaLabel={`${index + 1}회차 시작 시각`}
+                error={startsAtTimeError}
               />
               <span className="text-[12px] text-[#9AA0A6]">~</span>
               <TimeInput
                 value={session.endsAtTime}
                 onChange={(v) => onChange({ endsAtTime: v })}
                 ariaLabel={`${index + 1}회차 종료 시각`}
+                error={endsAtTimeError}
               />
             </div>
           </Field>
@@ -276,6 +283,7 @@ function SessionCard({
                 value={session.startsAtTime}
                 onChange={(v) => onChange({ startsAtTime: v })}
                 ariaLabel={`${index + 1}회차 시작 시각`}
+                error={startsAtTimeError}
               />
               <span className="text-[12px] text-[#9AA0A6]">~</span>
               <DateInput
@@ -288,6 +296,7 @@ function SessionCard({
                 value={session.endsAtTime}
                 onChange={(v) => onChange({ endsAtTime: v })}
                 ariaLabel={`${index + 1}회차 종료 시각`}
+                error={endsAtTimeError}
               />
             </div>
           </Field>
@@ -450,6 +459,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const [sessions, setSessions] = useState(() => (isEdit ? [] : [emptySession('new-1')]));
   // 시작/종료일이 비어있는 카드의 localId — SessionCard에 빨간 테두리로 표시하기 위함
   const [sessionFieldErrors, setSessionFieldErrors] = useState(new Set());
+  // 당일 시각 부분 입력/순서 오류가 있는 카드의 localId — 시각 입력란에 빨간 테두리로 표시
+  const [sessionTimeErrors, setSessionTimeErrors] = useState(new Set());
   // 직접입력인데 장소가 비어있는 카드의 localId
   const [sessionLocationErrors, setSessionLocationErrors] = useState(new Set());
 
@@ -698,23 +709,31 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       toast('최소 1회차는 입력해야합니다.', 'error');
       return false;
     }
-    const invalidSessions = sessions.filter((s) => {
+    const dateErrorSessions = [];
+    const timeErrorSessions = [];
+    sessions.forEach((s) => {
       const endDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
-      if (!s.startsAt || !endDate) return true;
-      if (s.startsAt > endDate) return true;
-      if (s.startsAt === endDate) {
-        if (Boolean(s.startsAtTime) !== Boolean(s.endsAtTime)) return true;
-        if (s.startsAtTime && s.endsAtTime && s.startsAtTime >= s.endsAtTime) return true;
+      if (!s.startsAt || !endDate || s.startsAt > endDate) {
+        dateErrorSessions.push(s);
+        return;
       }
-      return false;
+      if (s.startsAt === endDate) {
+        if (Boolean(s.startsAtTime) !== Boolean(s.endsAtTime)) {
+          timeErrorSessions.push(s);
+        } else if (s.startsAtTime && s.endsAtTime && s.startsAtTime >= s.endsAtTime) {
+          timeErrorSessions.push(s);
+        }
+      }
     });
-    if (invalidSessions.length > 0) {
-      setSessionFieldErrors(new Set(invalidSessions.map((s) => s.localId)));
+    if (dateErrorSessions.length > 0 || timeErrorSessions.length > 0) {
+      setSessionFieldErrors(new Set(dateErrorSessions.map((s) => s.localId)));
+      setSessionTimeErrors(new Set(timeErrorSessions.map((s) => s.localId)));
       setActiveTab('sessions');
       toast('모든 회차의 날짜(및 시각)를 확인해 주세요.', 'error');
       return false;
     }
     setSessionFieldErrors(new Set());
+    setSessionTimeErrors(new Set());
 
     const missingLocationSessions = sessions.filter(
       (s) => s.locationType === 'DIRECT_INPUT' && !s.location.trim(),
@@ -1060,6 +1079,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                 removable={sessions.length > 1}
                 startsAtError={sessionFieldErrors.has(s.localId)}
                 endsAtError={sessionFieldErrors.has(s.localId)}
+                startsAtTimeError={sessionTimeErrors.has(s.localId)}
+                endsAtTimeError={sessionTimeErrors.has(s.localId)}
                 locationError={sessionLocationErrors.has(s.localId)}
               />
             ))}
