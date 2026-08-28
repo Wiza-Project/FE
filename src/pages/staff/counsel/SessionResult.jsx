@@ -472,14 +472,14 @@ export default function SessionResult() {
         resultSummary,
         actionPlan,
         correctionReason: reason,
-      }),
+    }),
     onSuccess: (data, { sessionId }) => {
-      if (!isResultScreenFor(sessionId)) return;
-      updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), data);
       // 이력·학생 쪽 캐시도 함께 무효화해 다음 조회에서 정정된 최신 버전을 읽게 한다.
       queryClient.invalidateQueries({ queryKey: counselorPublicResultHistoryQueryKey(sessionId) });
       queryClient.invalidateQueries({ queryKey: ['studentCounselingResults'] });
       queryClient.invalidateQueries({ queryKey: studentCounselingResultDetailQueryKey(sessionId) });
+      if (!isResultScreenFor(sessionId)) return;
+      updateQueryIfPresent(queryClient, counselorPublicResultQueryKey(sessionId), data);
       resetCorrectionModal();
       toast('결과를 정정했습니다.', 'success');
     },
