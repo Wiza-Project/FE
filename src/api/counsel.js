@@ -552,12 +552,12 @@ export const counselingPrivateRecordQueryKey = (sessionId) => [
  * @property {number} reservationId
  * @property {number} assignmentId 회기에 고정된 배정 ID
  * @property {number|null} publicResultId resultStatus가 EMPTY이면 null
- * @property {number|null} versionNo 체크리스트 9번 최초 버전은 1, EMPTY이면 null
- * @property {string|null} resultSummary 공개 요약, EMPTY이면 null
- * @property {string|null} actionPlan 선택 실행 계획, 값이 없으면 null(배열 아님)
+ * @property {number|null} versionNo 응답 시점의 최신 버전 번호. 최초 공개는 1, 정정마다 +1, EMPTY이면 null
+ * @property {string|null} resultSummary 응답 시점 최신 버전의 공개 요약, EMPTY이면 null
+ * @property {string|null} actionPlan 응답 시점 최신 버전의 실행 계획, 값이 없으면 null(배열 아님)
  * @property {'EMPTY'|'DRAFT'|'PUBLISHED'} resultStatus 서버 계산값. DB 상태 컬럼이 아니다
- * @property {string|null} createdByName 초안 작성 상담사 표시명, EMPTY이면 null
- * @property {string|null} publishedAt UTC ISO-8601 Instant, 공개 전에는 null
+ * @property {string|null} createdByName 응답 시점 최신 버전을 만든 상담사 표시명, EMPTY이면 null
+ * @property {string|null} publishedAt UTC ISO-8601 Instant. 응답 시점 최신 버전의 최초 공개 또는 정정 공개 시각, 공개 전에는 null
  * @property {string} reservationStatus 예약의 현재 상태
  * @property {boolean} assignmentActive 이 회기가 속한 배정의 활성 여부
  * @property {boolean} privateRecordConfirmed 같은 회기의 비공개 기록 확정 여부(원문 미포함)
@@ -565,6 +565,7 @@ export const counselingPrivateRecordQueryKey = (sessionId) => [
  * @property {boolean} canSaveDraft 현재 사용자·배정·회기·결과 상태에서 저장 가능 여부
  * @property {boolean} canPublish 일반 공개 가능 여부
  * @property {boolean} canCompleteReservation 이 결과로 최종 완료 가능 여부
+ * @property {boolean} canCorrect 활성 ST200인 원래 담당 상담사가 최신 PUBLISHED 결과를 정정할 수 있는지 서버가 계산한 값
  */
 
 /**
@@ -640,6 +641,72 @@ export const completeCounselingWithPublicResult = async (sessionId) => {
 
 // 상담사 공개 결과 전용 query key. 회기 목록·상세, 비공개 기록 캐시와 분리한다.
 export const counselorPublicResultQueryKey = (sessionId) => ['counselorPublicResult', sessionId];
+
+/**
+ * @typedef {Object} CorrectCounselorPublicResultRequest
+ * @property {number} expectedVersionNo 1 이상. 서버가 잠금 후 다시 읽은 최신 공개 버전과 같아야 한다(다르면 409 S010).
+ * @property {string} resultSummary 호출부 검증 후 1~3,000자 필수. 함수 경계에서 다시 trim한다.
+ * @property {string|null} [actionPlan] 함수 경계에서 trim한 값이 비어 있으면 null로 보낸다.
+ * @property {string} correctionReason 호출부 검증 후 1~500자 필수. 함수 경계에서 다시 trim한다.
+ */
+
+/**
+ * 최신 PUBLISHED 공개 결과를 정정한다. 기존 행은 수정하지 않고 versionNo + 1 행을 새로
+ * 즉시 공개한다. 요청한 expectedVersionNo가 서버의 최신 버전과 다르면 409 S010(충돌),
+ * 정규화한 요약·실행계획이 최신 버전과 완전히 같으면 409 S012(무변경)로 거절된다.
+ *
+ * @param {number} sessionId
+ * @param {CorrectCounselorPublicResultRequest} request
+ * @returns {Promise<CounselorCounselingPublicResultResponse>} 정정 성공 후의 최신(=새로 만든) 버전
+ */
+export const correctCounselorPublicResult = async (sessionId, request) => {
+  // 서버 검증과 별개로 함수 경계에서 정규화한다. expectedVersionNo는 충돌 판정의 기준이므로
+  // 호출부가 전달한 값을 그대로 보내고 여기서 가공하지 않는다.
+  const normalized = {
+    expectedVersionNo: request?.expectedVersionNo,
+    resultSummary: request?.resultSummary?.trim?.() ?? '',
+    actionPlan: request?.actionPlan?.trim?.() || null,
+    correctionReason: request?.correctionReason?.trim?.() ?? '',
+  };
+  const { data } = await apiClient.post(
+    `/counselors/counseling-sessions/${sessionId}/public-result/corrections`,
+    normalized,
+  );
+  return data;
+};
+
+/**
+ * @typedef {Object} CounselorPublicResultHistoryItem
+ * @property {number} publicResultId 공개 결과 버전 행 ID
+ * @property {number} versionNo 회기 내 버전 번호
+ * @property {string} resultSummary 해당 버전의 완전한 공개 요약
+ * @property {string|null} actionPlan 해당 버전의 실행 계획
+ * @property {string|null} correctionReason v1은 null, 정정 버전은 항상 값이 있음
+ * @property {string|null} createdByName 해당 버전 작성자 표시명. 사용자 삭제 등으로 찾지 못하면 null
+ * @property {string} publishedAt UTC ISO-8601 Instant. 최초 공개 또는 정정 즉시 공개 시각
+ */
+
+/**
+ * 회기의 전체 공개 결과 버전 이력을 versionNo DESC로 조회한다. 접근 가능한 회기지만 공개
+ * 버전이 없으면 빈 배열을 반환한다(정상 상태). 담당(또는 과거 담당) 상담사 본인만 조회할 수
+ * 있고 학생에게는 이 API가 없다. 사용자가 이력 보기를 선택했을 때만 호출해야 한다.
+ *
+ * @param {number} sessionId
+ * @returns {Promise<CounselorPublicResultHistoryItem[]>}
+ */
+export const getCounselorPublicResultHistory = async (sessionId) => {
+  const { data } = await apiClient.get(
+    `/counselors/counseling-sessions/${sessionId}/public-result/history`,
+  );
+  return data;
+};
+
+// 상담사 공개 결과 이력 전용 query key. 최신 결과·회기·비공개 기록 캐시와 분리해 이력을
+// 닫을 때 이 키만 골라 제거할 수 있게 한다.
+export const counselorPublicResultHistoryQueryKey = (sessionId) => [
+  'counselorPublicResultHistory',
+  sessionId,
+];
 
 /**
  * @typedef {Object} StudentCounselingPublicResultResponse
