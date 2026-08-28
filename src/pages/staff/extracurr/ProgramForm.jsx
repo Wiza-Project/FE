@@ -1146,19 +1146,34 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           hidden={activeTab !== 'attachment'}
         >
           <Field label="운영계획서 첨부 (선택)">
-            {isEdit && existingFileName && !existingFileRemoved && fileGroupId == null && (
-              <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#F9FAFB] rounded-[6px] border border-[#E5E7EB]">
-                <span className="text-[12px] text-[#1F2328] flex-1 truncate">
-                  {existingFileName}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setExistingFileRemoved(true)}
-                  className="text-[11px] font-semibold text-[#CF222E] hover:underline"
-                >
-                  삭제
-                </button>
-              </div>
+            {isEdit && existingFileName && fileGroupId == null && (
+              existingFileRemoved ? (
+                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#FFF8F8] rounded-[6px] border border-[#F3D6D8]">
+                  <span className="text-[12px] text-[#CF222E] flex-1 truncate line-through">
+                    {existingFileName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExistingFileRemoved(false)}
+                    className="text-[11px] font-semibold text-[#2563EB] hover:underline"
+                  >
+                    되돌리기
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#F9FAFB] rounded-[6px] border border-[#E5E7EB]">
+                  <span className="text-[12px] text-[#1F2328] flex-1 truncate">
+                    {existingFileName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExistingFileRemoved(true)}
+                    className="text-[11px] font-semibold text-[#CF222E] hover:underline"
+                  >
+                    삭제
+                  </button>
+                </div>
+              )
             )}
             <FileUpload
               accept=".pdf"
