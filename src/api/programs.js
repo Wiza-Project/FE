@@ -119,7 +119,16 @@ export const fetchProgramDetailAdmin = async (programId) => {
  * 비교과 프로그램 수정. PUT /api/admin/programs/{programId}
  * 모집중이며 본인 소유인 프로그램만 가능. 실패 시 403(A004) 또는 400(PROGRAM_NOT_EDITABLE/P009).
  * @param {number} programId
- * @param {Object} payload ProgramUpdateRequestDTO와 동일한 형태
+ * @param {Object} payload ProgramUpdateRequestDTO와 동일한 형태.
+ *   fileGroupId를 생략하면 기존 첨부(file_group_id)를 그대로 유지한다. 새 파일을
+ *   첨부하려면 fileGroupId(uploadProgramOperationPlan으로 먼저 발급)를 보낸다.
+ *   기존 첨부만 제거하려면 fileGroupId 없이 clearFileGroup: true를 보낸다 —
+ *   FileGroup/StoredFile은 program 외 다른 도메인도 함께 쓰는 공용 테이블이라
+ *   이 요청은 프로그램의 file_group_id 연결만 해제(unlink)할 뿐 FileGroup/StoredFile
+ *   row 자체는 삭제하지 않는다. fileGroupId와 clearFileGroup을 동시에 보내면
+ *   400(PROGRAM_FILE_GROUP_CONFLICT/P023)으로 거부된다.
+ * @param {number} [payload.fileGroupId]
+ * @param {boolean} [payload.clearFileGroup]
  */
 export const updateProgram = async (programId, payload) => {
   const { data } = await apiClient.put(`/admin/programs/${programId}`, payload);

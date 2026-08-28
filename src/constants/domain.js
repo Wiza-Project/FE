@@ -136,6 +136,17 @@ export const CONSENT_MODULE_CODE = {
 /** 동의 정책 유형 — 백엔드 ConsentType enum 기준. 코드 분기용 상수. */
 export const CONSENT_TYPE = {
   PERSONAL_INFO: 'PERSONAL_INFO',
+  TERMS_OF_SERVICE: 'TERMS_OF_SERVICE',
+};
+
+/**
+ * 프로그램 신청 API가 반환하는 업무 오류 코드.
+ * REQUIRED_CONSENT_NOT_AGREED: PROGRAM 모듈 필수 동의(TERMS_OF_SERVICE, PERSONAL_INFO)를
+ * 모두 마치지 않은 상태로 신청했을 때. 정상 플로우에서는 FE가 신청 전에 동의를 먼저 처리하므로
+ * 발생하지 않아야 하지만, 서버가 같은 트랜잭션에서 다시 검증하므로 방어적으로 처리한다.
+ */
+export const PROGRAM_APPLICATION_ERROR_CODE = {
+  REQUIRED_CONSENT_NOT_AGREED: 'U009',
 };
 
 /** 학생 예약 취소 화면에서 쓰는 사유 선택값. 서버에는 표시명과 상세 사유를 합친 문자열만 전송한다. */
