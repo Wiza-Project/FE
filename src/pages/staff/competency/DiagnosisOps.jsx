@@ -1125,7 +1125,9 @@ function ResultStats({ rounds }) {
 
             {isLoading ? (
               <div className="py-16 text-center text-[12px] text-[#9AA0A6]">불러오는 중...</div>
-            ) : competencyBars.length === 0 ? (
+            ) : /* 응답자가 0명이면 aggregateByCompetency가 값 0인 막대를 채워 length 체크를 통과한다.
+                  BarChart는 max=0이라 barH가 NaN이 되므로 응답자 총합이 0인 회차도 빈 상태로 처리한다. */
+            competencyBars.length === 0 || respondentTotal === 0 ? (
               <EmptyState
                 message="집계할 응답이 없습니다."
                 sub="아직 제출된 진단 결과가 없거나 학적 정보가 등록된 응답자가 없습니다."
