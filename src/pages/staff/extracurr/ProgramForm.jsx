@@ -293,7 +293,12 @@ function SessionCard({
           </Field>
         )}
 
-        <Field label="장소" htmlFor={`session-${session.localId}-location`} error={locationError}>
+        <Field
+          label="장소"
+          htmlFor={`session-${session.localId}-location`}
+          error={locationError}
+          required={session.locationType === 'DIRECT_INPUT'}
+        >
           {index > 0 && (
             <div className="mb-2">
               <SessionRadioGroup
@@ -589,7 +594,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               startsAtTime: extractTime(s.startsAt),
               endsAt: endDate,
               endsAtTime: extractTime(s.endsAt),
-              locationType: 'DIRECT_INPUT',
+              locationType: s.locationType ?? 'DIRECT_INPUT',
               location: s.location ?? '',
             };
           })
@@ -688,8 +693,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       const endDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
       if (!s.startsAt || !endDate) return true;
       if (s.startsAt > endDate) return true;
-      if (s.startsAt === endDate && s.startsAtTime && s.endsAtTime && s.startsAtTime > s.endsAtTime) {
-        return true;
+      if (s.startsAt === endDate) {
+        if (Boolean(s.startsAtTime) !== Boolean(s.endsAtTime)) return true;
+        if (s.startsAtTime && s.endsAtTime && s.startsAtTime >= s.endsAtTime) return true;
       }
       return false;
     });

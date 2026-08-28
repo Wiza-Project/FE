@@ -439,14 +439,22 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                             사유확인
                           </button>
                         ) : app.status === '대기' ? (
-                          <button
-                            onClick={() => openConfirm(app)}
-                            disabled={reapplyingIds.has(app.programId)}
-                            className="h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-white"
-                            style={{ background: ACCENT }}
-                          >
-                            {reapplyingIds.has(app.programId) ? '처리 중...' : '신청'}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => openConfirm(app)}
+                              disabled={reapplyingIds.has(app.programId)}
+                              className="h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-white"
+                              style={{ background: ACCENT }}
+                            >
+                              {reapplyingIds.has(app.programId) ? '처리 중...' : '신청'}
+                            </button>
+                            <button
+                              onClick={() => handleBtn(app)}
+                              className="h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]"
+                            >
+                              {btn?.label ?? '취소'}
+                            </button>
+                          </>
                         ) : app.status === '취소' ? (
                           isRecruitmentClosed(app.recruitmentEndsAt, now) ? (
                             <span className="text-[11px] text-[#9AA0A6]">신청 불가</span>

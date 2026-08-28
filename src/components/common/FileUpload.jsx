@@ -48,6 +48,7 @@ export function FileUpload({
     const next = files.filter((_, j) => j !== i);
     setFiles(next);
     onFiles?.(next);
+    if (inputRef.current) inputRef.current.value = '';
   };
 
   return (
