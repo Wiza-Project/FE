@@ -231,6 +231,8 @@ export default function MileageDashboard({ onExternal }) {
     let mounted = true;
     setSimulationOptionsLoading(true);
     setSimulationOptionsError('');
+    setSimulationResult(null);
+    setSimulationError('');
 
     fetchMileageSimulationOptions(DASHBOARD_PERIOD)
       .then((data) => {
@@ -392,6 +394,7 @@ export default function MileageDashboard({ onExternal }) {
     }
 
     setSimulationLoading(true);
+    setSimulationResult(null);
     setSimulationError('');
     const requestId = simulationRequestIdRef.current + 1;
     simulationRequestIdRef.current = requestId;
