@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   PageHeader,
   Tabs,
@@ -868,6 +868,7 @@ function HistoryTab() {
   // 상세를 연 회기 ID만 들고 있는다. 목록 행의 요약 데이터를 그대로 재사용하지 않고 매번
   // 전용 상세 API로 최신 상태를 다시 받아 온다(다른 학생·미공개 초안 오류를 정확히 검증하기 위함).
   const [drawerSessionId, setDrawerSessionId] = useState(null);
+  const drawerTriggerRef = useRef(null);
 
   const {
     data: resultPage,
@@ -875,12 +876,15 @@ function HistoryTab() {
     isError,
     error: listError,
     refetch,
+    isPlaceholderData,
   } = useQuery({
     queryKey: studentCounselingResultsQueryKey(page, RESULT_PAGE_SIZE),
     queryFn: () => getStudentCounselingResults({ page, size: RESULT_PAGE_SIZE }),
     // 상세 쿼리와 동일하게 공개 요약 내용을 담은 캐시를 기본 gcTime(5분) 동안 남기지 않는다.
     gcTime: 0,
     retry: false,
+    // 다음 페이지를 읽는 동안 기존 행과 페이지네이션을 유지한다.
+    placeholderData: keepPreviousData,
   });
 
   // 상세 상담 결과는 학생 본인에게도 민감한 개인정보이므로 gcTime: 0으로 두어 Drawer를 닫으면
@@ -899,10 +903,16 @@ function HistoryTab() {
   });
 
   const closeDrawer = useCallback(() => {
+    const drawerTrigger = drawerTriggerRef.current;
     if (drawerSessionId !== null) {
       queryClient.removeQueries({ queryKey: studentCounselingResultDetailQueryKey(drawerSessionId) });
     }
     setDrawerSessionId(null);
+    window.requestAnimationFrame(() => {
+      if (drawerTrigger?.isConnected) {
+        drawerTrigger.focus();
+      }
+    });
   }, [drawerSessionId, queryClient]);
 
   // S011(다른 학생 소유·미공개·존재하지 않음)은 소유권 세부를 노출하지 않고 상세를 닫은 뒤
@@ -921,6 +931,18 @@ function HistoryTab() {
   const items = resultPage?.content ?? [];
   const totalElements = resultPage?.totalElements ?? 0;
   const totalPages = resultPage?.totalPages ?? 0;
+
+  useEffect(() => {
+    // 이전 페이지를 표시 중일 때는 그 응답의 totalPages로 현재 페이지를 보정하지 않는다.
+    if (isPlaceholderData || isError || !resultPage) return;
+    if (totalPages === 0 && page !== 0) {
+      setPage(0);
+      return;
+    }
+    if (totalPages > 0 && page >= totalPages) {
+      setPage(totalPages - 1);
+    }
+  }, [isError, isPlaceholderData, page, resultPage, totalPages]);
 
   return (
     <div>
@@ -998,7 +1020,10 @@ function HistoryTab() {
                   <td className="px-4 py-3 text-center">
                     <button
                       type="button"
-                      onClick={() => setDrawerSessionId(item.sessionId)}
+                      onClick={(event) => {
+                        drawerTriggerRef.current = event.currentTarget;
+                        setDrawerSessionId(item.sessionId);
+                      }}
                       aria-label={`${item.counselingTypeName} ${item.sessionNo}회기 상담 결과 상세 보기`}
                       className="h-6 px-2.5 text-[11px] font-bold rounded-[5px] border transition-colors hover:bg-[#F0FDFE]"
                       style={{ borderColor: ACCENT, color: ACCENT }}
