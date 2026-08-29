@@ -18,9 +18,10 @@ const TAB_CONFIG = [
 
 const SUB_VIEWS = ['guide', 'questions', 'result', 'history', 'compare', 'recommend'];
 
-// TODO(WP-118 S00): 진단 안내+동의 화면에서 발급받은 실제 attemptId로 교체.
-// S00 API(동의 시 attempt 생성)가 아직 연동되지 않아 응답·결과 화면을 우선 검증하기 위한 임시값.
-const DEV_ATTEMPT_ID = 1;
+// TODO: 학생이 여러 진행중 회차 중 하나를 고르는 화면은 개발 순서에 없다(개발순서_브랜치.md
+// 참조 — 진단 안내·동의는 화면 하나로 끝나는 범위). 실제로는 알림/대시보드 딥링크로 roundId가
+// 정해져 이 화면에 들어온다고 가정하고, 그 진입점이 아직 없어 임시로 고정값을 쓴다.
+const CURRENT_ASSESSMENT_ROUND_ID = 1;
 
 /**
  * 핵심역량 진단 화면 허브. 하위 화면들은 별도 라우트가 아니라 탭/버튼으로 전환되는
@@ -29,7 +30,9 @@ const DEV_ATTEMPT_ID = 1;
  */
 export default function CompetencyPage() {
   const [view, setView] = useState('guide');
-  const [alreadyDone] = useState(true); // false로 바꾸면 안내+동의 폼을 확인할 수 있습니다.
+  const [attemptId, setAttemptId] = useState(null);
+  // 진단 이력에서 체크박스로 고른 두 회차. 사전·사후 비교 화면이 이 두 attemptId로 조회한다.
+  const [comparePair, setComparePair] = useState(null);
 
   // Tab keys that map to sub-views
   const tabKey = SUB_VIEWS.includes(view) && view !== 'questions' ? view : 'guide';
@@ -49,21 +52,37 @@ export default function CompetencyPage() {
 
       {/* Top tabs (hide when in questions view — full focus mode) */}
       {view !== 'questions' && (
-        <Tabs tabs={TAB_CONFIG} active={tabKey} onChange={setView} accentColor={COMP_COLOR} />
+        <Tabs
+          tabs={TAB_CONFIG}
+          active={tabKey}
+          onChange={(next) => {
+            // 탭으로 비교 화면에 직접 들어오면 이전 비교 선택을 버리고 회차 선택부터 다시 하게 한다
+            // (선택 후 진입은 DiagnosisHistory의 onCompare가 comparePair를 채워준다).
+            if (next === 'compare') setComparePair(null);
+            setView(next);
+          }}
+          accentColor={COMP_COLOR}
+        />
       )}
 
       {/* Sub-views */}
       {view === 'guide' && (
         <DiagnosisGuide
-          alreadyDone={alreadyDone}
-          onStart={() => setView('questions')}
-          onViewResult={() => setView('result')}
+          roundId={CURRENT_ASSESSMENT_ROUND_ID}
+          onStart={(id) => {
+            setAttemptId(id);
+            setView('questions');
+          }}
+          onViewResult={(id) => {
+            setAttemptId(id);
+            setView('result');
+          }}
         />
       )}
 
       {view === 'questions' && (
         <DiagnosisQuestions
-          attemptId={DEV_ATTEMPT_ID}
+          attemptId={attemptId}
           onComplete={() => setView('result')}
           onBack={() => setView('guide')}
         />
@@ -71,23 +90,34 @@ export default function CompetencyPage() {
 
       {view === 'result' && (
         <DiagnosisResult
-          attemptId={DEV_ATTEMPT_ID}
+          attemptId={attemptId}
           onBack={() => setView('history')}
-          onCompare={() => setView('compare')}
+          // 비교는 두 회차를 골라야 하므로 결과 화면에서는 이력으로 보내 선택하게 한다.
+          onCompare={() => setView('history')}
           onRecommend={() => setView('recommend')}
         />
       )}
 
       {view === 'history' && (
         <DiagnosisHistory
-          onViewResult={() => setView('result')}
-          onCompare={() => setView('compare')}
+          onViewResult={(id) => {
+            setAttemptId(id);
+            setView('result');
+          }}
+          onCompare={(pair) => {
+            setComparePair(pair);
+            setView('compare');
+          }}
         />
       )}
 
-      {view === 'compare' && <ComparisonPage hasBoth onBack={() => setView('history')} />}
+      {view === 'compare' && (
+        <ComparisonPage pair={comparePair} onBack={() => setView('history')} />
+      )}
 
-      {view === 'recommend' && <RecommendedPrograms />}
+      {view === 'recommend' && (
+        <RecommendedPrograms attemptId={attemptId} onBack={() => setView('history')} />
+      )}
     </div>
   );
 }

@@ -310,6 +310,43 @@ export const notifyAssessmentNonParticipants = async (roundId, userIds) => {
 };
 
 /**
+ * @typedef {Object} DistributionCompetencyAverage
+ * @property {number} competencyId
+ * @property {string} competencyName
+ * @property {number} displayOrder 방사형 차트(SCR-S02)와 축 순서를 맞추기 위한 값
+ * @property {number} averageScore 100점 환산 평균
+ */
+
+/**
+ * @typedef {Object} DistributionGroup
+ * @property {string} groupKey 학년이면 "1"~"4", 전공이면 학과 공통코드 codeId 문자열
+ * @property {string} groupLabel 화면 표시용 라벨 ("3학년", 학과명 등)
+ * @property {number} respondentCount 이 집단에서 제출을 완료한 학생 수
+ * @property {DistributionCompetencyAverage[]} competencyAverages
+ */
+
+/**
+ * 진단 결과 통계 - 역량별 분포·집단별 비교 조회 (SCR-A06). 회차의 역량별 평균 환산점수를
+ * 집단 축(GRADE: 학년 / MAJOR: 전공)으로 나눠 집계한다. 역량별 분포 그래프와 집단별 비교
+ * 그래프가 같은 응답 구조를 재사용하며, 역량별 분포는 groups를 역량 축으로 다시 묶어 그린다.
+ * 단과대 축은 지원하지 않는다(학적 데이터에 단과대 계층 없음). GRADE/MAJOR가 아니면 ApiError(Q021).
+ *
+ * @param {number} roundId
+ * @param {'GRADE'|'MAJOR'} groupBy
+ * @returns {Promise<{
+ *   assessmentRoundId: number,
+ *   groupAxis: 'GRADE'|'MAJOR',
+ *   groups: DistributionGroup[],
+ * }>}
+ */
+export const fetchAssessmentDistribution = async (roundId, groupBy) => {
+  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/stats/distribution`, {
+    params: { groupBy },
+  });
+  return data;
+};
+
+/**
  * @typedef {Object} AssessmentResumeItem
  * @property {number} questionId
  * @property {number} competencyId
@@ -409,5 +446,171 @@ export const submitAssessment = async (attemptId) => {
  */
 export const fetchAssessmentResult = async (attemptId) => {
   const { data } = await apiClient.get(`/students/assessment-attempts/${attemptId}/result`);
+  return data;
+};
+
+/**
+ * @typedef {Object} AssessmentHistoryItem
+ * @property {number} attemptId 결과 조회(fetchAssessmentResult)·사전·사후 비교에 그대로 재사용하는 키
+ * @property {number} roundId
+ * @property {string} assessmentName
+ * @property {number} academicYear
+ * @property {string} semesterCode 공통코드 SEMESTER의 code
+ * @property {'PRE'|'POST'} assessmentType
+ * @property {string} submittedAt ISO-8601
+ */
+
+/**
+ * 과거 진단 결과 목록 조회. 본인이 응시완료(제출)한 회차를 제출일 최신순으로 페이지 단위
+ * 조회한다. 응답에 역량 점수는 없으므로, 회차를 고르면 결과 조회 API(fetchAssessmentResult)를
+ * attemptId로 재호출해 상세를 채운다.
+ *
+ * @param {Object} [params]
+ * @param {string} [params.keyword] 진단명 부분일치 검색
+ * @param {number} [params.page] 0-base 페이지 번호
+ * @param {number} [params.size] 페이지당 건수 (서버 기본 10)
+ * @returns {Promise<{
+ *   content: AssessmentHistoryItem[],
+ *   page: number,
+ *   size: number,
+ *   totalElements: number,
+ *   totalPages: number,
+ *   first: boolean,
+ *   last: boolean,
+ * }>}
+ */
+export const fetchAssessmentHistory = async (params) => {
+  const { data } = await apiClient.get('/students/assessment-history', { params });
+  return data;
+};
+
+/**
+ * @typedef {Object} AssessmentComparisonSide
+ * @property {number} attemptId
+ * @property {number} roundId
+ * @property {string} assessmentName
+ * @property {'PRE'|'POST'} assessmentType
+ * @property {number} academicYear
+ * @property {string} semesterCode 공통코드 SEMESTER의 code
+ * @property {string} submittedAt ISO-8601
+ * @property {number} overallAverageScore 방사형 차트 전체 평균 오버레이용
+ * @property {boolean} percentileAvailable
+ * @property {Array<{competencyId: number, competencyName: string, displayOrder: number,
+ *   convertedScore: number, percentile: number|null}>} scores 결과 조회와 동일 구조
+ */
+
+/**
+ * 사전·사후 비교 조회. 선택한 두 응시(attemptId)를 사전 → 사후 순으로 정렬해 겹친 방사형
+ * 차트용 점수(before/after)와 역량별 변화량(delta = afterScore - beforeScore, 하락도 그대로
+ * 음수로)을 반환한다. 두 attemptId의 전달 순서는 무관하며 서버가 회차 구분(PRE/POST)으로
+ * 방향을 정한다. 같은 응시를 두 번 지정하면 ApiError(코드 Q022), 같은 학년도의 사전·사후
+ * 한 쌍이 아니면 ApiError(코드 Q023)가 throw된다. 각 응시의 점수 계산·미채점 차단(Q018)·
+ * 소유권 검증은 결과 조회 API와 동일하다.
+ *
+ * @param {number} firstAttemptId
+ * @param {number} secondAttemptId
+ * @returns {Promise<{
+ *   before: AssessmentComparisonSide,
+ *   after: AssessmentComparisonSide,
+ *   deltas: Array<{
+ *     competencyId: number,
+ *     competencyName: string,
+ *     displayOrder: number,
+ *     beforeScore: number|null,
+ *     afterScore: number|null,
+ *     delta: number|null,
+ *   }>,
+ * }>}
+ */
+export const fetchAssessmentComparison = async (firstAttemptId, secondAttemptId) => {
+  const { data } = await apiClient.get('/students/assessment-comparison', {
+    params: { firstAttemptId, secondAttemptId },
+  });
+  return data;
+};
+
+/**
+ * @typedef {Object} RecommendedProgram
+ * @property {number} programId
+ * @property {string} programName
+ * @property {string} operatingUnitName 운영 부서명(공통코드 codeName)
+ * @property {string} programTypeName 프로그램 유형명(공통코드 codeName)
+ * @property {number} capacity 모집 정원
+ * @property {number} applicantCount 정원을 점유한(신청완료·승인) 인원
+ * @property {number} remainingCapacity 남은 자리. 정원을 이미 넘겼어도 음수 대신 0
+ * @property {string} recruitmentStartsAt ISO-8601
+ * @property {string} recruitmentEndsAt ISO-8601
+ * @property {string} operationStartsAt ISO-8601
+ * @property {string} operationEndsAt ISO-8601
+ * @property {number|null} mileagePoints 이수 시 부여 마일리지. 마일리지 정책이 없으면 null
+ * @property {'APPLIED'|'WAITLISTED'|'APPROVED'|'REJECTED'|null} myApplicationStatus
+ *   로그인 학생 본인의 이 프로그램 신청 상태. 신청 이력이 없거나 취소(CANCELLED)해
+ *   재신청 가능하면 null — 즉 null이면 "신청하기" 버튼을 노출해도 되는 상태다
+ * @property {string|null} myApplicationStatusLabel 위 상태의 한글 라벨(null이면 함께 null)
+ */
+
+/**
+ * @typedef {Object} WeakCompetencyGroup
+ * @property {number} competencyId
+ * @property {string} competencyName
+ * @property {number} displayOrder 방사형 차트 축 순서. 취약도 순서와는 무관한 표시용 값
+ * @property {number} convertedScore 이 역량이 취약으로 뽑힌 근거인 100점 환산점수
+ * @property {RecommendedProgram[]} programs 이 역량에 연계된 모집중 프로그램(최대 3건).
+ *   연계 프로그램이 없으면 빈 배열이지만 그룹 자체는 유지된다
+ */
+
+/**
+ * 진단 결과 기반 추천 비교과 프로그램 조회. 해당 응시의 역량별 환산점수에서 하위 2개를
+ * 취약 역량으로 골라(환산점수 오름차순, 동점이면 displayOrder 앞선 역량 우선), 각 역량에
+ * 연계된 모집중 프로그램을 최대 3건씩 묶어 내려준다. weakCompetencies는 방사형 축 순서가
+ * 아니라 "더 취약한 역량"이 앞에 오도록 정렬돼 있다.
+ *
+ * 프로그램 후보가 3건을 넘으면 서버가 매 호출마다 무작위로 3건을 다시 뽑으므로 같은
+ * 응시라도 목록이 바뀔 수 있다 — 목록을 캐시에 오래 붙들지 말 것. 취약 역량이 없거나
+ * (정상 경로에선 드묾) 연계 프로그램이 하나도 없으면 빈 목록/빈 배열이 정상 응답이다.
+ * 상세 점수·차트는 이 응답에 없으므로 결과 조회 API(fetchAssessmentResult)를 재사용한다.
+ * 응시 소유자가 아니면 ApiError(Q014), 아직 채점 전이면 ApiError(Q018) — 결과 조회와 동일.
+ *
+ * @param {number} attemptId
+ * @returns {Promise<{attemptId: number, weakCompetencies: WeakCompetencyGroup[]}>}
+ */
+export const fetchRecommendedPrograms = async (attemptId) => {
+  const { data } = await apiClient.get(
+    `/students/assessment-attempts/${attemptId}/recommended-programs`,
+  );
+  return data;
+};
+
+/**
+ * 진단 안내 조회. 진단명·응시기간·문항수·예상 소요시간과 함께, 이미 응시를
+ * 시작한 적이 있으면 기존 attemptId/attemptStatus를 내려준다(없으면 둘 다 null).
+ *
+ * @param {number} roundId
+ * @returns {Promise<{
+ *   assessmentRoundId: number,
+ *   assessmentName: string,
+ *   startsAt: string,
+ *   endsAt: string,
+ *   questionCount: number,
+ *   estimatedMinutes: number,
+ *   attemptId: number|null,
+ *   attemptStatus: string|null,
+ * }>}
+ */
+export const fetchAssessmentIntro = async (roundId) => {
+  const { data } = await apiClient.get(`/students/assessment-rounds/${roundId}/intro`);
+  return data;
+};
+
+/**
+ * 응시 시작. 필수 동의(`api/consent.js`)를 모두 마친 뒤 호출해야 하며,
+ * 응시기간이 아니면 실패한다(ApiError 코드 Q003). 이미 시작한 학생이 다시 호출하면
+ * 새로 만들지 않고 기존 attempt를 그대로 반환한다(멱등).
+ *
+ * @param {number} roundId
+ * @returns {Promise<{attemptId: number, attemptStatus: string}>}
+ */
+export const startAssessmentAttempt = async (roundId) => {
+  const { data } = await apiClient.post(`/students/assessment-rounds/${roundId}/attempts`);
   return data;
 };
