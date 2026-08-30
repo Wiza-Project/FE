@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
-import { USER_TYPE } from '@/constants/domain';
+import { USER_TYPE, USER_ROLE } from '@/constants/domain';
 import { UNIVERSITY_NAME, SEMESTERS } from '@/data/dummy';
 import { toast } from '@/components/common';
 import {
@@ -215,7 +215,13 @@ export default function PortalShell() {
   const navigate = useNavigate();
 
   const portal = user?.userType === USER_TYPE.STAFF ? 'staff' : 'student';
-  const nav = PORTAL_NAVS[portal];
+  const isCounselor = (user?.roleCodes ?? []).includes(USER_ROLE.COUNSELOR);
+  // 교직원이지만 상담사(ST200)가 아니면 '상담 운영' 메뉴를 숨긴다. 이는 UX용 1차 숨김이고
+  // 실제 진입 차단은 라우트의 CounselOperationRoute, 최종 권한은 BE가 판단한다.
+  const nav =
+    portal === 'staff' && !isCounselor
+      ? NAV_STAFF.filter((item) => item.key !== 'counseling')
+      : PORTAL_NAVS[portal];
   const portalColor = PORTAL_COLORS[portal];
 
   const [semester, setSemester] = useState(SEMESTERS[1] ?? SEMESTERS[0]);

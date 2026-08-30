@@ -137,7 +137,7 @@ const formatKstDateTime = (iso) => {
     return '표시할 수 없음';
   }
 
-  return `${new Intl.DateTimeFormat('ko-KR', {
+  return new Intl.DateTimeFormat('ko-KR', {
     timeZone: 'Asia/Seoul',
     year: 'numeric',
     month: '2-digit',
@@ -145,7 +145,7 @@ const formatKstDateTime = (iso) => {
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',
-  }).format(date)} KST`;
+  }).format(date);
 };
 
 const getReservationListErrorMessage = (error) => {
@@ -259,6 +259,13 @@ function ReservationTab({ onApply }) {
   const [changeReason, setChangeReason] = useState('');
   const [cancelError, setCancelError] = useState('');
   const [changeError, setChangeError] = useState('');
+  // 409(S013) stale 충돌이 나면 여기에 재조회한 "최신" 예약을 담아 둔다(못 찾으면 null일 수
+  // 있다). 충돌 여부 자체은 이 값의 null 여부로 파생하지 않고 isScheduleConflict로 별도
+  // 관리한다 — 재조회 결과에서 해당 예약을 못 찾아 null이 돼도 충돌 UI가 사라지면 안 되기
+  // 때문이다(사라지면 옛 기준값으로 재제출 → 또 S013 무한 반복).
+  const [scheduleConflictReservation, setScheduleConflictReservation] = useState(null);
+  const [isScheduleConflict, setIsScheduleConflict] = useState(false);
+  const rebaseButtonRef = useRef(null);
 
   const {
     data: reservationPage,
@@ -315,6 +322,8 @@ function ReservationTab({ onApply }) {
     setChangeScheduleId('');
     setChangeReason('');
     setChangeError('');
+    setScheduleConflictReservation(null);
+    setIsScheduleConflict(false);
   }, []);
   const restoreFocus = useCallback((triggerRef) => {
     window.requestAnimationFrame(() => {
@@ -357,8 +366,9 @@ function ReservationTab({ onApply }) {
     },
   });
   const changeMutation = useMutation({
-    mutationFn: async ({ reservationId, scheduleId, reason }) => ({
+    mutationFn: async ({ reservationId, expectedScheduleId, scheduleId, reason }) => ({
       reservation: await changeCounselingReservationSchedule(reservationId, {
+        expectedScheduleId,
         scheduleId,
         changeReason: reason,
       }),
@@ -379,7 +389,32 @@ function ReservationTab({ onApply }) {
       restoreFocus(changeTriggerRef);
       toast('상담 일정을 변경했습니다.', 'success');
     },
-    onError: async (error) => {
+    onError: async (error, variables) => {
+      // S013(stale) 은 요청 당시 기준 일정이 이미 낡았다는 뜻이라 다른 오류와 다르게 다룬다.
+      // 여기서는 절대 같은 요청을 자동 재전송하지 않고, 최신 예약을 다시 읽어 사용자가
+      // 스스로 기준을 갱신한 뒤에만 재선택하게 한다.
+      if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.RESERVATION_SCHEDULE_CONFLICT) {
+        setChangeError('예약 일정이 이미 변경되었습니다. 최신 예약 정보를 확인해 주세요.');
+
+        const [reservationResult] = await Promise.all([
+          refetchReservations(),
+          queryClient.invalidateQueries({ queryKey: ['availableSchedules'] }),
+        ]);
+        const latestReservations = reservationResult.data?.content ?? [];
+        const latestReservation =
+          latestReservations.find((item) => item.reservationId === variables.reservationId) ??
+          null;
+
+        // 사유는 사용자가 다시 입력하지 않도록 보존하고, 일정 선택만 비워 낡은 값으로
+        // 재제출되지 않게 한다. 기준 일정(changeModal)은 여기서 자동으로 바꾸지 않는다.
+        // latestReservation을 못 찾아도(예: 목록에서 이미 사라짐) 충돌 플래그는 반드시 true로
+        // 유지해 "변경 확정" 버튼이 옛 기준값으로 다시 뜨지 않게 한다.
+        setScheduleConflictReservation(latestReservation);
+        setIsScheduleConflict(true);
+        setChangeScheduleId('');
+        return;
+      }
+
       const message = getReservationMutationErrorMessage(error, 'change');
 
       setChangeError(message);
@@ -415,6 +450,8 @@ function ReservationTab({ onApply }) {
     });
     changeTriggerRef.current = trigger;
     setChangeError('');
+    setScheduleConflictReservation(null);
+    setIsScheduleConflict(false);
     setChangeModal(reservation);
   };
   const closeCancelModal = useCallback(() => {
@@ -455,6 +492,15 @@ function ReservationTab({ onApply }) {
     }
   }, [changeModal]);
 
+  // S013 충돌로 footer 버튼이 "변경 확정"에서 "최신 예약 기준으로 다시 선택"으로 바뀌는
+  // 순간 포커스가 사라진 이전 버튼에 남아 body로 튈 수 있어, 새로 뜬 버튼으로 옮겨준다.
+  // Button 컴포넌트가 ref를 forwarding하지 않으므로 감싸는 span에 ref를 걸고 내부 button을 찾는다.
+  useEffect(() => {
+    if (isScheduleConflict) {
+      rebaseButtonRef.current?.querySelector('button')?.focus();
+    }
+  }, [isScheduleConflict]);
+
   useEffect(() => {
     if (!changeModal) {
       return undefined;
@@ -490,7 +536,19 @@ function ReservationTab({ onApply }) {
   const handleChange = () => {
     const scheduleId = Number(changeScheduleId);
 
-    if (!changeModal || changeMutation.isPending) {
+    // stale 충돌 상태에서는 사용자가 "최신 예약 기준으로 다시 선택"을 눌러 기준을
+    // 갱신하기 전까지 재제출을 막는다(자동 재시도 금지).
+    if (!changeModal || changeMutation.isPending || isScheduleConflict) {
+      return;
+    }
+
+    // expectedScheduleId는 모달을 연 시점에 조회한 예약의 현재 일정 ID다. REQUESTED 상태
+    // 예약은 항상 일정이 배정돼 있어야 하므로, 양의 정수가 아니면 화면이 오래된 데이터를
+    // 들고 있다고 보고 요청 자체를 막는다.
+    const expectedScheduleId = changeModal.counselingScheduleId;
+
+    if (!Number.isInteger(expectedScheduleId) || expectedScheduleId < 1) {
+      setChangeError('최신 상태를 확인해 주세요.');
       return;
     }
 
@@ -507,9 +565,30 @@ function ReservationTab({ onApply }) {
     setChangeError('');
     changeMutation.mutate({
       reservationId: changeModal.reservationId,
+      expectedScheduleId,
       scheduleId,
       reason: changeReason.trim(),
     });
+  };
+  // "최신 예약 기준으로 다시 선택" 버튼 전용 핸들러. 재조회한 최신 예약이 여전히
+  // REQUESTED일 때만 그 예약을 새 기준으로 삼아 재선택을 허용한다. 그 외에는 화면이
+  // 이미 낡았다고 보고 모달을 닫아 사용자가 목록에서 최신 상태를 다시 보게 한다.
+  const handleRebaseChangeModal = () => {
+    if (
+      !scheduleConflictReservation ||
+      scheduleConflictReservation.reservationStatus !== COUNSELING_RESERVATION_STATUS.REQUESTED
+    ) {
+      resetChangeModal();
+      restoreFocus(changeTriggerRef);
+      return;
+    }
+
+    // changeReason은 사용자가 입력한 값을 그대로 유지하고, 기준 일정과 일정 선택만 갱신한다.
+    setChangeModal(scheduleConflictReservation);
+    setScheduleConflictReservation(null);
+    setIsScheduleConflict(false);
+    setChangeScheduleId('');
+    setChangeError('');
   };
 
   return (
@@ -519,9 +598,6 @@ function ReservationTab({ onApply }) {
           {reservationPage ? `총 ${totalReservations}건` : '예약 현황'}
           {totalReservations > RESERVATION_PAGE_SIZE && ` · 최근 ${RESERVATION_PAGE_SIZE}건 표시`}
         </p>
-        <Button size="sm" style={{ background: ACCENT }} onClick={onApply}>
-          + 상담 신청
-        </Button>
       </div>
 
       {hasCounselingTypesError && !isReservationsLoading && !reservationsError && (
@@ -535,7 +611,7 @@ function ReservationTab({ onApply }) {
           <table className="w-full min-w-[720px] border-collapse text-[12px]">
           <thead>
             <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-              {['예약번호', '상담유형', '일정 ID', '신청일', '상태', '관리'].map((header) => (
+              {['예약번호', '상담유형', '상담 시각', '신청일', '상태', '관리'].map((header) => (
                 <th
                   key={header}
                   className={`px-3 py-3 text-[11px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${header === '상담유형' ? 'text-left' : 'text-center'}`}
@@ -590,8 +666,10 @@ function ReservationTab({ onApply }) {
                     <td className="px-3 py-3 font-semibold text-[#1F2328]">
                       {typeLabel(reservation.counselingTypeId)}
                     </td>
-                    <td className="px-3 py-3 text-center font-mono text-[#656D76]">
-                      {reservation.counselingScheduleId ?? '미배정'}
+                    <td className="px-3 py-3 text-center text-[#656D76] whitespace-nowrap">
+                      {/* 상담 시각은 nullable이다. counselingScheduleId가 없는 레거시 예약에선 startsAt도 null이라 '미배정'으로 표시한다. */}
+                      {/* new Date(null)은 Invalid가 아니라 1970년으로 찍히므로, null을 formatKstDateTime에 넘기기 전에 반드시 먼저 거른다. */}
+                      {reservation.startsAt ? formatKstDateTime(reservation.startsAt) : '미배정'}
                     </td>
                     <td className="px-3 py-3 text-center text-[#656D76] whitespace-nowrap">
                       {formatKstDateTime(reservation.createdAt)}
@@ -755,9 +833,17 @@ function ReservationTab({ onApply }) {
             >
               닫기
             </Button>
-            <Button size="sm" loading={changeMutation.isPending} onClick={handleChange}>
-              변경 확정
-            </Button>
+            {isScheduleConflict ? (
+              <span ref={rebaseButtonRef}>
+                <Button size="sm" onClick={handleRebaseChangeModal}>
+                  최신 예약 기준으로 다시 선택
+                </Button>
+              </span>
+            ) : (
+              <Button size="sm" loading={changeMutation.isPending} onClick={handleChange}>
+                변경 확정
+              </Button>
+            )}
           </>
         }
       >
@@ -803,14 +889,14 @@ function ReservationTab({ onApply }) {
                     return (
                       <label
                         key={schedule.scheduleId}
-                        className={`block cursor-pointer rounded-[6px] border p-3 transition-colors ${isSelected ? 'border-[#0891B2] bg-[#F0FDFE]' : 'border-[#E5E7EB] hover:border-[#67E8F9]'} ${changeMutation.isPending ? 'cursor-not-allowed opacity-60' : ''}`}
+                        className={`block cursor-pointer rounded-[6px] border p-3 transition-colors ${isSelected ? 'border-[#0891B2] bg-[#F0FDFE]' : 'border-[#E5E7EB] hover:border-[#67E8F9]'} ${changeMutation.isPending || isScheduleConflict ? 'cursor-not-allowed opacity-60' : ''}`}
                       >
                         <input
                           type="radio"
                           name="change-schedule"
                           value={schedule.scheduleId}
                           checked={isSelected}
-                          disabled={changeMutation.isPending}
+                          disabled={changeMutation.isPending || isScheduleConflict}
                           onChange={(event) => {
                             setChangeScheduleId(event.target.value);
                             setChangeError('');
