@@ -260,10 +260,13 @@ function ReservationTab() {
   const [cancelError, setCancelError] = useState('');
   const [changeError, setChangeError] = useState('');
   // 409(S013) stale 충돌이 나면 여기에 재조회한 "최신" 예약을 담아 둔다(못 찾으면 null일 수
-  // 있다). 충돌 여부 자체은 이 값의 null 여부로 파생하지 않고 isScheduleConflict로 별도
+  // 있다). null만으로는 조회 실패와 실제 미존재를 구분할 수 없으므로 조회 상태를 별도로
+  // 관리한다. 충돌 여부 자체도 이 값의 null 여부로 파생하지 않고 isScheduleConflict로
   // 관리한다 — 재조회 결과에서 해당 예약을 못 찾아 null이 돼도 충돌 UI가 사라지면 안 되기
   // 때문이다(사라지면 옛 기준값으로 재제출 → 또 S013 무한 반복).
   const [scheduleConflictReservation, setScheduleConflictReservation] = useState(null);
+  const [scheduleConflictReservationId, setScheduleConflictReservationId] = useState(null);
+  const [latestReservationFetchStatus, setLatestReservationFetchStatus] = useState('idle');
   const [isScheduleConflict, setIsScheduleConflict] = useState(false);
   const rebaseButtonRef = useRef(null);
 
@@ -323,6 +326,8 @@ function ReservationTab() {
     setChangeReason('');
     setChangeError('');
     setScheduleConflictReservation(null);
+    setScheduleConflictReservationId(null);
+    setLatestReservationFetchStatus('idle');
     setIsScheduleConflict(false);
   }, []);
   const restoreFocus = useCallback((triggerRef) => {
@@ -337,6 +342,32 @@ function ReservationTab() {
       queryClient.invalidateQueries({ queryKey: RESERVATION_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: ['availableSchedules'] }),
     ]);
+  const reloadLatestReservation = async (reservationId) => {
+    setLatestReservationFetchStatus('loading');
+    setScheduleConflictReservation(null);
+
+    try {
+      const [reservationResult] = await Promise.all([
+        refetchReservations(),
+        queryClient.invalidateQueries({ queryKey: ['availableSchedules'] }),
+      ]);
+
+      if (!reservationResult || reservationResult.isError) {
+        setChangeError('최신 예약 정보를 불러오지 못했습니다. 다시 시도해 주세요.');
+        setLatestReservationFetchStatus('error');
+        return;
+      }
+
+      const latestReservations = reservationResult.data?.content ?? [];
+      setScheduleConflictReservation(
+        latestReservations.find((item) => item.reservationId === reservationId) ?? null,
+      );
+      setLatestReservationFetchStatus('success');
+    } catch {
+      setChangeError('최신 예약 정보를 불러오지 못했습니다. 다시 시도해 주세요.');
+      setLatestReservationFetchStatus('error');
+    }
+  };
   const cancelMutation = useMutation({
     mutationFn: async ({ reservationId, cancellationReason }) => ({
       reservation: await cancelCounselingReservation(reservationId, { cancellationReason }),
@@ -401,22 +432,8 @@ function ReservationTab() {
         setChangeError('예약 일정이 이미 변경되었습니다. 최신 예약 정보를 확인해 주세요.');
         setIsScheduleConflict(true);
         setChangeScheduleId('');
-
-        try {
-          const [reservationResult] = await Promise.all([
-            refetchReservations(),
-            queryClient.invalidateQueries({ queryKey: ['availableSchedules'] }),
-          ]);
-          const latestReservations = reservationResult.data?.content ?? [];
-          setScheduleConflictReservation(
-            latestReservations.find((item) => item.reservationId === variables.reservationId) ??
-              null,
-          );
-        } catch {
-          // 재조회 실패 시 최신 예약을 못 구하지만 이미 충돌 상태로 막아 뒀다.
-          // 재기준 버튼은 예약이 없으면 모달을 닫으므로 안전하다.
-          setScheduleConflictReservation(null);
-        }
+        setScheduleConflictReservationId(variables.reservationId);
+        await reloadLatestReservation(variables.reservationId);
         return;
       }
 
@@ -456,6 +473,8 @@ function ReservationTab() {
     changeTriggerRef.current = trigger;
     setChangeError('');
     setScheduleConflictReservation(null);
+    setScheduleConflictReservationId(null);
+    setLatestReservationFetchStatus('idle');
     setIsScheduleConflict(false);
     setChangeModal(reservation);
   };
@@ -466,11 +485,11 @@ function ReservationTab() {
     }
   }, [cancelMutation.isPending, resetCancelModal, restoreFocus]);
   const closeChangeModal = useCallback(() => {
-    if (!changeMutation.isPending) {
+    if (!changeMutation.isPending && latestReservationFetchStatus !== 'loading') {
       resetChangeModal();
       restoreFocus(changeTriggerRef);
     }
-  }, [changeMutation.isPending, resetChangeModal, restoreFocus]);
+  }, [changeMutation.isPending, latestReservationFetchStatus, resetChangeModal, restoreFocus]);
 
   useEffect(() => {
     if (cancelModal) {
@@ -497,14 +516,17 @@ function ReservationTab() {
     }
   }, [changeModal]);
 
-  // S013 충돌로 footer 버튼이 "변경 확정"에서 "최신 예약 기준으로 다시 선택"으로 바뀌는
-  // 순간 포커스가 사라진 이전 버튼에 남아 body로 튈 수 있어, 새로 뜬 버튼으로 옮겨준다.
+  // S013 충돌 직후에는 최신 예약을 다시 읽는 동안 재기준 버튼이 비활성화된다.
+  // 조회가 끝나 활성화된 재기준 또는 재시도 버튼으로 포커스를 옮긴다.
   // Button 컴포넌트가 ref를 forwarding하지 않으므로 감싸는 span에 ref를 걸고 내부 button을 찾는다.
   useEffect(() => {
-    if (isScheduleConflict) {
+    if (
+      isScheduleConflict &&
+      (latestReservationFetchStatus === 'success' || latestReservationFetchStatus === 'error')
+    ) {
       rebaseButtonRef.current?.querySelector('button')?.focus();
     }
-  }, [isScheduleConflict]);
+  }, [isScheduleConflict, latestReservationFetchStatus]);
 
   useEffect(() => {
     if (!changeModal) {
@@ -513,11 +535,16 @@ function ReservationTab() {
 
     const modalElement = changeModalContentRef.current?.closest('.fixed');
     const onKeyDown = (event) =>
-      handleModalKeyDown(event, modalElement, changeMutation.isPending, closeChangeModal);
+      handleModalKeyDown(
+        event,
+        modalElement,
+        changeMutation.isPending || latestReservationFetchStatus === 'loading',
+        closeChangeModal,
+      );
 
     modalElement?.addEventListener('keydown', onKeyDown);
     return () => modalElement?.removeEventListener('keydown', onKeyDown);
-  }, [changeModal, changeMutation.isPending, closeChangeModal]);
+  }, [changeModal, changeMutation.isPending, closeChangeModal, latestReservationFetchStatus]);
 
   const handleCancel = () => {
     if (!cancelModal || cancelMutation.isPending) {
@@ -575,10 +602,25 @@ function ReservationTab() {
       reason: changeReason.trim(),
     });
   };
+  const handleRetryLatestReservation = () => {
+    if (
+      changeMutation.isPending ||
+      latestReservationFetchStatus === 'loading' ||
+      scheduleConflictReservationId === null
+    ) {
+      return;
+    }
+
+    void reloadLatestReservation(scheduleConflictReservationId);
+  };
   // "최신 예약 기준으로 다시 선택" 버튼 전용 핸들러. 재조회한 최신 예약이 여전히
   // REQUESTED일 때만 그 예약을 새 기준으로 삼아 재선택을 허용한다. 그 외에는 화면이
   // 이미 낡았다고 보고 모달을 닫아 사용자가 목록에서 최신 상태를 다시 보게 한다.
   const handleRebaseChangeModal = () => {
+    if (changeMutation.isPending || latestReservationFetchStatus !== 'success') {
+      return;
+    }
+
     if (
       !scheduleConflictReservation ||
       scheduleConflictReservation.reservationStatus !== COUNSELING_RESERVATION_STATUS.REQUESTED
@@ -591,6 +633,8 @@ function ReservationTab() {
     // changeReason은 사용자가 입력한 값을 그대로 유지하고, 기준 일정과 일정 선택만 갱신한다.
     setChangeModal(scheduleConflictReservation);
     setScheduleConflictReservation(null);
+    setScheduleConflictReservationId(null);
+    setLatestReservationFetchStatus('idle');
     setIsScheduleConflict(false);
     setChangeScheduleId('');
     setChangeError('');
@@ -833,15 +877,28 @@ function ReservationTab() {
             <Button
               size="sm"
               variant="secondary"
-              disabled={changeMutation.isPending}
+              disabled={changeMutation.isPending || latestReservationFetchStatus === 'loading'}
               onClick={closeChangeModal}
             >
               닫기
             </Button>
             {isScheduleConflict ? (
               <span ref={rebaseButtonRef}>
-                <Button size="sm" onClick={handleRebaseChangeModal}>
-                  최신 예약 기준으로 다시 선택
+                <Button
+                  size="sm"
+                  loading={latestReservationFetchStatus === 'loading'}
+                  disabled={changeMutation.isPending || latestReservationFetchStatus === 'loading'}
+                  onClick={
+                    latestReservationFetchStatus === 'error'
+                      ? handleRetryLatestReservation
+                      : handleRebaseChangeModal
+                  }
+                >
+                  {latestReservationFetchStatus === 'loading'
+                    ? '최신 예약 확인 중...'
+                    : latestReservationFetchStatus === 'error'
+                      ? '최신 예약 다시 불러오기'
+                      : '최신 예약 기준으로 다시 선택'}
                 </Button>
               </span>
             ) : (
