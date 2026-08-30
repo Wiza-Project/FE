@@ -243,7 +243,7 @@ function ReservationBadge({ status }) {
   return <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${style}`}>{label}</span>;
 }
 
-function ReservationTab({ onApply }) {
+function ReservationTab() {
   const queryClient = useQueryClient();
   const cancelModalContentRef = useRef(null);
   const changeModalContentRef = useRef(null);
@@ -394,24 +394,29 @@ function ReservationTab({ onApply }) {
       // 여기서는 절대 같은 요청을 자동 재전송하지 않고, 최신 예약을 다시 읽어 사용자가
       // 스스로 기준을 갱신한 뒤에만 재선택하게 한다.
       if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.RESERVATION_SCHEDULE_CONFLICT) {
-        setChangeError('예약 일정이 이미 변경되었습니다. 최신 예약 정보를 확인해 주세요.');
-
-        const [reservationResult] = await Promise.all([
-          refetchReservations(),
-          queryClient.invalidateQueries({ queryKey: ['availableSchedules'] }),
-        ]);
-        const latestReservations = reservationResult.data?.content ?? [];
-        const latestReservation =
-          latestReservations.find((item) => item.reservationId === variables.reservationId) ??
-          null;
-
+        // stale 충돌: 재조회가 실패하더라도 낡은 expectedScheduleId로 재제출되지 않도록
+        // 막는 안전 상태를 먼저, 무조건 반영한다(아래 재조회의 성공에 의존하지 않는다).
         // 사유는 사용자가 다시 입력하지 않도록 보존하고, 일정 선택만 비워 낡은 값으로
         // 재제출되지 않게 한다. 기준 일정(changeModal)은 여기서 자동으로 바꾸지 않는다.
-        // latestReservation을 못 찾아도(예: 목록에서 이미 사라짐) 충돌 플래그는 반드시 true로
-        // 유지해 "변경 확정" 버튼이 옛 기준값으로 다시 뜨지 않게 한다.
-        setScheduleConflictReservation(latestReservation);
+        setChangeError('예약 일정이 이미 변경되었습니다. 최신 예약 정보를 확인해 주세요.');
         setIsScheduleConflict(true);
         setChangeScheduleId('');
+
+        try {
+          const [reservationResult] = await Promise.all([
+            refetchReservations(),
+            queryClient.invalidateQueries({ queryKey: ['availableSchedules'] }),
+          ]);
+          const latestReservations = reservationResult.data?.content ?? [];
+          setScheduleConflictReservation(
+            latestReservations.find((item) => item.reservationId === variables.reservationId) ??
+              null,
+          );
+        } catch {
+          // 재조회 실패 시 최신 예약을 못 구하지만 이미 충돌 상태로 막아 뒀다.
+          // 재기준 버튼은 예약이 없으면 모달을 닫으므로 안전하다.
+          setScheduleConflictReservation(null);
+        }
         return;
       }
 
@@ -1370,7 +1375,7 @@ export default function MyCounseling({ onApply }) {
         />
       </div>
 
-      {tab === 'reservation' && <ReservationTab onApply={onApply} />}
+      {tab === 'reservation' && <ReservationTab />}
       {tab === 'history' && <HistoryTab />}
       {tab === 'psych' && <PsychTab />}
     </div>
