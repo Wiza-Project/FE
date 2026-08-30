@@ -522,11 +522,12 @@ function ReservationTab() {
   useEffect(() => {
     if (
       isScheduleConflict &&
+      !changeMutation.isPending &&
       (latestReservationFetchStatus === 'success' || latestReservationFetchStatus === 'error')
     ) {
       rebaseButtonRef.current?.querySelector('button')?.focus();
     }
-  }, [isScheduleConflict, latestReservationFetchStatus]);
+  }, [isScheduleConflict, latestReservationFetchStatus, changeMutation.isPending]);
 
   useEffect(() => {
     if (!changeModal) {
