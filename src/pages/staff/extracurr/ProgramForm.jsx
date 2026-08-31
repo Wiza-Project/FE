@@ -648,6 +648,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     onSuccess: () => {
       toast('수정 내용이 저장되었습니다.', 'success');
       queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
+      queryClient.invalidateQueries({ queryKey: ['adminProgramDetail', programId] });
       onSubmit();
     },
     onError: handleSubmitError,
