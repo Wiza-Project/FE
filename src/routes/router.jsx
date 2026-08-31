@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import RootLayout from '@/components/layout/RootLayout';
 import PortalShell from '@/components/layout/PortalShell';
 import ProtectedRoute from '@/routes/ProtectedRoute';
+import CounselOperationRoute from '@/routes/CounselOperationRoute';
 import { USER_TYPE } from '@/constants/domain';
 import HomePage from '@/pages/HomePage';
 import MyPage from '@/pages/MyPage';
@@ -97,7 +98,10 @@ export const router = createBrowserRouter([
           { path: '/staff', element: <StaffDashboard /> },
           { path: '/staff/programs', element: <StaffExtracurrPage /> },
           { path: '/staff/competency', element: <StaffCompetencyPage /> },
-          { path: '/staff/counsel', element: <StaffCounselingPage /> },
+          {
+            element: <CounselOperationRoute />,
+            children: [{ path: '/staff/counsel', element: <StaffCounselingPage /> }],
+          },
           { path: '/staff/students', element: <StudentRecords /> },
           { path: '/staff/boards', element: <StaffBoardsPage /> },
           { path: '/staff/mileage', element: <StaffMileagePage /> },

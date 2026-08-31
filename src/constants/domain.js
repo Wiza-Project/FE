@@ -173,6 +173,8 @@ export const COUNSELING_RESERVATION_ERROR_CODE = {
   ALREADY_PROCESSED: 'S005',
   /** 동일 정책에 동시에 동의 요청이 들어와 충돌한 경우. 동의(POST /consents) API 전용. */
   CONSENT_CONFLICT: 'U012',
+  /** (일정 수정 전용) 예약 행 잠금 후 확인한 현재 일정이 요청의 expectedScheduleId와 달라 stale. 자동 재시도 금지, 사용자가 최신 기준으로 다시 선택해야 한다. */
+  RESERVATION_SCHEDULE_CONFLICT: 'S013',
 };
 
 /** 상담 회기의 출석 상태 — CounselingSessionResponse.attendanceStatus. */
