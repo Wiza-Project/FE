@@ -496,10 +496,18 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     queryKey: ['competencyOptions'],
     queryFn: fetchCompetencyOptions,
   });
-  const competencyOptions = (competencyData ?? []).map((c) => ({
-    id: c.competencyId,
-    label: c.competencyName,
-  }));
+  // 활성 목록에는 없지만 기존 프로그램이 참조 중인(비활성화된) 값을 셀렉트에 표시하기 위해
+  // 상세 응답의 원본 id/label을 옵션 끝에 병합한다.
+  const mergeCurrentOption = (options, currentId, currentLabel) =>
+    isEdit && currentId != null && !options.some((o) => o.id === currentId)
+      ? [...options, { id: currentId, label: currentLabel }]
+      : options;
+
+  const competencyOptions = mergeCurrentOption(
+    (competencyData ?? []).map((c) => ({ id: c.competencyId, label: c.competencyName })),
+    detailData?.competencyId,
+    detailData?.competencyName,
+  );
   const competencyPlaceholder = competencyLoading
     ? '불러오는 중…'
     : competencyErrored
@@ -511,7 +519,11 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     isLoading: programTypeLoading,
     isError: programTypeErrored,
   } = useCommonCode('PROGRAM_TYPE');
-  const programTypeOptions = programTypeCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
+  const programTypeOptions = mergeCurrentOption(
+    programTypeCodes.map((c) => ({ id: c.codeId, label: c.codeName })),
+    detailData?.programTypeCodeId,
+    detailData?.programTypeCodeName,
+  );
 
   const {
     data: departmentCodes = [],
@@ -519,7 +531,11 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     isError: departmentErrored,
     refetch: refetchDepartments,
   } = useCommonCode('DEPARTMENT');
-  const departmentOptions = departmentCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
+  const departmentOptions = mergeCurrentOption(
+    departmentCodes.map((c) => ({ id: c.codeId, label: c.codeName })),
+    detailData?.operatingUnitCodeId,
+    detailData?.operatingUnitCodeName,
+  );
 
   // 수정 모드 프리필에 필요한 옵션 조회가 실패했거나(에러) 로딩이 끝났는데도 비어 있으면,
   // prefilled가 영원히 false로 남아 로딩 화면에 갇히므로 별도 상태로 구분해 재시도 UI를 보여준다.
@@ -534,8 +550,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         programTypeOptions.length === 0 ||
         departmentOptions.length === 0));
 
-  // 수정 모드 프리필: 상세조회 + 역량/분류/부서 옵션 목록이 모두 준비되면 한 번만 채운다
-  // (역량·분류·부서는 상세 응답이 라벨만 주므로 옵션 목록에서 이름이 일치하는 id로 역매핑한다).
+  // 수정 모드 프리필: 상세조회 + 역량/분류/부서 옵션 목록이 모두 준비되면 한 번만 채운다.
+  // 역량·분류·부서는 상세 응답의 원본 id를 그대로 쓴다(옵션 목록은 셀렉트 표시용).
   useEffect(() => {
     if (!isEdit || prefilled || !detailData) return;
     if (
@@ -558,38 +574,14 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     );
     setExistingFileName(detailData.fileName ?? null);
 
-    const competencyMatch = competencyOptions.find((o) => o.label === detailData.competencyName);
-    if (competencyMatch) {
-      setCompetencyId(String(competencyMatch.id));
-    } else if (detailData.competencyName) {
-      toast(
-        `기존 핵심역량('${detailData.competencyName}')을 목록에서 찾지 못했습니다. 다시 선택해 주세요.`,
-        'error',
-      );
+    if (detailData.competencyId != null) {
+      setCompetencyId(String(detailData.competencyId));
     }
-
-    const programTypeMatch = programTypeOptions.find(
-      (o) => o.label === detailData.programTypeCodeName,
-    );
-    if (programTypeMatch) {
-      setProgramTypeCodeId(String(programTypeMatch.id));
-    } else if (detailData.programTypeCodeName) {
-      toast(
-        `기존 프로그램분류('${detailData.programTypeCodeName}')를 목록에서 찾지 못했습니다. 다시 선택해 주세요.`,
-        'error',
-      );
+    if (detailData.programTypeCodeId != null) {
+      setProgramTypeCodeId(String(detailData.programTypeCodeId));
     }
-
-    const departmentMatch = departmentOptions.find(
-      (o) => o.label === detailData.operatingUnitCodeName,
-    );
-    if (departmentMatch) {
-      setOperatingUnitCodeId(String(departmentMatch.id));
-    } else if (detailData.operatingUnitCodeName) {
-      toast(
-        `기존 운영부서('${detailData.operatingUnitCodeName}')를 목록에서 찾지 못했습니다. 다시 선택해 주세요.`,
-        'error',
-      );
+    if (detailData.operatingUnitCodeId != null) {
+      setOperatingUnitCodeId(String(detailData.operatingUnitCodeId));
     }
 
     // 기존 회차가 없는 프로그램(과거 이력)도 화면은 항상 최소 1장으로 시작한다.
