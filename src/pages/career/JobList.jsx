@@ -40,10 +40,14 @@ function DDayBadge({ endDate }) {
  * - 설정 버튼 클릭 시 개인정보 선택동의(PROFILING) 안내 모달 호출
  */
 function AiRecommendationBanner({ onDetail, onRequireConsent }) {
-  const { data: recommendedJobs = [], isLoading } = useQuery({
+  const { data: resData, isLoading } = useQuery({
     queryKey: ['careerRecommendedJobs'],
     queryFn: () => getRecommendedPostings(),
   });
+
+  // resData가 { success: true, data: [...] } 또는 { content: [...] } 또는 일반 배열 형태인 경우 모두 안전하게 처리
+  const rawList = resData?.data || resData?.content || resData;
+  const recommendedJobs = Array.isArray(rawList) ? rawList : [];
 
   return (
     <div className="bg-gradient-to-r from-[#ECFDF5] to-[#F0FDF4] border border-[#A7F3D0] rounded-[10px] p-4 mb-5 shadow-[0_1px_4px_rgba(5,150,105,0.06)]">

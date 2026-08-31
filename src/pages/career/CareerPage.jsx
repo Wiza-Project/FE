@@ -11,35 +11,49 @@ import CareerPrepPage from './CareerPrepPage';
 export default function CareerPage() {
   const [section, setSection] = useState('jobs');
   const [jobView, setJobView] = useState('list');
-  const [selectedJob, setSelectedJob] = useState('J001');
+  const [selectedJobId, setSelectedJobId] = useState(null);
 
   const goJobList = () => {
     setSection('jobs');
     setJobView('list');
+    setSelectedJobId(null);
+  };
+
+  // 공고 상세 선택 핸들러
+  const handleSelectJob = (id) => {
+    setSelectedJobId(id);
+    setJobView('detail');
   };
 
   // Render job sub-screens
   const renderJobs = () => {
     switch (jobView) {
       case 'detail':
-        return <JobDetail jobId={selectedJob} onBack={() => setJobView('list')} />;
+        return selectedJobId ? (
+          <JobDetail
+            jobId={selectedJobId}
+            onBack={() => {
+              setSelectedJobId(null);
+              setJobView('list');
+            }}
+          />
+        ) : (
+          <JobList
+            onDetail={handleSelectJob}
+            onBookmarks={() => setJobView('bookmarks')}
+          />
+        );
       case 'bookmarks':
         return (
           <JobBookmarks
             onBack={() => setJobView('list')}
-            onDetail={(id) => {
-              setSelectedJob(id);
-              setJobView('detail');
-            }}
+            onDetail={handleSelectJob}
           />
         );
       default:
         return (
           <JobList
-            onDetail={(id) => {
-              setSelectedJob(id);
-              setJobView('detail');
-            }}
+            onDetail={handleSelectJob}
             onBookmarks={() => setJobView('bookmarks')}
           />
         );

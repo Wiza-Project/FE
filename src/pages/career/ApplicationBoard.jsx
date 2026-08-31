@@ -9,10 +9,10 @@ import {
 
 // 실제 백엔드 지원 상태 컬럼 그룹
 const BOARD_COLUMNS = [
-  { key: JOB_APPLICATION_STATUS.APPLIED, color: '#0969DA' },
-  { key: JOB_APPLICATION_STATUS.UNDER_REVIEW, color: '#7C3AED' },
-  { key: JOB_APPLICATION_STATUS.PASSED, color: '#059669' },
-  { key: JOB_APPLICATION_STATUS.REJECTED, color: '#CF222E' },
+  { key: 'APPLIED', label: '지원완료', color: '#0969DA' },
+  { key: 'UNDER_REVIEW', label: '서류검토중', color: '#7C3AED' },
+  { key: 'PASSED', label: '합격', color: '#059669' },
+  { key: 'REJECTED', label: '불합격', color: '#CF222E' },
 ];
 
 function KanbanCard({ item, onCancelRequest }) {
