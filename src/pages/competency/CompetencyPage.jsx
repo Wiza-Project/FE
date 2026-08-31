@@ -1,12 +1,16 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs } from '@/components/common';
 import { COMP_COLOR } from '@/data/competencyData';
+import { fetchStudentAssessmentRounds } from '@/api/competency';
 import DiagnosisGuide from './DiagnosisGuide';
 import DiagnosisQuestions from './DiagnosisQuestions';
 import DiagnosisResult from './DiagnosisResult';
 import DiagnosisHistory from './DiagnosisHistory';
 import ComparisonPage from './ComparisonPage';
 import RecommendedPrograms from './RecommendedPrograms';
+import RoundPicker from './RoundPicker';
 
 const TAB_CONFIG = [
   { key: 'guide', label: '진단 안내' },
@@ -18,11 +22,6 @@ const TAB_CONFIG = [
 
 const SUB_VIEWS = ['guide', 'questions', 'result', 'history', 'compare', 'recommend'];
 
-// TODO: 학생이 여러 진행중 회차 중 하나를 고르는 화면은 개발 순서에 없다(개발순서_브랜치.md
-// 참조 — 진단 안내·동의는 화면 하나로 끝나는 범위). 실제로는 알림/대시보드 딥링크로 roundId가
-// 정해져 이 화면에 들어온다고 가정하고, 그 진입점이 아직 없어 임시로 고정값을 쓴다.
-const CURRENT_ASSESSMENT_ROUND_ID = 1;
-
 /**
  * 핵심역량 진단 화면 허브. 하위 화면들은 별도 라우트가 아니라 탭/버튼으로 전환되는
  * 하나의 화면입니다 (Figma 원본 설계를 그대로 따름 — 진단 흐름이 URL보다 단계 중심이라
@@ -33,6 +32,22 @@ export default function CompetencyPage() {
   const [attemptId, setAttemptId] = useState(null);
   // 진단 이력에서 체크박스로 고른 두 회차. 사전·사후 비교 화면이 이 두 attemptId로 조회한다.
   const [comparePair, setComparePair] = useState(null);
+
+  // 응시할 회차 결정: 알림/대시보드 딥링크(?roundId=) > 사용자가 목록에서 고른 것 >
+  // 열린 회차가 하나뿐이면 자동 선택. 셋 다 없으면 RoundPicker를 먼저 보여준다.
+  const [searchParams] = useSearchParams();
+  const deepLinkRoundId = Number(searchParams.get('roundId')) || null;
+  const [pickedRoundId, setPickedRoundId] = useState(null);
+
+  const roundsQuery = useQuery({
+    queryKey: ['studentAssessmentRounds'],
+    queryFn: fetchStudentAssessmentRounds,
+  });
+  const openRounds = roundsQuery.data ?? [];
+  const activeRoundId =
+    deepLinkRoundId ??
+    pickedRoundId ??
+    (openRounds.length === 1 ? openRounds[0].assessmentRoundId : null);
 
   // Tab keys that map to sub-views
   const tabKey = SUB_VIEWS.includes(view) && view !== 'questions' ? view : 'guide';
@@ -66,19 +81,28 @@ export default function CompetencyPage() {
       )}
 
       {/* Sub-views */}
-      {view === 'guide' && (
-        <DiagnosisGuide
-          roundId={CURRENT_ASSESSMENT_ROUND_ID}
-          onStart={(id) => {
-            setAttemptId(id);
-            setView('questions');
-          }}
-          onViewResult={(id) => {
-            setAttemptId(id);
-            setView('result');
-          }}
-        />
-      )}
+      {view === 'guide' &&
+        (activeRoundId != null ? (
+          <DiagnosisGuide
+            roundId={activeRoundId}
+            onStart={(id) => {
+              setAttemptId(id);
+              setView('questions');
+            }}
+            onViewResult={(id) => {
+              setAttemptId(id);
+              setView('result');
+            }}
+          />
+        ) : (
+          <RoundPicker
+            rounds={openRounds}
+            isLoading={roundsQuery.isPending}
+            isError={roundsQuery.isError}
+            onRetry={roundsQuery.refetch}
+            onPick={setPickedRoundId}
+          />
+        ))}
 
       {view === 'questions' && (
         <DiagnosisQuestions

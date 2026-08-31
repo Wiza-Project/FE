@@ -615,6 +615,27 @@ export const fetchRecommendedPrograms = async (attemptId) => {
 };
 
 /**
+ * 응시 가능한 진단 회차 목록. GET /api/students/assessment-rounds
+ * 지금이 응시기간 안이면서 로그인 학생이 대상 조건에 해당하는 회차만 최근 개설순으로 내려온다.
+ * 이미 응시를 시작한 회차는 attemptId/attemptStatus가 채워진다(없으면 둘 다 null).
+ *
+ * @returns {Promise<{
+ *   assessmentRoundId: number,
+ *   assessmentName: string,
+ *   assessmentType: 'PRE'|'POST',
+ *   startsAt: string,
+ *   endsAt: string,
+ *   questionCount: number,
+ *   attemptId: number|null,
+ *   attemptStatus: string|null,
+ * }[]>}
+ */
+export const fetchStudentAssessmentRounds = async () => {
+  const { data } = await apiClient.get('/students/assessment-rounds');
+  return data;
+};
+
+/**
  * 진단 안내 조회. 진단명·응시기간·문항수·예상 소요시간과 함께, 이미 응시를
  * 시작한 적이 있으면 기존 attemptId/attemptStatus를 내려준다(없으면 둘 다 null).
  *
