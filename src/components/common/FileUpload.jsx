@@ -14,10 +14,6 @@ function isAllowedFile(file, accept) {
   return tokens.some((ext) => name.endsWith(ext));
 }
 
-function isSameFile(a, b) {
-  return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
-}
-
 /**
  * @param {Object} props
  * @param {string} [props.accept]
@@ -44,19 +40,14 @@ export function FileUpload({
     setRejectedNames(rejected.map((f) => f.name));
     if (valid.length === 0) return;
     const filesToUse = multiple ? valid : valid.slice(0, 1);
-    const deduped = multiple
-      ? filesToUse.filter((f) => !files.some((existing) => isSameFile(existing, f)))
-      : filesToUse;
-    const next = multiple ? [...files, ...deduped] : deduped;
-    setFiles(next);
-    onFiles?.(next);
+    setFiles((prev) => (multiple ? [...prev, ...filesToUse] : filesToUse));
+    onFiles?.(filesToUse);
   };
 
   const removeFile = (i) => {
     const next = files.filter((_, j) => j !== i);
     setFiles(next);
     onFiles?.(next);
-    if (inputRef.current) inputRef.current.value = '';
   };
 
   return (

@@ -50,7 +50,6 @@ export function Tabs({ tabs, active, onChange, accentColor = '#2563EB', withPane
     >
       {tabs.map((tab, index) => (
         <button
-          type="button"
           key={tab.key}
           ref={(el) => {
             tabRefs.current[index] = el;

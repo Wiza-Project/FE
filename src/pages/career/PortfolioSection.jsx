@@ -442,7 +442,7 @@ function PortfolioFormModal({ open, documentId, onClose, onSaved }) {
               accept={ATTACHMENT_ACCEPT}
               maxSize="서버 정책에 따름"
               multiple
-              onFiles={setPendingFiles}
+              onFiles={(files) => setPendingFiles((prev) => [...prev, ...files])}
             />
             <p className="text-[10px] text-[#9AA0A6] mt-1">저장 시 함께 업로드됩니다.</p>
 

@@ -41,7 +41,7 @@ const isValidActiveConsent = (consent, consentPolicyId) =>
   Number.isInteger(consentPolicyId) &&
   consentPolicyId > 0 &&
   consent?.consentPolicyId === consentPolicyId &&
-  consent.withdrawnAt == null &&
+  consent.withdrawnAt === null &&
   Number.isInteger(consent.userConsentId) &&
   consent.userConsentId > 0;
 
@@ -211,7 +211,7 @@ export default function CounselingApply({ onComplete, onBack }) {
   const hasConsentConfigError =
     !isConsentLoading && !hasConsentQueryError && requiredPersonalInfoPolicies.length !== 1;
 
-  // 내 동의 이력 중, 현재 정책에 대해 철회되지 않은(withdrawnAt == null) 이력만 "유효"로 본다.
+  // 내 동의 이력 중, 현재 정책에 대해 철회되지 않은(withdrawnAt === null) 이력만 "유효"로 본다.
   const activeConsent = useMemo(
     () =>
       myConsents.find(
