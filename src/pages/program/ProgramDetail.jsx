@@ -224,6 +224,7 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                   <button
                     type="button"
                     onClick={() => setSessionsOpen((v) => !v)}
+                    aria-expanded={sessionsOpen}
                     className="text-[12px] font-semibold text-[#2563EB] hover:underline"
                   >
                     회차 상세 {sessionsOpen ? '접기' : `보기 (총 ${sessionCount}회차)`}
