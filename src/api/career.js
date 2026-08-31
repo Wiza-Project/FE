@@ -35,7 +35,7 @@ import { apiClient } from '@/api/client';
  * @returns {Promise<PageResponse>}
  */
 export const getJobPostings = (params) =>
-  apiClient.get('/students/career/job-postings', { params });
+  apiClient.get('/students/career/job-postings', { params }).then((res) => res.data);
 
 /**
  * @typedef {Object} JobPostingDetail
@@ -43,9 +43,7 @@ export const getJobPostings = (params) =>
  * @property {string} postingTitle 공고 제목
  * @property {string} companyName 기업명
  * @property {string} [companyLogoUrl] 기업 로고 URL
- * @property {string} jobDescription 직무 상세 기술서
- * @property {string} qualificationRequirements 자격 요건 (JSON/Text)
- * @property {string} preferredQualifications 우대 사항 (JSON/Text)
+ * @property {string} jobDescription 직무 상세 기술서 (자격요건/우대사항 통합 본문)
  * @property {string} [benefits] 추천채용 혜택/복리후생
  * @property {string} employmentType 고용 형태
  * @property {string} salaryInfo 급여 조건
@@ -63,7 +61,7 @@ export const getJobPostings = (params) =>
  * @returns {Promise<JobPostingDetail>}
  */
 export const getJobPostingDetail = (id) =>
-  apiClient.get(`/students/career/job-postings/${id}`);
+  apiClient.get(`/students/career/job-postings/${id}`).then((res) => res.data);
 
 /**
  * @typedef {Object} JobPostingSummary
@@ -86,7 +84,7 @@ export const getJobPostingDetail = (id) =>
  * @returns {Promise<Array<JobPostingSummary>>}
  */
 export const getRecommendedPostings = () =>
-  apiClient.get('/students/career/matching/recommendations');
+  apiClient.get('/students/career/matching/recommendations').then((res) => res.data);
 
 /**
  * @typedef {Object} JobRelationRequest
@@ -111,7 +109,7 @@ export const getRecommendedPostings = () =>
  * @returns {Promise<JobRelationResponse>}
  */
 export const applyJobPosting = (payload) =>
-  apiClient.post('/students/career/applications', payload);
+  apiClient.post('/students/career/applications', payload).then((res) => res.data);
 
 /**
  * [학생] 채용공고 지원 취소 (접수 마감 전)
@@ -120,7 +118,7 @@ export const applyJobPosting = (payload) =>
  * @returns {Promise<void>}
  */
 export const cancelJobApplication = (jobPostingId) =>
-  apiClient.delete(`/students/career/applications/${jobPostingId}`);
+  apiClient.delete(`/students/career/applications/${jobPostingId}`).then((res) => res.data);
 
 /**
  * @typedef {Object} JobScrapToggleResponse
@@ -135,7 +133,7 @@ export const cancelJobApplication = (jobPostingId) =>
  * @returns {Promise<JobScrapToggleResponse>}
  */
 export const toggleJobScrap = (jobPostingId) =>
-  apiClient.post(`/students/career/scraps/${jobPostingId}`);
+  apiClient.post(`/students/career/scraps/${jobPostingId}`).then((res) => res.data);
 
 /**
  * @typedef {Object} JobScrapSummary
@@ -153,7 +151,7 @@ export const toggleJobScrap = (jobPostingId) =>
  * @returns {Promise<PageResponse>}
  */
 export const getMyJobScraps = (params) =>
-  apiClient.get('/students/career/scraps', { params });
+  apiClient.get('/students/career/scraps', { params }).then((res) => res.data);
 
 /**
  * [학생] 내 온라인 지원 내역 목록 조회 (최신지원순)
@@ -162,7 +160,7 @@ export const getMyJobScraps = (params) =>
  * @returns {Promise<PageResponse>}
  */
 export const getMyJobApplications = (params) =>
-  apiClient.get('/students/career/applications', { params });
+  apiClient.get('/students/career/applications', { params }).then((res) => res.data);
 
 /**
  * @typedef {Object} JobPreference
@@ -181,7 +179,7 @@ export const getMyJobApplications = (params) =>
  * @returns {Promise<JobPreference>}
  */
 export const getJobPreference = () =>
-  apiClient.get('/students/career/preference');
+  apiClient.get('/students/career/preference').then((res) => res.data);
 
 /**
  * [학생] 취업 희망조건 등록 및 수정
@@ -190,7 +188,7 @@ export const getJobPreference = () =>
  * @returns {Promise<JobPreference>}
  */
 export const saveJobPreference = (payload) =>
-  apiClient.put('/students/career/preference', payload);
+  apiClient.put('/students/career/preference', payload).then((res) => res.data);
 
 // 화면 호환용 별칭 - 불필요 시 삭제
 export const fetchJobPostings = getJobPostings;

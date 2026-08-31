@@ -35,7 +35,7 @@ import { apiClient } from '@/api/client';
  * @returns {Promise<PageResponse>}
  */
 export const getStaffJobPostings = (params) =>
-  apiClient.get('/admin/career/job-postings', { params });
+  apiClient.get('/admin/career/job-postings', { params }).then((res) => res.data);
 
 /**
  * @typedef {Object} JobPostingCreateRequest
@@ -59,7 +59,7 @@ export const getStaffJobPostings = (params) =>
  * @returns {Promise<number>} 생성된 jobPostingId
  */
 export const createJobPosting = (payload) =>
-  apiClient.post('/admin/career/job-postings', payload);
+  apiClient.post('/admin/career/job-postings', payload).then((res) => res.data);
 
 /**
  * [교직원] 채용공고 내용 수정
@@ -69,7 +69,7 @@ export const createJobPosting = (payload) =>
  * @returns {Promise<void>}
  */
 export const updateJobPosting = (jobPostingId, payload) =>
-  apiClient.put(`/admin/career/job-postings/${jobPostingId}`, payload);
+  apiClient.put(`/admin/career/job-postings/${jobPostingId}`, payload).then((res) => res.data);
 
 /**
  * @typedef {Object} JobPostingReviewRequest
@@ -85,7 +85,7 @@ export const updateJobPosting = (jobPostingId, payload) =>
  * @returns {Promise<void>}
  */
 export const reviewJobPosting = (jobPostingId, payload) =>
-  apiClient.patch(`/admin/career/job-postings/${jobPostingId}/review`, payload);
+  apiClient.patch(`/admin/career/job-postings/${jobPostingId}/review`, payload).then((res) => res.data);
 
 /**
  * [교직원] 채용공고 삭제
@@ -94,7 +94,7 @@ export const reviewJobPosting = (jobPostingId, payload) =>
  * @returns {Promise<void>}
  */
 export const deleteJobPosting = (jobPostingId) =>
-  apiClient.delete(`/admin/career/job-postings/${jobPostingId}`);
+  apiClient.delete(`/admin/career/job-postings/${jobPostingId}`).then((res) => res.data);
 
 /**
  * @typedef {Object} ApplicantSearchCondition
@@ -111,7 +111,7 @@ export const deleteJobPosting = (jobPostingId) =>
  * @returns {Promise<PageResponse>}
  */
 export const getApplicantsByJobPosting = (jobPostingId, params) =>
-  apiClient.get(`/admin/career/postings/${jobPostingId}/applicants`, { params });
+  apiClient.get(`/admin/career/postings/${jobPostingId}/applicants`, { params }).then((res) => res.data);
 
 /**
  * @typedef {Object} CompanySearchCondition
@@ -128,7 +128,7 @@ export const getApplicantsByJobPosting = (jobPostingId, params) =>
  * @returns {Promise<PageResponse>}
  */
 export const getCompanies = (params) =>
-  apiClient.get('/admin/career/companies', { params });
+  apiClient.get('/admin/career/companies', { params }).then((res) => res.data);
 
 /**
  * @typedef {Object} CompanyDetailResponse
@@ -153,7 +153,7 @@ export const getCompanies = (params) =>
  * @returns {Promise<CompanyDetailResponse>}
  */
 export const getCompanyDetail = (companyAccountId) =>
-  apiClient.get(`/admin/career/companies/${companyAccountId}`);
+  apiClient.get(`/admin/career/companies/${companyAccountId}`).then((res) => res.data);
 
 /**
  * @typedef {Object} CompanyRegisterRequest
@@ -174,7 +174,7 @@ export const getCompanyDetail = (companyAccountId) =>
  * @returns {Promise<number>} 생성된 companyAccountId
  */
 export const registerCompany = (payload) =>
-  apiClient.post('/admin/career/companies', payload);
+  apiClient.post('/admin/career/companies', payload).then((res) => res.data);
 
 /**
  * @typedef {Object} CompanyVerifyRequest
@@ -190,7 +190,7 @@ export const registerCompany = (payload) =>
  * @returns {Promise<void>}
  */
 export const verifyCompany = (companyAccountId, payload) =>
-  apiClient.patch(`/admin/career/companies/${companyAccountId}/verify`, payload);
+  apiClient.patch(`/admin/career/companies/${companyAccountId}/verify`, payload).then((res) => res.data);
 
 // 화면 호환용 별칭 - 불필요 시 삭제
 export const fetchStaffJobPostings = getStaffJobPostings;
