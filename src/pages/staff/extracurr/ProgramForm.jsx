@@ -1157,6 +1157,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               ) : (
                 <div
                   id="mileagePolicyPreview"
+                  role="status"
+                  aria-live="polite"
                   className="h-9 flex items-center text-[13px] text-[#1F2328]"
                 >
                   {!programTypeCodeId
