@@ -71,21 +71,27 @@ export const fetchMyAttendance = async (programId) => {
 };
 
 /**
- * 프로그램 등록 폼의 "연계 핵심역량" select용 목록 조회. GET /api/admin/programs/competencies
- * 최상위(상위역량 없음) + 사용 중인 역량만 displayOrder 순으로 내려온다.
- * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number}[]>}
+ * 프로그램 등록/수정 폼의 "연계 핵심역량" select용 목록 조회. GET /api/competencies
+ * (핵심역량 도메인 공용 조회 API, WP-230) 최상위(상위역량 없음) + 사용 중인 역량만
+ * displayOrder 순으로 내려온다.
+ * @param {Object} [opts]
+ * @param {number} [opts.includeCompetencyId] 활성 목록에 없어도(비활성) 강제로 포함할 역량 id.
+ *   수정 폼에서 기존 프로그램이 참조 중인 값을 셀렉트에 표시하기 위해 사용. 생략 시 기존과 동일하게 호출.
+ * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number, active: boolean}[]>}
  */
-export const fetchCompetencyOptions = async () => {
-  const { data } = await apiClient.get('/admin/programs/competencies');
+export const fetchCompetencyOptions = async ({ includeCompetencyId } = {}) => {
+  const { data } = await apiClient.get('/competencies', {
+    params: includeCompetencyId != null ? { includeCompetencyId } : undefined,
+  });
   return data;
 };
 
 /**
- * 학생용 "핵심역량" 필터 옵션 조회. GET /api/students/programs/competencies
+ * 학생용 "핵심역량" 필터 옵션 조회. GET /api/competencies
  * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number}[]>}
  */
 export const fetchCompetencyOptionsStudent = async () => {
-  const { data } = await apiClient.get('/students/programs/competencies');
+  const { data } = await apiClient.get('/competencies');
   return data;
 };
 
