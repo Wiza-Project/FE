@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { PageHeader, StatusBadge, Button, ConfirmDialog, toast } from '@/components/common';
 import { fetchProgramDetail, downloadProgramOperationPlan } from '@/api/programs';
 import { applyToProgram } from '@/api/programApplications';
-import { formatDate } from '@/utils/date';
+import { formatDate, formatDateTime, formatTime } from '@/utils/date';
 import { useProgramConsent } from '@/hooks/useProgramConsent';
 import { PROGRAM_APPLICATION_ERROR_CODE, CONSENT_MODULE_CODE } from '@/constants/domain';
 import { useQueryClient } from '@tanstack/react-query';
@@ -142,6 +142,12 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
   const dDay = Math.ceil(
     (new Date(p.recruitmentEndsAt).getTime() - Date.now()) / 86400000,
   );
+  const formatSessionPeriod = (startsAt, endsAt) => {
+    if (formatDate(startsAt) === formatDate(endsAt)) {
+      return `${formatDate(startsAt)} ${formatTime(startsAt)} ~ ${formatTime(endsAt)}`;
+    }
+    return `${formatDateTime(startsAt)} ~ ${formatDateTime(endsAt)}`;
+  };
 
   return (
     <div>
@@ -168,15 +174,17 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
         {/* ── Left: Program info ── */}
         <div className="flex flex-col gap-4">
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
-              <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-              <h2 className="text-[14px] font-bold text-[#1F2328]">프로그램 정보</h2>
+            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
+                <h2 className="text-[14px] font-bold text-[#1F2328]">프로그램 정보</h2>
+              </div>
             </div>
             <div className="divide-y divide-[#F3F4F6]">
               {[
                 { label: '주관부서', value: p.operatingUnitCodeName || '-' },
                 { label: '프로그램유형', value: p.programTypeCodeName || '-' },
-                { label: '운영기간', value: `${period} (${sessionCount}회차)` },
+                { label: '운영기간', value: period },
                 { label: '장소', value: location },
                 { label: '모집기간', value: recruitPeriod },
                 { label: '정원', value: `${p.capacity}명 (현재 ${applied}명 신청)` },
@@ -188,34 +196,6 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                   <span className="text-[13px] text-[#1F2328]">{row.value}</span>
                 </div>
               ))}
-              {sessionCount > 0 && (
-                <div className="px-5 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setSessionsOpen((v) => !v)}
-                    className="text-[12px] font-semibold text-[#2563EB] hover:underline"
-                  >
-                    회차 상세 {sessionsOpen ? '접기' : `보기 (${sessionCount}회차)`}
-                  </button>
-                  {sessionsOpen && (
-                    <div className="mt-2 flex flex-col gap-2">
-                      {p.sessions.map((s, i) => (
-                        <div
-                          key={s.programSessionId ?? i}
-                          className="text-[12px] text-[#656D76] bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2"
-                        >
-                          <span className="font-semibold text-[#1F2328]">{i + 1}회차</span>
-                          {s.sessionName && <span> · {s.sessionName}</span>}
-                          <div>
-                            {formatDate(s.startsAt)} ~ {formatDate(s.endsAt)}
-                            {s.location ? ` · ${s.location}` : ''}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
               {p.competencyName && (
                 <div className="flex px-5 py-3">
                   <span className="w-24 flex-shrink-0 text-[13px] font-semibold text-[#656D76]">
@@ -237,6 +217,33 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                   <span className="text-[13px] text-[#1F2328] whitespace-pre-line">
                     {p.description}
                   </span>
+                </div>
+              )}
+              {sessionCount > 0 && (
+                <div className="px-5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setSessionsOpen((v) => !v)}
+                    aria-expanded={sessionsOpen}
+                    className="text-[12px] font-semibold text-[#2563EB] hover:underline"
+                  >
+                    회차 상세 {sessionsOpen ? '접기' : `보기 (총 ${sessionCount}회차)`}
+                  </button>
+                  {sessionsOpen && (
+                    <div className="mt-2 flex flex-col gap-2">
+                      {p.sessions.map((s, i) => (
+                        <div
+                          key={s.programSessionId ?? i}
+                          className="text-[12px] text-[#656D76] bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2"
+                        >
+                          <span className="font-semibold text-[#1F2328]">{i + 1}회차</span>
+                          {s.sessionName && <span> · {s.sessionName}</span>}
+                          <div>{formatSessionPeriod(s.startsAt, s.endsAt)}</div>
+                          {s.location && <div>{s.location}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {p.mileagePoints != null && (
@@ -275,24 +282,6 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                 </div>
               )}
             </div>
-
-            {/* Capacity bar */}
-            {p.capacity > 0 && (
-              <div className="px-5 py-4 border-t border-[#F3F4F6]">
-                <div className="flex justify-between text-[12px] mb-1.5">
-                  <span className="text-[#656D76]">신청 현황</span>
-                  <span className="font-bold text-[#1F2328]">
-                    {applied}/{p.capacity}명
-                  </span>
-                </div>
-                <div className="h-2 bg-[#F3F4F6] rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-[#2563EB] rounded-full"
-                    style={{ width: `${Math.min((applied / p.capacity) * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Mileage notice */}
@@ -392,6 +381,7 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                               type="button"
                               onClick={() => toggleContent(policy.consentPolicyId)}
                               aria-expanded={contentOpen}
+                              aria-label={`${policy.title} 내용 ${contentOpen ? '접기' : '보기'}`}
                               className="text-[12px] text-[#2563EB] underline self-start ml-[26px]"
                             >
                               {contentOpen ? '내용 접기' : '내용 보기'}

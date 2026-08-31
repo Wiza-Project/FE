@@ -398,7 +398,11 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                         <StatusBadge status={full ? '마감' : p.status} size="sm" />
                       </td>
                       <td className="px-3 py-3 text-center">
-                        {p.myApplicationStatus ? (
+                        {p.myApplicationStatus === 'WAITLISTED' ? (
+                          <span className="inline-flex items-center h-7 px-3 text-[12px] font-bold text-[#D97706] bg-[#FEF3C7] rounded-[5px]">
+                            대기중
+                          </span>
+                        ) : p.myApplicationStatus ? (
                           <span className="inline-flex items-center h-7 px-3 text-[12px] font-bold text-[#656D76] bg-[#F3F4F6] rounded-[5px]">
                             신청완료
                           </span>
@@ -499,7 +503,11 @@ export default function ProgramList({ onDetail, onMyApplications }) {
                     )}
                     <div className="flex items-center justify-between pt-2 border-t border-[#F3F4F6] mt-auto">
                       <span className="text-[12px] font-bold text-[#D97706]">🏅 {p.mileage}점</span>
-                      {p.myApplicationStatus ? (
+                      {p.myApplicationStatus === 'WAITLISTED' ? (
+                        <span className="inline-flex items-center h-7 px-3 text-[12px] font-bold text-[#D97706] bg-[#FEF3C7] rounded-[5px]">
+                          대기중
+                        </span>
+                      ) : p.myApplicationStatus ? (
                         <span className="inline-flex items-center h-7 px-3 text-[12px] font-bold text-[#656D76] bg-[#F3F4F6] rounded-[5px]">
                           신청완료
                         </span>
