@@ -764,13 +764,13 @@ export default function ReservationManage() {
                 ))}
               </select>
               {proxySchedulesError || proxyTypesError ? (
-                <p className="mt-1 text-[10px] text-[#CF222E]">
+                <p role="alert" className="mt-1 text-[10px] text-[#CF222E]">
                   일정을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
                 </p>
               ) : !proxySchedulesLoading &&
                 !proxyTypesLoading &&
                 availableSchedules.length === 0 ? (
-                <p className="mt-1 text-[10px] text-[#CF222E]">예약 가능한 일정이 없습니다.</p>
+                <p role="status" className="mt-1 text-[10px] text-[#CF222E]">예약 가능한 일정이 없습니다.</p>
               ) : null}
               {scheduleError && (
                 <p
