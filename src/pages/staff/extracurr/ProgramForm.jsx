@@ -4,13 +4,13 @@ import { Button, FileUpload, StatusBadge, Tabs, toast } from '@/components/commo
 import {
   createProgram,
   fetchCompetencyOptions,
+  fetchMileagePolicyPreview,
   fetchProgramDetailAdmin,
   updateProgram,
   uploadProgramOperationPlan,
 } from '@/api/programs';
 import { ApiError } from '@/api/client';
 import { useCommonCode } from '@/hooks/useCommonCode';
-import { MILEAGE_POLICY_OPTIONS } from '@/data/programOptions';
 import { formatDate } from '@/utils/date';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
@@ -474,7 +474,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
 
   // 역량·정책
   const [competencyId, setCompetencyId] = useState('');
-  const [mileagePolicyId, setMileagePolicyId] = useState('');
   const [completionRate, setCompletionRate] = useState(80);
 
   // Validation / submit state
@@ -542,6 +541,19 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     detailData?.programTypeCodeName,
   );
 
+  // 등록 모드에서만 사용 — 아직 저장 전이라 매핑된 정책을 알 수 없으므로 프로그램 유형
+  // 선택값이 바뀔 때마다 미리보기 API로 실시간 조회한다. 수정 모드는 detailData에 이미
+  // 매핑된 정책이 내려오므로 이 조회를 쓰지 않는다.
+  const {
+    data: mileagePreview,
+    isFetching: mileagePreviewLoading,
+    isError: mileagePreviewErrored,
+  } = useQuery({
+    queryKey: ['mileagePolicyPreview', programTypeCodeId],
+    queryFn: () => fetchMileagePolicyPreview(Number(programTypeCodeId)),
+    enabled: !isEdit && !!programTypeCodeId,
+  });
+
   const {
     data: departmentCodes = [],
     isLoading: departmentLoading,
@@ -586,9 +598,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     setOpE(formatDate(detailData.operationEndsAt));
     setCapacity(detailData.capacity ?? '');
     setCompletionRate(detailData.completionRate != null ? Number(detailData.completionRate) : 80);
-    setMileagePolicyId(
-      detailData.mileagePolicyId != null ? String(detailData.mileagePolicyId) : '',
-    );
     setExistingFileName(detailData.fileName ?? null);
 
     if (detailData.competencyId != null) {
@@ -788,7 +797,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     operatingUnitCodeId: Number(operatingUnitCodeId),
     programTypeCodeId: Number(programTypeCodeId),
     competencyId: Number(competencyId),
-    mileagePolicyId: mileagePolicyId ? Number(mileagePolicyId) : null,
     programName: name.trim(),
     description: description.trim() || null,
     recruitmentStartsAt: toInstant(recruitStart),
@@ -1131,14 +1139,37 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               />
             </Field>
 
-            <Field label="마일리지 정책" htmlFor="mileagePolicyId">
-              <IdSelect
-                id="mileagePolicyId"
-                value={mileagePolicyId}
-                onChange={setMileagePolicyId}
-                options={MILEAGE_POLICY_OPTIONS}
-                placeholder="선택 안함"
-              />
+            <Field label="마일리지 정책" htmlFor="mileagePolicyPreview">
+              {isEdit ? (
+                <>
+                  <div
+                    id="mileagePolicyPreview"
+                    className="h-9 flex items-center text-[13px] text-[#1F2328]"
+                  >
+                    {detailData?.mileageActivityName
+                      ? `${detailData.mileageActivityName} · ${detailData.mileagePoints}점 적립`
+                      : '매핑된 마일리지 정책이 없습니다'}
+                  </div>
+                  <p className="mt-1 text-[11px] text-[#9AA0A6]">
+                    프로그램 유형을 변경하면 저장 시 정책이 자동으로 바뀌어 적용됩니다.
+                  </p>
+                </>
+              ) : (
+                <div
+                  id="mileagePolicyPreview"
+                  className="h-9 flex items-center text-[13px] text-[#1F2328]"
+                >
+                  {!programTypeCodeId
+                    ? '프로그램 유형을 먼저 선택하세요'
+                    : mileagePreviewLoading
+                      ? '불러오는 중…'
+                      : mileagePreviewErrored
+                        ? '정책 정보를 불러오지 못했습니다'
+                        : mileagePreview?.mileageActivityName
+                          ? `${mileagePreview.mileageActivityName} · ${mileagePreview.mileagePoints}점 적립`
+                          : '매핑된 마일리지 정책이 없습니다'}
+                </div>
+              )}
             </Field>
 
             <div className="col-span-2">
