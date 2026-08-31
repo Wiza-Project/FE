@@ -271,7 +271,10 @@ export default function PortalShell() {
   const [semesterYear, setSemesterYear] = useState('');
   const [semesterCode, setSemesterCode] = useState('');
   useEffect(() => {
-    if (semesterYear || visibleAcademicYears.length === 0) return;
+    if (visibleAcademicYears.length === 0) return;
+    // studentProfile(입학연도)이 academicYears보다 늦게 도착하면 이미 골라둔
+    // semesterYear가 필터링 후 목록에서 빠질 수 있다 — 그 경우엔 다시 골라야 한다.
+    if (semesterYear && visibleAcademicYears.some((y) => y.code === semesterYear)) return;
     const fallback = visibleAcademicYears.find((y) => y.code === '2026') ?? visibleAcademicYears[0];
     setSemesterYear(fallback.code);
   }, [semesterYear, visibleAcademicYears]);
@@ -420,6 +423,7 @@ export default function PortalShell() {
           {/* Semester selector: 학년도 · 학기 별도 드롭다운 */}
           <div className="flex items-center gap-1.5">
             <select
+              aria-label="학년도 선택"
               value={semesterYear}
               onChange={(e) => setSemesterYear(e.target.value)}
               className="h-8 px-3 pr-7 text-[12px] font-semibold text-[#1F2328] bg-[#F6F8FA] border border-[#E5E7EB] rounded-[6px] appearance-none cursor-pointer focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"
@@ -435,6 +439,7 @@ export default function PortalShell() {
               )}
             </select>
             <select
+              aria-label="학기 선택"
               value={semesterCode}
               onChange={(e) => setSemesterCode(e.target.value)}
               className="h-8 px-3 pr-7 text-[12px] font-semibold text-[#1F2328] bg-[#F6F8FA] border border-[#E5E7EB] rounded-[6px] appearance-none cursor-pointer focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"

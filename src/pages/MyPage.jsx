@@ -824,11 +824,13 @@ export default function MyPage() {
               <div className="h-6 w-60 bg-[#F3F4F6] rounded animate-pulse" />
               <div className="h-4 w-72 bg-[#F3F4F6] rounded animate-pulse" />
             </div>
-          ) : profileQuery.isError ? (
+          ) : profileQuery.isError || !profile ? (
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-[22px] font-bold text-[#1F2328] leading-tight">안녕하세요 👋</h1>
               <span className="text-[12px] text-[#CF222E]">
-                {getErrorMessage(profileQuery.error, '내 정보를 불러오지 못했습니다.')}
+                {profileQuery.isError
+                  ? getErrorMessage(profileQuery.error, '내 정보를 불러오지 못했습니다.')
+                  : '표시할 정보가 없습니다.'}
               </span>
               <button
                 type="button"
