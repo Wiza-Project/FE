@@ -137,6 +137,8 @@ export default function Survey({ programId, applicationId, programName, onBack }
                           return (
                             <button
                               key={l.value}
+                              type="button"
+                              aria-pressed={isSelected}
                               onClick={() =>
                                 setAnswers((prev) => {
                                   if (prev[q.id] === l.value) {
