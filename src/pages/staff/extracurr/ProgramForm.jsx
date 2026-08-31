@@ -106,7 +106,10 @@ function NumberInput({ id, value, onChange, min = 0, max, placeholder = '', erro
   );
 }
 
-/** 백엔드 FK(operatingUnitCodeId 등)를 받는 select. options는 {id, label}[] 형태. */
+/**
+ * 백엔드 FK(operatingUnitCodeId 등)를 받는 select. options는 {id, label, active?}[] 형태.
+ * active가 false인 옵션은 비활성 표시(회색 텍스트 + "(비활성)" 접미사)만 하고 선택은 계속 허용한다.
+ */
 function IdSelect({ id, value, onChange, options, placeholder = '선택하세요', error, disabled }) {
   return (
     <select
@@ -118,8 +121,12 @@ function IdSelect({ id, value, onChange, options, placeholder = '선택하세요
     >
       <option value="">{placeholder}</option>
       {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.label}
+        <option
+          key={o.id}
+          value={o.id}
+          className={o.active === false ? 'text-[#9AA0A6]' : undefined}
+        >
+          {o.active === false ? `${o.label} (비활성)` : o.label}
         </option>
       ))}
     </select>
@@ -488,26 +495,35 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     enabled: isEdit,
   });
 
+  // 수정 모드에서는 상세조회 완료(=competencyId 확정) 전까지 대기했다가, 확정된 id를
+  // includeCompetencyId로 넘겨 비활성 상태라도 현재 값이 옵션에 포함되도록 한다.
+  // 등록 모드는 기존과 동일하게 파라미터 없이 즉시 호출한다.
+  const competencyIncludeId = isEdit ? detailData?.competencyId : undefined;
+
   const {
     data: competencyData,
-    isLoading: competencyLoading,
+    isPending: competencyLoading,
     isError: competencyErrored,
   } = useQuery({
-    queryKey: ['competencyOptions'],
-    queryFn: fetchCompetencyOptions,
+    queryKey: isEdit
+      ? ['competencyOptions', 'edit', competencyIncludeId]
+      : ['competencyOptions', 'create'],
+    queryFn: () => fetchCompetencyOptions({ includeCompetencyId: competencyIncludeId }),
+    enabled: isEdit ? !!detailData : true,
   });
   // 활성 목록에는 없지만 기존 프로그램이 참조 중인(비활성화된) 값을 셀렉트에 표시하기 위해
-  // 상세 응답의 원본 id/label을 옵션 끝에 병합한다.
+  // 상세 응답의 원본 id/label을 옵션 끝에 병합한다. (역량은 BE가 includeCompetencyId로
+  // 현재 값을 직접 포함해 내려주므로 이 병합 로직을 타지 않는다 — 분류/부서에서만 계속 사용.)
   const mergeCurrentOption = (options, currentId, currentLabel) =>
     isEdit && currentId != null && !options.some((o) => o.id === currentId)
       ? [...options, { id: currentId, label: currentLabel }]
       : options;
 
-  const competencyOptions = mergeCurrentOption(
-    (competencyData ?? []).map((c) => ({ id: c.competencyId, label: c.competencyName })),
-    detailData?.competencyId,
-    detailData?.competencyName,
-  );
+  const competencyOptions = (competencyData ?? []).map((c) => ({
+    id: c.competencyId,
+    label: c.competencyName,
+    active: c.active,
+  }));
   const competencyPlaceholder = competencyLoading
     ? '불러오는 중…'
     : competencyErrored
