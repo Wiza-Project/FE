@@ -36,7 +36,7 @@ export function useProgramConsent() {
   const agreedPolicyIds = useMemo(
     () =>
       new Set(
-        myConsents.filter((c) => c.withdrawnAt === null).map((c) => c.consentPolicyId),
+        myConsents.filter((c) => c.withdrawnAt == null).map((c) => c.consentPolicyId),
       ),
     [myConsents],
   );
