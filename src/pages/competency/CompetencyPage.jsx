@@ -44,8 +44,13 @@ export default function CompetencyPage() {
     queryFn: fetchStudentAssessmentRounds,
   });
   const openRounds = roundsQuery.data ?? [];
+  // 딥링크 roundId는 실제 응시 가능한 회차일 때만 쓴다 — 만료·대상 조건 불일치 회차면 무시하고
+  // RoundPicker의 빈 상태 안내가 뜨도록 한다.
+  const deepLinkIsAvailable =
+    deepLinkRoundId != null &&
+    openRounds.some((r) => r.assessmentRoundId === deepLinkRoundId);
   const activeRoundId =
-    deepLinkRoundId ??
+    (deepLinkIsAvailable ? deepLinkRoundId : null) ??
     pickedRoundId ??
     (openRounds.length === 1 ? openRounds[0].assessmentRoundId : null);
 

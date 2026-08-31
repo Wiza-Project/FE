@@ -1256,6 +1256,7 @@ export default function DiagnosisOps() {
   // 단일 원천이며, 등록·수정 후에는 각 뮤테이션이 이 키를 무효화한다.
   const {
     data: rounds = [],
+    isLoading: roundsLoading,
     isError: roundsError,
   } = useQuery({
     queryKey: ROUNDS_QUERY_KEY,
@@ -1274,15 +1275,21 @@ export default function DiagnosisOps() {
         <Tabs tabs={TABS} active={tab} onChange={setTab} accentColor={ACCENT} />
       </div>
 
-      {roundsError && (
-        <div className="mb-4 p-3 rounded-[8px] bg-[#FEE2E2] border border-[#FECACA] text-[12px] text-[#CF222E] font-semibold">
+      {/* 조회 중·실패 상태에서는 각 탭의 "등록된 회차가 없습니다" 빈 화면을 띄우지 않는다
+          (rounds가 기본값 []이라 성공한 빈 응답과 구분되지 않기 때문). */}
+      {roundsError ? (
+        <div className="p-3 rounded-[8px] bg-[#FEE2E2] border border-[#FECACA] text-[12px] text-[#CF222E] font-semibold">
           회차 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
         </div>
+      ) : roundsLoading ? (
+        <SkeletonLoader rows={6} cols={8} />
+      ) : (
+        <>
+          {tab === 'round' && <RoundManage rounds={rounds} />}
+          {tab === 'response' && <ResponseManage rounds={rounds} />}
+          {tab === 'stats' && <ResultStats rounds={rounds} />}
+        </>
       )}
-
-      {tab === 'round' && <RoundManage rounds={rounds} />}
-      {tab === 'response' && <ResponseManage rounds={rounds} />}
-      {tab === 'stats' && <ResultStats rounds={rounds} />}
     </div>
   );
 }

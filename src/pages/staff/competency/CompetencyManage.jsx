@@ -50,15 +50,15 @@ export default function CompetencyManage() {
     queryFn: fetchAdminCompetencies,
   });
 
-  // BE CompetencyResponse → 화면 표시용 형태. 하위역량·문항 수는 이 API가 주지 않아 0으로 둔다
-  // (하위역량은 미개발, 문항 수 표시는 후속 개선 대상).
+  // BE CompetencyResponse → 화면 표시용 형태. 하위역량 수는 미개발이라 0, 문항 수는 이 API가
+  // 주지 않아 미확인(null)으로 두고 표에서 '—'로 표시한다(0으로 표시하면 문항이 있는 역량도 0건처럼 보임).
   const cores = (competencyList ?? []).map((c) => ({
     id: c.competencyId,
     code: c.competencyCode,
     name: c.competencyName,
     nameEn: c.englishName ?? '',
     subCount: 0,
-    qCount: 0,
+    qCount: null,
     axisOrder: c.displayOrder,
     active: c.active,
   }));
@@ -258,7 +258,7 @@ export default function CompetencyManage() {
                     <td className="px-3 py-3 font-bold text-[#1F2328]">{c.name}</td>
                     <td className="px-3 py-3 text-[#9AA0A6] text-[11px]">{c.nameEn}</td>
                     <td className="px-3 py-3 text-center text-[#656D76]">{c.subCount}</td>
-                    <td className="px-3 py-3 text-center text-[#656D76]">{c.qCount}</td>
+                    <td className="px-3 py-3 text-center text-[#656D76]">{c.qCount ?? '—'}</td>
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <select
                         value={c.axisOrder}
