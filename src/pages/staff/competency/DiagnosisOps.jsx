@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart,
   Button,
@@ -19,6 +19,7 @@ import {
   fetchAssessmentAttendance,
   fetchAssessmentDistribution,
   fetchAssessmentNonParticipants,
+  fetchAssessmentRounds,
   notifyAssessmentNonParticipants,
   registerAssessmentRound,
   updateAssessmentRound,
@@ -31,6 +32,8 @@ const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
 const NON_PARTICIPANT_PAGE_SIZE = 10;
+
+const ROUNDS_QUERY_KEY = ['assessmentRounds'];
 
 // ─── Tab 1: 회차 관리 ─────────────────────────────────────────────────────────
 
@@ -66,7 +69,10 @@ const describeTarget = (targetCondition, majorLabel) => {
   return '전체 재학생';
 };
 
-function RoundManage({ rounds, setRounds }) {
+function RoundManage({ rounds }) {
+  const queryClient = useQueryClient();
+  const invalidateRounds = () => queryClient.invalidateQueries({ queryKey: ROUNDS_QUERY_KEY });
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
 
@@ -153,7 +159,7 @@ function RoundManage({ rounds, setRounds }) {
   const registerMutation = useMutation({
     mutationFn: registerAssessmentRound,
     onSuccess: (created) => {
-      setRounds((prev) => [created, ...prev]);
+      invalidateRounds();
       setDrawerOpen(false);
       toast(`'${created.assessmentName}' 회차가 등록되었습니다.`, 'success');
     },
@@ -163,9 +169,7 @@ function RoundManage({ rounds, setRounds }) {
   const updateMutation = useMutation({
     mutationFn: updateAssessmentRound,
     onSuccess: (updated) => {
-      setRounds((prev) =>
-        prev.map((r) => (r.assessmentRoundId === updated.assessmentRoundId ? updated : r)),
-      );
+      invalidateRounds();
       setDrawerOpen(false);
       toast(`'${updated.assessmentName}' 회차가 수정되었습니다.`, 'success');
     },
@@ -1247,10 +1251,17 @@ function ResultStats({ rounds }) {
 
 export default function DiagnosisOps() {
   const [tab, setTab] = useState('round');
-  // TODO: GET /api/admin/assessment-rounds 목록 조회 API 나오면 useQuery로 교체.
-  // 그 전까지는 이 세션에서 등록·수정한 회차만 보이고 새로고침하면 사라진다. 탭을 넘나들며
-  // 같은 회차를 참조해야 해서(응시 관리 탭의 회차 선택) 여기서 관리한다.
-  const [rounds, setRounds] = useState([]);
+
+  // 회차/응시/결과 통계 세 탭이 같은 회차 목록을 참조한다. react-query 캐시가 탭 전환·재조회의
+  // 단일 원천이며, 등록·수정 후에는 각 뮤테이션이 이 키를 무효화한다.
+  const {
+    data: rounds = [],
+    isLoading: roundsLoading,
+    isError: roundsError,
+  } = useQuery({
+    queryKey: ROUNDS_QUERY_KEY,
+    queryFn: fetchAssessmentRounds,
+  });
 
   const TABS = [
     { key: 'round', label: '① 회차 관리' },
@@ -1264,9 +1275,21 @@ export default function DiagnosisOps() {
         <Tabs tabs={TABS} active={tab} onChange={setTab} accentColor={ACCENT} />
       </div>
 
-      {tab === 'round' && <RoundManage rounds={rounds} setRounds={setRounds} />}
-      {tab === 'response' && <ResponseManage rounds={rounds} />}
-      {tab === 'stats' && <ResultStats rounds={rounds} />}
+      {/* 조회 중·실패 상태에서는 각 탭의 "등록된 회차가 없습니다" 빈 화면을 띄우지 않는다
+          (rounds가 기본값 []이라 성공한 빈 응답과 구분되지 않기 때문). */}
+      {roundsError ? (
+        <div className="p-3 rounded-[8px] bg-[#FEE2E2] border border-[#FECACA] text-[12px] text-[#CF222E] font-semibold">
+          회차 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+        </div>
+      ) : roundsLoading ? (
+        <SkeletonLoader rows={6} cols={8} />
+      ) : (
+        <>
+          {tab === 'round' && <RoundManage rounds={rounds} />}
+          {tab === 'response' && <ResponseManage rounds={rounds} />}
+          {tab === 'stats' && <ResultStats rounds={rounds} />}
+        </>
+      )}
     </div>
   );
 }

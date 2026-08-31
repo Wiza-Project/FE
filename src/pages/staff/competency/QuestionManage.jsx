@@ -5,9 +5,9 @@ import {
   editAssessmentQuestion,
   fetchAssessmentQuestions,
   fetchAssessmentQuestionVersionHistory,
+  fetchCompetencyList,
   uploadAssessmentQuestions,
 } from '@/api/competency';
-import { fetchCompetencyOptions } from '@/api/programs';
 import { ApiError } from '@/api/client';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
@@ -41,8 +41,8 @@ export default function QuestionManage() {
     isLoading: competencyLoading,
     isError: competencyErrored,
   } = useQuery({
-    queryKey: ['competencyOptions'],
-    queryFn: fetchCompetencyOptions,
+    queryKey: ['competencyList'],
+    queryFn: fetchCompetencyList,
   });
   const competencyOptions = competencyData ?? [];
 
