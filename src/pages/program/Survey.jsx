@@ -137,7 +137,18 @@ export default function Survey({ programId, applicationId, programName, onBack }
                           return (
                             <button
                               key={l.value}
-                              onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: l.value }))}
+                              type="button"
+                              aria-pressed={isSelected}
+                              onClick={() =>
+                                setAnswers((prev) => {
+                                  if (prev[q.id] === l.value) {
+                                    const next = { ...prev };
+                                    delete next[q.id];
+                                    return next;
+                                  }
+                                  return { ...prev, [q.id]: l.value };
+                                })
+                              }
                               className={`flex-1 flex flex-col items-center gap-2 py-3 rounded-[8px] border-2 transition-all ${isSelected ? 'border-[#2563EB] bg-[#EFF6FF]' : 'border-[#E5E7EB] bg-white hover:border-[#93C5FD] hover:bg-[#F0F9FF]'}`}
                             >
                               <div
