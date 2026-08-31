@@ -73,6 +73,7 @@ function TextInput({ id, value, onChange, placeholder = '', error, maxLength, di
       placeholder={placeholder}
       maxLength={maxLength}
       disabled={disabled}
+      aria-invalid={!!error}
       className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors disabled:bg-[#F3F4F6] disabled:text-[#9AA0A6] disabled:cursor-not-allowed ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
