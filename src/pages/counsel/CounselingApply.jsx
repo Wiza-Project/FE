@@ -1025,7 +1025,7 @@ export default function CounselingApply({ onComplete, onBack }) {
 
               <div className="bg-[#F0FDFE] border border-[#A5F3FC] rounded-[8px] px-4 py-3 w-full text-left">
                 <p className="text-[12px] text-[#164E63]">
-                  📱 알림톡으로 예약 확정 안내가 발송됩니다. 상담 당일 취소는 최소{' '}
+                  🔔 인앱 알림으로 예약 확정 안내가 제공됩니다. 상담 당일 취소는 최소{' '}
                   <strong>1일 전</strong>까지 가능합니다.
                 </p>
               </div>
