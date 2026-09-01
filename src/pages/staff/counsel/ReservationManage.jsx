@@ -33,8 +33,8 @@ function getErrorMessage(error) {
   if (code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE)
     return '일정 시작 시각이 이미 지나 승인할 수 없습니다. 목록을 새로고침했습니다.';
   if (code === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT)
-    return error.message || '입력값을 다시 확인해 주세요.';
-  return error.message || '처리 중 오류가 발생했습니다.';
+    return '입력값을 다시 확인해 주세요.';
+  return '처리 중 오류가 발생했습니다.';
 }
 
 // 재조회로 목록에서 사라져야 하는(=서버-클라 상태 불일치) 오류인지 구분한다.
@@ -67,6 +67,7 @@ export default function ReservationManage() {
     queryKey: pendingReservationsQueryKey(page),
     queryFn: () => fetchPendingCounselorReservations({ page, size: PAGE_SIZE }),
     placeholderData: keepPreviousData,
+    retry: false,
   });
 
   const invalidatePending = () =>

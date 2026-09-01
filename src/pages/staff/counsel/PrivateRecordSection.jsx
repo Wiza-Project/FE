@@ -32,8 +32,8 @@ function getPrivateRecordErrorMessage(error) {
   if (code === COUNSELING_SESSION_ERROR_CODE.CONFLICT)
     return '상담 상태가 바뀌었습니다. 최신 정보를 다시 불러왔습니다.';
   if (code === COUNSELING_SESSION_ERROR_CODE.INVALID_INPUT)
-    return error.message || '입력값을 다시 확인해 주세요.';
-  return error.message || '처리 중 오류가 발생했습니다.';
+    return '입력값을 다시 확인해 주세요.';
+  return '처리 중 오류가 발생했습니다.';
 }
 
 /**

@@ -30,8 +30,8 @@ export function getSessionErrorMessage(error) {
   if (code === COUNSELING_SESSION_ERROR_CODE.TIME_CONFLICT)
     return '기존 상담 일정·회기와 시간이 겹칩니다. 다른 시간을 선택해 주세요.';
   if (code === COUNSELING_SESSION_ERROR_CODE.INVALID_STATE)
-    return error.message || '현재 상태에서는 처리할 수 없습니다. 목록을 새로고침했습니다.';
+    return '현재 상태에서는 처리할 수 없습니다. 목록을 새로고침했습니다.';
   if (code === COUNSELING_SESSION_ERROR_CODE.INVALID_INPUT)
-    return error.message || '입력값을 다시 확인해 주세요.';
-  return error.message || '처리 중 오류가 발생했습니다.';
+    return '입력값을 다시 확인해 주세요.';
+  return '처리 중 오류가 발생했습니다.';
 }

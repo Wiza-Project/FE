@@ -13,6 +13,7 @@ export default function ReservationDetailModal({ reservationId, onClose }) {
     queryKey: ['counselorReservationDetail', reservationId],
     queryFn: () => fetchCounselorReservationDetail(reservationId),
     enabled: reservationId !== null,
+    retry: false,
   });
 
   const closeDetail = () => {

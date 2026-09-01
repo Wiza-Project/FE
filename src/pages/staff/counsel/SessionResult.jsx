@@ -67,12 +67,14 @@ export default function SessionResult() {
     refetch: refetchSessions,
     isPlaceholderData,
   } = useQuery({
-    queryKey: counselingSessionsQueryKey(page, statusFilter),
+    // queryKey는 counselingSessionsQueryKey 내부에서 statusFilter가 ''일 때도 'ALL'로 정규화하지
+    // 않으므로(nullish만 처리), placeholderData 비교와 동일한 정규화 값을 직접 넘겨 맞춘다.
+    queryKey: counselingSessionsQueryKey(page, statusFilter || 'ALL'),
     queryFn: () =>
       fetchCounselingSessions({ page, size: PAGE_SIZE, sessionStatus: statusFilter || undefined }),
     retry: false,
     placeholderData: (previousData, previousQuery) =>
-      previousQuery?.queryKey[2] === statusFilter ? previousData : undefined,
+      previousQuery?.queryKey[2] === (statusFilter || 'ALL') ? previousData : undefined,
   });
 
   const content = sessionPage?.content ?? [];

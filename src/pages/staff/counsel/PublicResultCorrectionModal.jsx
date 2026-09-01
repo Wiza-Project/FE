@@ -9,7 +9,11 @@ import {
   getCounselorPublicResult,
   studentCounselingResultDetailQueryKey,
 } from '@/api/counsel';
-import { COUNSELING_PUBLIC_RESULT_ERROR_CODE, COUNSELING_PUBLIC_RESULT_STATUS } from '@/constants/domain';
+import {
+  COUNSELING_PUBLIC_RESULT_ERROR_CODE,
+  COUNSELING_PUBLIC_RESULT_STATUS,
+  COUNSELING_PUBLIC_RESULT_STATUS_LABEL,
+} from '@/constants/domain';
 import {
   cancelQueryBeforeUpdate,
   getPublicResultErrorMessage,
@@ -104,13 +108,37 @@ export default function PublicResultCorrectionModal({
     isMountedRef.current && requestSessionId === sessionIdRef.current;
 
   // Editor와 같은 공개 결과 Query key를 관찰한다(같은 캐시를 공유하므로 별도 API 왕복이 늘지 않는다).
-  const { data: publicResult } = useQuery({
+  const {
+    data: publicResult,
+    isLoading: isPublicResultLoading,
+    isError: isPublicResultError,
+    error: publicResultError,
+  } = useQuery({
     queryKey: counselorPublicResultQueryKey(sessionId),
     queryFn: () => getCounselorPublicResult(sessionId),
     enabled: open && sessionId !== null,
     gcTime: 0,
     retry: false,
   });
+
+  // "정정 불가" 판정은 파생 상태(correctionBase)가 아니라 서버 조회 결과 자체로 한다.
+  // correctionBase === null은 (1) PUBLISHED가 아님 (2) 조회 에러(403/404/네트워크) (3) 아직
+  // 시딩 전, 이렇게 세 가지 서로 다른 상황에서 모두 나타나므로 이걸로는 "결과가 없다"와
+  // "조회가 실패했다"를 구분할 수 없다. 아래에서 로딩 → 에러 → 상태값 순으로 직접 분기한다.
+  // publicResult가 아직 없는 경우(sessionId===null이라 enabled:false인 한 프레임 등)까지
+  // "정정 불가"로 취급하면 안 된다 — 그건 로딩/에러도 아니고 결과가 없다는 확정도 아니다.
+  // 형제 PublicResultEditorModal.jsx도 같은 이유로 !publicResult일 때 아무것도 그리지 않는다.
+  const isCorrectionUnavailable =
+    !isPublicResultLoading &&
+    !isPublicResultError &&
+    Boolean(publicResult) &&
+    publicResult.resultStatus !== COUNSELING_PUBLIC_RESULT_STATUS.PUBLISHED;
+  // 폼(정정 입력)은 조회가 끝났고, 에러도 없고, 실제로 PUBLISHED일 때만 보여준다.
+  const showCorrectionForm =
+    !isPublicResultLoading &&
+    !isPublicResultError &&
+    Boolean(publicResult) &&
+    publicResult.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.PUBLISHED;
 
   // 모달이 열릴 때(또는 열린 채로 회기가 바뀔 때) 이 시점의 최신 버전·요약·실행계획을 기준값으로
   // 한 번만 고정한다. 이후 같은 열림 상태에서 쿼리가 다시 조회돼도 이 기준은 사용자가 명시적으로
@@ -365,25 +393,55 @@ export default function PublicResultCorrectionModal({
           <Button variant="outline" onClick={closeCorrectionModal} disabled={correctMutation.isPending}>
             닫기
           </Button>
-          <Button
-            loading={correctMutation.isPending}
-            disabled={correctMutation.isPending || Boolean(conflictLatest)}
-            onClick={submitCorrection}
-          >
-            정정 저장
-          </Button>
+          {/* 폼이 안 보이는 로딩/에러/정정불가 상태에서는 "정정 저장" 버튼도 함께 감춘다.
+              눌러도 절대 활성화될 수 없는 버튼을 남겨두지 않기 위함이다 — 위 폼 표시 조건과
+              같은 showCorrectionForm을 기준으로 삼는다. */}
+          {showCorrectionForm && (
+            <Button
+              loading={correctMutation.isPending}
+              disabled={correctMutation.isPending || Boolean(conflictLatest) || !correctionBase}
+              onClick={submitCorrection}
+            >
+              정정 저장
+            </Button>
+          )}
         </>
       }
     >
       {/* tabIndex=-1 + ref: 모달이 열리자마자 여기로 포커스를 옮겨야 Tab 트랩 시작점이
           생기고, 스크린리더가 "결과 정정" 창이 새로 열렸음을 알 수 있다. */}
       <div ref={correctionContentRef} tabIndex={-1} className="flex flex-col gap-4">
-        <p className="text-[11px] text-[#656D76]">
-          정정하면 기존 버전(v{correctionBase?.versionNo ?? '-'})은 그대로 남고 새 버전이 즉시
-          학생에게 공개됩니다. 되돌릴 수 없으니 내용을 다시 확인해 주세요.
-        </p>
+        {isPublicResultLoading ? (
+          <p className="text-center text-[12px] text-[#656D76] py-4">불러오는 중입니다.</p>
+        ) : isPublicResultError ? (
+          <p className="text-[12px] text-[#CF222E]" role="alert">
+            {getPublicResultErrorMessage(publicResultError)}
+          </p>
+        ) : !publicResult ? (
+          // 로딩도 에러도 아닌데 publicResult가 아직 없는 경우다 — sessionId가 null로 바뀌는
+          // 순간(Editor가 접근 오류로 닫히는 도중 한 프레임)처럼 조회가 비활성화된 상태다.
+          // 확정된 정보가 없으니 "정정 불가"를 단정하지 않고 형제 Editor 모달과 같이 아무것도
+          // 그리지 않는다.
+          null
+        ) : isCorrectionUnavailable ? (
+          // 조회는 성공했지만 PUBLISHED가 아니면 정정할 대상 자체가 없다. 이건 오류가 아니라
+          // 전제조건 미충족이라 에러 문구와 달리 회색 안내로 구분하고, 계약에 없는 "취소" 같은
+          // 상태를 지어내지 않고 실제 서버 상태 라벨만 사용한다. EMPTY(작성 전)와 DRAFT(공개
+          // 전 초안)는 다음에 필요한 행동이 달라 안내 문장을 나눈다.
+          <p className="text-center text-[12px] text-[#656D76] py-4">
+            정정할 수 있는 공개 결과가 없습니다.{' '}
+            {publicResult.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.EMPTY
+              ? '결과를 작성해 공개한 뒤에 정정할 수 있습니다.'
+              : `결과를 공개한 뒤에 정정할 수 있습니다. (현재 상태: ${COUNSELING_PUBLIC_RESULT_STATUS_LABEL[publicResult.resultStatus]})`}
+          </p>
+        ) : (
+          <p className="text-[11px] text-[#656D76]">
+            정정하면 기존 버전(v{correctionBase?.versionNo ?? '-'})은 그대로 남고 새 버전이 즉시
+            학생에게 공개됩니다. 되돌릴 수 없으니 내용을 다시 확인해 주세요.
+          </p>
+        )}
 
-        {conflictLatest && (
+        {showCorrectionForm && conflictLatest && (
           <div className="rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] p-3 flex flex-col gap-2" role="alert">
             <p className="text-[11px] font-bold text-[#92400E]">
               다른 요청이 먼저 v{conflictLatest.versionNo}를 공개했습니다. 아래 최신 내용을 확인한 뒤
@@ -407,89 +465,95 @@ export default function PublicResultCorrectionModal({
           </div>
         )}
 
-        <div>
-          <label htmlFor="correctionSummary" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-            공개 요약 <span className="text-[#CF222E]">*</span>
-          </label>
-          <textarea
-            id="correctionSummary"
-            value={correctionSummary}
-            onChange={(e) => {
-              setCorrectionSummary(e.target.value);
-              if (correctionFieldError === 'summary') {
-                setCorrectionFieldError('');
-                setCorrectionError('');
-              }
-            }}
-            required
-            aria-required="true"
-            aria-invalid={correctionFieldError === 'summary'}
-            aria-describedby={correctionFieldError === 'summary' ? 'correction-error' : undefined}
-            rows={5}
-            maxLength={SUMMARY_MAX_LENGTH}
-            disabled={correctMutation.isPending || Boolean(conflictLatest)}
-            className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151]"
-          />
-          <p className="text-[11px] text-[#656D76] text-right">
-            {correctionSummary.length}/{SUMMARY_MAX_LENGTH}자
-          </p>
-        </div>
+        {/* 로딩/에러/정정불가 상태에서는 고칠 대상이 없거나 아직 확정되지 않았으므로 입력
+            폼 자체를 보여주지 않는다. */}
+        {showCorrectionForm && (
+          <>
+            <div>
+              <label htmlFor="correctionSummary" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+                공개 요약 <span className="text-[#CF222E]">*</span>
+              </label>
+              <textarea
+                id="correctionSummary"
+                value={correctionSummary}
+                onChange={(e) => {
+                  setCorrectionSummary(e.target.value);
+                  if (correctionFieldError === 'summary') {
+                    setCorrectionFieldError('');
+                    setCorrectionError('');
+                  }
+                }}
+                required
+                aria-required="true"
+                aria-invalid={correctionFieldError === 'summary'}
+                aria-describedby={correctionFieldError === 'summary' ? 'correction-error' : undefined}
+                rows={5}
+                maxLength={SUMMARY_MAX_LENGTH}
+                disabled={correctMutation.isPending || Boolean(conflictLatest)}
+                className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151]"
+              />
+              <p className="text-[11px] text-[#656D76] text-right">
+                {correctionSummary.length}/{SUMMARY_MAX_LENGTH}자
+              </p>
+            </div>
 
-        <div>
-          <label htmlFor="correctionPlan" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-            실행계획 (선택)
-          </label>
-          <textarea
-            id="correctionPlan"
-            value={correctionPlan}
-            onChange={(e) => {
-              setCorrectionPlan(e.target.value);
-              if (correctionFieldError === 'plan') {
-                setCorrectionFieldError('');
-                setCorrectionError('');
-              }
-            }}
-            aria-required="false"
-            aria-invalid={correctionFieldError === 'plan'}
-            aria-describedby={correctionFieldError === 'plan' ? 'correction-error' : undefined}
-            rows={4}
-            maxLength={ACTION_PLAN_MAX_LENGTH}
-            disabled={correctMutation.isPending || Boolean(conflictLatest)}
-            className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151]"
-          />
-          <p className="text-[11px] text-[#656D76] text-right">
-            {correctionPlan.length}/{ACTION_PLAN_MAX_LENGTH}자
-          </p>
-        </div>
+            <div>
+              <label htmlFor="correctionPlan" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+                실행계획 (선택)
+              </label>
+              <textarea
+                id="correctionPlan"
+                value={correctionPlan}
+                onChange={(e) => {
+                  setCorrectionPlan(e.target.value);
+                  if (correctionFieldError === 'plan') {
+                    setCorrectionFieldError('');
+                    setCorrectionError('');
+                  }
+                }}
+                aria-required="false"
+                aria-invalid={correctionFieldError === 'plan'}
+                aria-describedby={correctionFieldError === 'plan' ? 'correction-error' : undefined}
+                rows={4}
+                maxLength={ACTION_PLAN_MAX_LENGTH}
+                disabled={correctMutation.isPending || Boolean(conflictLatest)}
+                className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151]"
+              />
+              <p className="text-[11px] text-[#656D76] text-right">
+                {correctionPlan.length}/{ACTION_PLAN_MAX_LENGTH}자
+              </p>
+            </div>
 
-        <div>
-          <label htmlFor="correctionReason" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-            정정 사유 <span className="text-[#CF222E]">*</span>
-          </label>
-          <textarea
-            id="correctionReason"
-            value={correctionReason}
-            onChange={(e) => {
-              setCorrectionReason(e.target.value);
-              if (correctionFieldError === 'reason') {
-                setCorrectionFieldError('');
-                setCorrectionError('');
-              }
-            }}
-            required
-            aria-required="true"
-            aria-invalid={correctionFieldError === 'reason'}
-            aria-describedby={correctionFieldError === 'reason' ? 'correction-error' : undefined}
-            rows={3}
-            maxLength={CORRECTION_REASON_MAX_LENGTH}
-            placeholder="학생에게 공개된 내용 중 무엇을 왜 바로잡는지 입력하세요."
-            disabled={correctMutation.isPending || Boolean(conflictLatest)}
-            className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151]"
-          />
-          <p className="text-[11px] text-[#656D76] text-right">
-            {correctionReason.length}/{CORRECTION_REASON_MAX_LENGTH}자
-          </p>
-        </div>
+            <div>
+              <label htmlFor="correctionReason" className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+                정정 사유 <span className="text-[#CF222E]">*</span>
+              </label>
+              <textarea
+                id="correctionReason"
+                value={correctionReason}
+                onChange={(e) => {
+                  setCorrectionReason(e.target.value);
+                  if (correctionFieldError === 'reason') {
+                    setCorrectionFieldError('');
+                    setCorrectionError('');
+                  }
+                }}
+                required
+                aria-required="true"
+                aria-invalid={correctionFieldError === 'reason'}
+                aria-describedby={correctionFieldError === 'reason' ? 'correction-error' : undefined}
+                rows={3}
+                maxLength={CORRECTION_REASON_MAX_LENGTH}
+                placeholder="학생에게 공개된 내용 중 무엇을 왜 바로잡는지 입력하세요."
+                disabled={correctMutation.isPending || Boolean(conflictLatest)}
+                className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] resize-none focus:outline-none focus:border-[#374151]"
+              />
+              <p className="text-[11px] text-[#656D76] text-right">
+                {correctionReason.length}/{CORRECTION_REASON_MAX_LENGTH}자
+              </p>
+            </div>
+          </>
+        )}
 
         {correctionError && (
           <p

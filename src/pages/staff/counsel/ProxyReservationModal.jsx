@@ -49,6 +49,7 @@ export default function ProxyReservationModal({ open, onClose }) {
     queryKey: TYPE_QUERY_KEY,
     queryFn: fetchCounselorCounselingTypes,
     enabled: open,
+    retry: false,
   });
 
   const {
@@ -59,6 +60,7 @@ export default function ProxyReservationModal({ open, onClose }) {
     queryKey: SCHEDULE_QUERY_KEY,
     queryFn: fetchCounselorSchedules,
     enabled: open,
+    retry: false,
   });
 
   // 일정 select에 유형 이름을 붙이는 조회용 맵이다. 서버가 counselingTypeId만 주므로
@@ -245,7 +247,7 @@ export default function ProxyReservationModal({ open, onClose }) {
             toast('권한이 변경되어 대행 예약을 진행할 수 없습니다.', 'error');
             return;
           }
-          setSubmitError(mutationError.message || '처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+          setSubmitError('처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
         },
       },
     );

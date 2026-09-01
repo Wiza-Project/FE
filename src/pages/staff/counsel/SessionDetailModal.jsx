@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
@@ -55,6 +55,25 @@ function localInputToInstant(localValue) {
  */
 export default function SessionDetailModal({ sessionId, onClose }) {
   const queryClient = useQueryClient();
+
+  // 컴포넌트는 sessionId prop이 바뀔 때마다 재사용된다(부모가 언마운트하지 않고 prop만 교체).
+  // mutation 콜백은 요청을 보낸 시점이 아니라 응답이 도착한 시점에 실행되므로, 그 사이 사용자가
+  // 다른 회기로 넘어가거나(prop 변경) 화면을 완전히 떠났으면(언마운트) 늦게 도착한 응답이 지금
+  // 화면 상태를 건드리면 안 된다. 두 ref로 "지금 보고 있는 회기"와 "아직 화면에 붙어 있는지"를
+  // 판단 시점 그대로 기억해 둔다.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    // StrictMode는 개발 모드에서 이 effect를 mount→cleanup→remount로 한 번 더 실행한다.
+    // 여기서 다시 true로 세팅하지 않으면 첫 cleanup(가짜 언마운트)에서 false가 된 뒤 영원히
+    // 복구되지 않아, 실제로는 마운트돼 있는데도 guard가 항상 응답을 막아버린다.
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  const currentSessionIdRef = useRef(sessionId);
+  currentSessionIdRef.current = sessionId;
+
   // null | 'followup' | 'complete' | 'cancel' — 상세 모달 안에서 어떤 폼을 보여줄지 결정한다.
   const [formMode, setFormMode] = useState(null);
   const [formError, setFormError] = useState('');
@@ -77,16 +96,25 @@ export default function SessionDetailModal({ sessionId, onClose }) {
     queryFn: () => fetchCounselingSessionDetail(sessionId),
     enabled: sessionId !== null,
     gcTime: 0,
+    retry: false,
   });
 
   // 페이지·필터별로 나뉜 회기 목록 캐시를 접두사만으로 한 번에 무효화한다(TanStack Query는
   // queryKey가 이 배열로 시작하는 모든 캐시를 대상으로 삼는다).
   const invalidateList = () => queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
-  const invalidateDetail = () => {
-    if (sessionId !== null) {
-      queryClient.invalidateQueries({ queryKey: counselingSessionDetailQueryKey(sessionId) });
+  // 항상 mutation을 보낸 대상 회기 ID(targetSessionId)로 invalidate한다. 현재 sessionId prop을
+  // 그대로 쓰면, 사용자가 이미 다른 회기로 넘어간 뒤 이전 요청이 성공했을 때 엉뚱한 회기의
+  // 캐시가 갱신된다.
+  const invalidateDetail = (targetSessionId) => {
+    if (targetSessionId !== null && targetSessionId !== undefined) {
+      queryClient.invalidateQueries({ queryKey: counselingSessionDetailQueryKey(targetSessionId) });
     }
   };
+
+  // 응답이 도착한 시점 기준으로 "아직 이 회기를 보고 있고, 컴포넌트도 살아있는지"를 판단한다.
+  // false면 invalidate·toast·form 상태 변경을 모두 건너뛴다.
+  const isResponseForCurrentSession = (targetSessionId) =>
+    isMountedRef.current && targetSessionId === currentSessionIdRef.current;
 
   const resetForms = () => {
     setFormMode(null);
@@ -109,10 +137,13 @@ export default function SessionDetailModal({ sessionId, onClose }) {
     onClose();
   };
 
-  const onActionError = (mutationError) => {
+  // variables는 mutate() 호출 시 넘긴 그 객체 그대로다(응답이 아니라 요청 시점 값) — 늦게 도착한
+  // 응답이라도 "그 요청이 어떤 회기를 대상으로 했는지"는 변하지 않으므로 대상 판별에 쓸 수 있다.
+  const onActionError = (mutationError, variables) => {
+    if (!isResponseForCurrentSession(variables?.sessionId)) return;
     if (mutationError instanceof ApiError && STALE_STATE_CODES.has(mutationError.code)) {
       invalidateList();
-      invalidateDetail();
+      invalidateDetail(variables.sessionId);
       toast(getSessionErrorMessage(mutationError), 'error');
       setFormMode(null);
       return;
@@ -120,7 +151,8 @@ export default function SessionDetailModal({ sessionId, onClose }) {
     setFormError(getSessionErrorMessage(mutationError));
   };
 
-  const onFollowUpError = (mutationError) => {
+  const onFollowUpError = (mutationError, variables) => {
+    if (!isResponseForCurrentSession(variables?.sessionId)) return;
     // 시간 관련 위반(TIME_CONFLICT/INVALID_STATE)은 같은 입력값을 고쳐 바로 재시도할 수 있으므로
     // 폼을 닫지 않고 인라인 오류로만 보여준다. 나머지 코드는 공통 stale 처리를 그대로 따른다.
     if (
@@ -131,14 +163,17 @@ export default function SessionDetailModal({ sessionId, onClose }) {
       setFormError(getSessionErrorMessage(mutationError));
       return;
     }
-    onActionError(mutationError);
+    onActionError(mutationError, variables);
   };
 
   const followUpMutation = useMutation({
+    // sessionId는 대상 판별용 UI 메타데이터일 뿐이다. destructuring으로 assignmentId·request만
+    // 뽑아 서버 요청(createFollowUpSession)에는 절대 포함되지 않도록 한다.
     mutationFn: ({ assignmentId, request }) => createFollowUpSession(assignmentId, request),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      if (!isResponseForCurrentSession(variables.sessionId)) return;
       invalidateList();
-      invalidateDetail();
+      invalidateDetail(variables.sessionId);
       toast('후속 회기가 생성되었습니다.', 'success');
       resetForms();
     },
@@ -148,9 +183,10 @@ export default function SessionDetailModal({ sessionId, onClose }) {
   const completeMutation = useMutation({
     mutationFn: ({ sessionId: targetSessionId, request }) =>
       completeCounselingSession(targetSessionId, request),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      if (!isResponseForCurrentSession(variables.sessionId)) return;
       invalidateList();
-      invalidateDetail();
+      invalidateDetail(variables.sessionId);
       toast('회기가 출결 완료 처리되었습니다.', 'success');
       resetForms();
     },
@@ -160,9 +196,10 @@ export default function SessionDetailModal({ sessionId, onClose }) {
   const cancelMutation = useMutation({
     mutationFn: ({ sessionId: targetSessionId, request }) =>
       cancelCounselingSession(targetSessionId, request),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      if (!isResponseForCurrentSession(variables.sessionId)) return;
       invalidateList();
-      invalidateDetail();
+      invalidateDetail(variables.sessionId);
       toast('회기가 취소되었습니다.', 'info');
       resetForms();
     },
@@ -215,7 +252,13 @@ export default function SessionDetailModal({ sessionId, onClose }) {
       return;
     }
     setFormError('');
-    followUpMutation.mutate({ assignmentId: detail.assignmentId, request: { startsAt, endsAt } });
+    // sessionId는 서버로 보내지 않는 UI 전용 메타데이터다(대상 회기 판별용). mutationFn이
+    // assignmentId·request만 destructuring해서 쓰기 때문에 실제 요청 바디에는 포함되지 않는다.
+    followUpMutation.mutate({
+      assignmentId: detail.assignmentId,
+      request: { startsAt, endsAt },
+      sessionId: detail.sessionId,
+    });
   };
 
   const submitComplete = () => {
