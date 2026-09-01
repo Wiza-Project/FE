@@ -64,7 +64,7 @@ import { apiClient, downloadFile } from './client';
  */
 
 /**
- * 내 이력서 목록(버전 이력) 조회. GET /api/v1/students/me/resumes
+ * 내 이력서 목록(버전 이력) 조회. GET /api/students/me/resumes
  * 서버가 버전 최신순으로 정렬해 내려준다.
  * @param {Object} [params]
  * @param {number} [params.page] 0-base 페이지 번호 (기본 0)
@@ -72,33 +72,33 @@ import { apiClient, downloadFile } from './client';
  * @returns {Promise<PageResponse & {content: ResumeSummary[]}>}
  */
 export const fetchResumes = async (params) => {
-  const { data } = await apiClient.get('/v1/students/me/resumes', {
+  const { data } = await apiClient.get('/students/me/resumes', {
     params: { page: 0, size: 50, ...params },
   });
   return data;
 };
 
 /**
- * 내 최신 버전 이력서 조회. GET /api/v1/students/me/resumes/latest
+ * 내 최신 버전 이력서 조회. GET /api/students/me/resumes/latest
  * @returns {Promise<ResumeDetail>}
  */
 export const fetchLatestResume = async () => {
-  const { data } = await apiClient.get('/v1/students/me/resumes/latest');
+  const { data } = await apiClient.get('/students/me/resumes/latest');
   return data;
 };
 
 /**
- * 이력서 특정 버전 상세 조회. GET /api/v1/students/me/resumes/{documentId}
+ * 이력서 특정 버전 상세 조회. GET /api/students/me/resumes/{documentId}
  * @param {number} documentId
  * @returns {Promise<ResumeDetail>}
  */
 export const fetchResume = async (documentId) => {
-  const { data } = await apiClient.get(`/v1/students/me/resumes/${documentId}`);
+  const { data } = await apiClient.get(`/students/me/resumes/${documentId}`);
   return data;
 };
 
 /**
- * 이력서 최초 작성(버전 1). POST /api/v1/students/me/resumes
+ * 이력서 최초 작성(버전 1). POST /api/students/me/resumes
  * 이미 작성된 이력이 있으면 실패한다(J018) — 이후 새 버전은 createResumeVersion을 쓴다.
  * @param {Object} payload
  * @param {string} payload.documentTitle
@@ -106,13 +106,13 @@ export const fetchResume = async (documentId) => {
  * @returns {Promise<ResumeDetail>}
  */
 export const createResume = async (payload) => {
-  const { data } = await apiClient.post('/v1/students/me/resumes', payload);
+  const { data } = await apiClient.post('/students/me/resumes', payload);
   return data;
 };
 
 /**
  * 이력서 임시 저장(새 버전을 만들지 않고 지정한 버전을 그대로 덮어씀).
- * PUT /api/v1/students/me/resumes/{documentId}
+ * PUT /api/students/me/resumes/{documentId}
  * @param {number} documentId
  * @param {Object} payload
  * @param {string} payload.documentTitle
@@ -120,12 +120,12 @@ export const createResume = async (payload) => {
  * @returns {Promise<ResumeDetail>}
  */
 export const updateResume = async (documentId, payload) => {
-  const { data } = await apiClient.put(`/v1/students/me/resumes/${documentId}`, payload);
+  const { data } = await apiClient.put(`/students/me/resumes/${documentId}`, payload);
   return data;
 };
 
 /**
- * 새 버전 생성. POST /api/v1/students/me/resumes/{documentId}/versions
+ * 새 버전 생성. POST /api/students/me/resumes/{documentId}/versions
  * 지정한 버전의 현재(저장된) 내용을 그대로 스냅샷하여 새 버전을 만든다 — 아직 저장하지 않은
  * 화면상의 수정값은 반영되지 않으므로, 반영하려면 먼저 updateResume으로 임시 저장해야 한다.
  * 응답에 새로 생성된 버전 전체가 담겨오므로 별도 재조회 없이 바로 선택에 쓸 수 있다.
@@ -133,18 +133,18 @@ export const updateResume = async (documentId, payload) => {
  * @returns {Promise<ResumeDetail>}
  */
 export const createResumeVersion = async (documentId) => {
-  const { data } = await apiClient.post(`/v1/students/me/resumes/${documentId}/versions`);
+  const { data } = await apiClient.post(`/students/me/resumes/${documentId}/versions`);
   return data;
 };
 
 /**
- * 이력서 특정 버전 삭제. DELETE /api/v1/students/me/resumes/{documentId}
+ * 이력서 특정 버전 삭제. DELETE /api/students/me/resumes/{documentId}
  * 지정한 그 버전 한 건만 삭제한다 — 다른 버전에는 영향이 없다.
  * @param {number} documentId
  * @returns {Promise<null>}
  */
 export const deleteResume = async (documentId) => {
-  const { data } = await apiClient.delete(`/v1/students/me/resumes/${documentId}`);
+  const { data } = await apiClient.delete(`/students/me/resumes/${documentId}`);
   return data;
 };
 
@@ -185,7 +185,7 @@ export const deleteResume = async (documentId) => {
  */
 
 /**
- * 내 자기소개서 목록(버전 이력) 조회. GET /api/v1/students/me/cover-letters
+ * 내 자기소개서 목록(버전 이력) 조회. GET /api/students/me/cover-letters
  * 서버가 버전 최신순으로 정렬해 내려준다.
  * @param {Object} [params]
  * @param {number} [params.page] 0-base 페이지 번호 (기본 0)
@@ -193,33 +193,33 @@ export const deleteResume = async (documentId) => {
  * @returns {Promise<PageResponse & {content: CoverLetterSummary[]}>}
  */
 export const fetchCoverLetters = async (params) => {
-  const { data } = await apiClient.get('/v1/students/me/cover-letters', {
+  const { data } = await apiClient.get('/students/me/cover-letters', {
     params: { page: 0, size: 50, ...params },
   });
   return data;
 };
 
 /**
- * 내 최신 버전 자기소개서 조회. GET /api/v1/students/me/cover-letters/latest
+ * 내 최신 버전 자기소개서 조회. GET /api/students/me/cover-letters/latest
  * @returns {Promise<CoverLetterDetail>}
  */
 export const fetchLatestCoverLetter = async () => {
-  const { data } = await apiClient.get('/v1/students/me/cover-letters/latest');
+  const { data } = await apiClient.get('/students/me/cover-letters/latest');
   return data;
 };
 
 /**
- * 자기소개서 특정 버전 상세 조회. GET /api/v1/students/me/cover-letters/{documentId}
+ * 자기소개서 특정 버전 상세 조회. GET /api/students/me/cover-letters/{documentId}
  * @param {number} documentId
  * @returns {Promise<CoverLetterDetail>}
  */
 export const fetchCoverLetter = async (documentId) => {
-  const { data } = await apiClient.get(`/v1/students/me/cover-letters/${documentId}`);
+  const { data } = await apiClient.get(`/students/me/cover-letters/${documentId}`);
   return data;
 };
 
 /**
- * 자기소개서 최초 작성(버전 1). POST /api/v1/students/me/cover-letters
+ * 자기소개서 최초 작성(버전 1). POST /api/students/me/cover-letters
  * 이미 작성된 이력이 있으면 실패한다 — 이후 새 버전은 createCoverLetterVersion을 쓴다.
  * @param {Object} payload
  * @param {string} payload.documentTitle
@@ -228,13 +228,13 @@ export const fetchCoverLetter = async (documentId) => {
  * @returns {Promise<CoverLetterDetail>}
  */
 export const createCoverLetter = async (payload) => {
-  const { data } = await apiClient.post('/v1/students/me/cover-letters', payload);
+  const { data } = await apiClient.post('/students/me/cover-letters', payload);
   return data;
 };
 
 /**
  * 자기소개서 내용 수정(새 버전을 만들지 않고 지정한 버전을 그대로 덮어씀).
- * PUT /api/v1/students/me/cover-letters/{documentId}
+ * PUT /api/students/me/cover-letters/{documentId}
  * @param {number} documentId
  * @param {Object} payload
  * @param {string} payload.documentTitle
@@ -243,29 +243,29 @@ export const createCoverLetter = async (payload) => {
  * @returns {Promise<CoverLetterDetail>}
  */
 export const updateCoverLetter = async (documentId, payload) => {
-  const { data } = await apiClient.put(`/v1/students/me/cover-letters/${documentId}`, payload);
+  const { data } = await apiClient.put(`/students/me/cover-letters/${documentId}`, payload);
   return data;
 };
 
 /**
- * 새 버전 생성. POST /api/v1/students/me/cover-letters/{documentId}/versions
+ * 새 버전 생성. POST /api/students/me/cover-letters/{documentId}/versions
  * 지정한 버전의 현재 내용을 스냅샷하여 새 버전을 만든다(과거 버전 지정 시 그 내용으로 복원하는 효과).
  * 응답에 새로 생성된 버전 전체가 담겨오므로 별도 재조회 없이 바로 선택에 쓸 수 있다.
  * @param {number} documentId 기준이 되는 버전의 문서 ID
  * @returns {Promise<CoverLetterDetail>}
  */
 export const createCoverLetterVersion = async (documentId) => {
-  const { data } = await apiClient.post(`/v1/students/me/cover-letters/${documentId}/versions`);
+  const { data } = await apiClient.post(`/students/me/cover-letters/${documentId}/versions`);
   return data;
 };
 
 /**
- * 자기소개서 삭제. DELETE /api/v1/students/me/cover-letters/{documentId}
+ * 자기소개서 삭제. DELETE /api/students/me/cover-letters/{documentId}
  * @param {number} documentId
  * @returns {Promise<null>}
  */
 export const deleteCoverLetter = async (documentId) => {
-  const { data } = await apiClient.delete(`/v1/students/me/cover-letters/${documentId}`);
+  const { data } = await apiClient.delete(`/students/me/cover-letters/${documentId}`);
   return data;
 };
 
@@ -307,7 +307,7 @@ export const deleteCoverLetter = async (documentId) => {
  */
 
 /**
- * 내 포트폴리오 목록 조회. GET /api/v1/students/me/portfolios
+ * 내 포트폴리오 목록 조회. GET /api/students/me/portfolios
  * 서버가 최종 수정순(updatedAt desc)으로 정렬해 내려준다.
  * 목록 응답에는 contentData(설명·기술태그 등)가 포함되지 않는다 — 상세는 fetchPortfolio로 조회.
  * @param {Object} [params]
@@ -316,24 +316,24 @@ export const deleteCoverLetter = async (documentId) => {
  * @returns {Promise<PageResponse & {content: PortfolioSummary[]}>}
  */
 export const fetchPortfolios = async (params) => {
-  const { data } = await apiClient.get('/v1/students/me/portfolios', {
+  const { data } = await apiClient.get('/students/me/portfolios', {
     params: { page: 0, size: 50, ...params },
   });
   return data;
 };
 
 /**
- * 포트폴리오 항목 단건 상세(첨부파일 포함) 조회. GET /api/v1/students/me/portfolios/{documentId}
+ * 포트폴리오 항목 단건 상세(첨부파일 포함) 조회. GET /api/students/me/portfolios/{documentId}
  * @param {number} documentId
  * @returns {Promise<PortfolioDetail>}
  */
 export const fetchPortfolio = async (documentId) => {
-  const { data } = await apiClient.get(`/v1/students/me/portfolios/${documentId}`);
+  const { data } = await apiClient.get(`/students/me/portfolios/${documentId}`);
   return data;
 };
 
 /**
- * 포트폴리오 항목 생성. POST /api/v1/students/me/portfolios
+ * 포트폴리오 항목 생성. POST /api/students/me/portfolios
  * 생성 요청에는 공개 여부·첨부파일이 포함되지 않는다 — 생성 후 필요 시
  * uploadPortfolioAttachments / updatePortfolioVisibility를 이어서 호출한다.
  * @param {Object} payload
@@ -343,12 +343,12 @@ export const fetchPortfolio = async (documentId) => {
  * @returns {Promise<PortfolioDetail>}
  */
 export const createPortfolio = async (payload) => {
-  const { data } = await apiClient.post('/v1/students/me/portfolios', payload);
+  const { data } = await apiClient.post('/students/me/portfolios', payload);
   return data;
 };
 
 /**
- * 포트폴리오 항목 수정. PUT /api/v1/students/me/portfolios/{documentId}
+ * 포트폴리오 항목 수정. PUT /api/students/me/portfolios/{documentId}
  * 공개 여부는 이 요청에 포함되지 않는다 — updatePortfolioVisibility를 따로 호출한다.
  * @param {number} documentId
  * @param {Object} payload
@@ -358,36 +358,36 @@ export const createPortfolio = async (payload) => {
  * @returns {Promise<PortfolioDetail>}
  */
 export const updatePortfolio = async (documentId, payload) => {
-  const { data } = await apiClient.put(`/v1/students/me/portfolios/${documentId}`, payload);
+  const { data } = await apiClient.put(`/students/me/portfolios/${documentId}`, payload);
   return data;
 };
 
 /**
- * 포트폴리오 공개 여부 변경. PATCH /api/v1/students/me/portfolios/{documentId}/visibility
+ * 포트폴리오 공개 여부 변경. PATCH /api/students/me/portfolios/{documentId}/visibility
  * @param {number} documentId
  * @param {boolean} isPublic
  * @returns {Promise<PortfolioDetail>}
  */
 export const updatePortfolioVisibility = async (documentId, isPublic) => {
   const { data } = await apiClient.patch(
-    `/v1/students/me/portfolios/${documentId}/visibility`,
+    `/students/me/portfolios/${documentId}/visibility`,
     { isPublic },
   );
   return data;
 };
 
 /**
- * 포트폴리오 삭제(첨부파일 포함). DELETE /api/v1/students/me/portfolios/{documentId}
+ * 포트폴리오 삭제(첨부파일 포함). DELETE /api/students/me/portfolios/{documentId}
  * @param {number} documentId
  * @returns {Promise<null>}
  */
 export const deletePortfolio = async (documentId) => {
-  const { data } = await apiClient.delete(`/v1/students/me/portfolios/${documentId}`);
+  const { data } = await apiClient.delete(`/students/me/portfolios/${documentId}`);
   return data;
 };
 
 /**
- * 포트폴리오 첨부파일 업로드(이미지/PDF). POST /api/v1/students/me/portfolios/{documentId}/attachments
+ * 포트폴리오 첨부파일 업로드(이미지/PDF). POST /api/students/me/portfolios/{documentId}/attachments
  * 항목이 먼저 생성되어 있어야 호출할 수 있다(=fileGroupId 선발급 방식이 아님).
  * @param {number} documentId
  * @param {File[]} files
@@ -397,7 +397,7 @@ export const uploadPortfolioAttachments = async (documentId, files) => {
   const formData = new FormData();
   files.forEach((file) => formData.append('files', file));
   const { data } = await apiClient.post(
-    `/v1/students/me/portfolios/${documentId}/attachments`,
+    `/students/me/portfolios/${documentId}/attachments`,
     formData,
     { headers: { 'Content-Type': undefined } },
   );
@@ -406,13 +406,13 @@ export const uploadPortfolioAttachments = async (documentId, files) => {
 
 /**
  * 포트폴리오 첨부파일 다운로드.
- * GET /api/v1/students/me/portfolios/{documentId}/attachments/{storedFileId}
+ * GET /api/students/me/portfolios/{documentId}/attachments/{storedFileId}
  * @param {number} documentId
  * @param {number} storedFileId
  * @param {string} fallbackName 서버가 파일명을 안 줄 때 사용할 이름
  */
 export const downloadPortfolioAttachment = (documentId, storedFileId, fallbackName) =>
   downloadFile(
-    `/v1/students/me/portfolios/${documentId}/attachments/${storedFileId}`,
+    `/students/me/portfolios/${documentId}/attachments/${storedFileId}`,
     fallbackName,
   );
