@@ -64,6 +64,8 @@ export const fetchAvailableSchedules = async (counselingTypeId) => {
  * @property {number} reservationId
  * @property {number} counselingTypeId
  * @property {number|null} counselingScheduleId DIRECT 예약의 일정 ID. CENTER 예약은 null일 수 있다.
+ * @property {string|null} startsAt 연결된 일정 시작 시각(UTC ISO-8601 Instant). counselingScheduleId가 null인 레거시 CENTER 예약에서만 null.
+ * @property {string|null} endsAt 연결된 일정 종료 시각(UTC ISO-8601 Instant). startsAt과 동일한 null 규칙.
  * @property {'REQUESTED'|'APPROVED'|'IN_PROGRESS'|'COMPLETED'|'REJECTED'|'CANCELED'} reservationStatus
  * @property {string} createdAt UTC ISO-8601 Instant
  */
@@ -136,6 +138,8 @@ export const cancelCounselingReservation = async (reservationId, request) => {
 
 /**
  * @typedef {Object} ChangeCounselingReservationScheduleRequest
+ * @property {number} expectedScheduleId 0보다 큰 값. 모달을 연 예약의 현재 counselingScheduleId(기준 버전).
+ *   서버가 이 값과 실제 현재 일정을 비교해 stale 변경을 거른다.
  * @property {number} scheduleId 0보다 큰 새 일정 ID
  * @property {string} changeReason 공백만으로 구성될 수 없다.
  */
