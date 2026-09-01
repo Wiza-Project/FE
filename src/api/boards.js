@@ -5,7 +5,7 @@ import { apiClient, downloadFile } from './client';
  *
  * 백엔드가 board_post 테이블 하나로 공지사항·FAQ를 함께 관리하는 공통 게시판 엔진이다
  * (boardType 값: 'NOTICE', 'FAQ'). 조회(GET)는 학생·교직원이 함께 쓰는 공용 엔드포인트이고,
- * 등록/수정/삭제만 /admin 하위 전용 엔드포인트로 분리되어 있다 — 그래서 이 파일에서도 조회 함수를
+ * 등록/수정/삭제만 /staff 하위 전용 엔드포인트로 분리되어 있다 — 그래서 이 파일에서도 조회 함수를
  * 학생 화면(NoticePage 등)과 교직원 관리 화면(StaffBoardsPage 등) 양쪽에서 그대로 재사용한다.
  *
  * FAQ 카테고리는 게시판 API가 아니라 공통코드(FAQ_CATEGORY
@@ -151,7 +151,7 @@ export const downloadBoardFile = (storedFileId, fallbackName) =>
 // ─── 게시글 관리 (교직원 전용) ────────────────────────────────────────────────
 
 /**
- * 게시글 등록. POST /api/admin/boards/{boardType}/posts
+ * 게시글 등록. POST /api/staff/boards/{boardType}/posts
  *
  * 같은 경로에 Content-Type만 다른 두 핸들러가 있어 서버가 자동 분기한다 — 첨부파일이
  * 있을 때만 multipart/form-data로 보낸다(JSON 필드는 "request" part(Blob,
@@ -176,17 +176,17 @@ export const createBoardPost = async (boardType, { files, ...fields }) => {
     const formData = new FormData();
     formData.append('request', new Blob([JSON.stringify(fields)], { type: 'application/json' }));
     files.forEach((file) => formData.append('files', file));
-    const { data } = await apiClient.post(`/admin/boards/${boardType}/posts`, formData, {
+    const { data } = await apiClient.post(`/staff/boards/${boardType}/posts`, formData, {
       headers: { 'Content-Type': undefined },
     });
     return data;
   }
-  const { data } = await apiClient.post(`/admin/boards/${boardType}/posts`, fields);
+  const { data } = await apiClient.post(`/staff/boards/${boardType}/posts`, fields);
   return data;
 };
 
 /**
- * 게시글 수정. PATCH /api/admin/boards/{boardType}/posts/{postId}
+ * 게시글 수정. PATCH /api/staff/boards/{boardType}/posts/{postId}
  * 등록과 마찬가지로 JSON/multipart 둘 다 받는다. null 필드는 "변경하지 않음"이라는
  * 뜻이라 이 함수는 실제로 바뀐 필드만 담아 보내는 걸 전제로 한다(화면에서는 편의상
  * 전체 필드를 매번 다시 보낸다 — 값이 그대로면 서버에서도 결과가 같다).
@@ -215,22 +215,22 @@ export const updateBoardPost = async (boardType, postId, { files, ...fields }) =
     const formData = new FormData();
     formData.append('request', new Blob([JSON.stringify(fields)], { type: 'application/json' }));
     files.forEach((file) => formData.append('files', file));
-    const { data } = await apiClient.patch(`/admin/boards/${boardType}/posts/${postId}`, formData, {
+    const { data } = await apiClient.patch(`/staff/boards/${boardType}/posts/${postId}`, formData, {
       headers: { 'Content-Type': undefined },
     });
     return data;
   }
-  const { data } = await apiClient.patch(`/admin/boards/${boardType}/posts/${postId}`, fields);
+  const { data } = await apiClient.patch(`/staff/boards/${boardType}/posts/${postId}`, fields);
   return data;
 };
 
 /**
- * 게시글 삭제. DELETE /api/admin/boards/{boardType}/posts/{postId}
+ * 게시글 삭제. DELETE /api/staff/boards/{boardType}/posts/{postId}
  * Soft delete(deleted_at만 채움, 204 No Content)라 삭제 후에는 학생·STAFF 모두 조회 시
  * 404가 된다. 복구 API는 없다.
  * @param {string} boardType
  * @param {number} postId
  */
 export const deleteBoardPost = async (boardType, postId) => {
-  await apiClient.delete(`/admin/boards/${boardType}/posts/${postId}`);
+  await apiClient.delete(`/staff/boards/${boardType}/posts/${postId}`);
 };

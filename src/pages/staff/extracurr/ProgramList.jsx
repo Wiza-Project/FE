@@ -20,7 +20,7 @@ const STATUS_OPTIONS = [
   { value: 'CLOSED', label: '종료' },
 ];
 
-// ProgramAdminListItemResponseDTO(GET /api/admin/programs) -> 화면에서 쓰는 행 모양으로 변환.
+// ProgramAdminListItemResponseDTO(GET /api/staff/programs) -> 화면에서 쓰는 행 모양으로 변환.
 const toRow = (dto) => ({
   id: dto.programId,
   name: dto.programName,
@@ -67,7 +67,7 @@ function ApplyBar({ applied, capacity }) {
 }
 
 /**
- * 교직원 비교과 프로그램 목록. GET /api/admin/programs 연동.
+ * 교직원 비교과 프로그램 목록. GET /api/staff/programs 연동.
  *
  * @param {Object} props
  * @param {() => void} props.onNew
