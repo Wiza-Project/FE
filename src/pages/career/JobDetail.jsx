@@ -54,6 +54,7 @@ export default function JobDetail({ jobId, onBack }) {
   const applyMutation = useMutation({
     mutationFn: () => applyJobPosting({
       jobPostingId: jobId,
+      isThirdPartyConsent: true,
       coverLetter: coverLetter || undefined,
       portfolioUrl: portfolioUrl || undefined,
     }),
@@ -192,10 +193,9 @@ export default function JobDetail({ jobId, onBack }) {
                 <p className="text-[12px] font-bold text-[#656D76] mb-2">📋 상세 채용 포스터</p>
                 <div className="border border-[#E5E7EB] rounded-[8px] p-2 bg-[#FAFAFA] flex justify-center">
                   <img
-                    src={`/api/common/files/view/${job.fileGroupId}`}
+                    src={`/api/career/job-postings/posters/${job.fileGroupId}`}
                     alt="채용공고 포스터"
                     className="max-w-full h-auto rounded"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
                 </div>
               </div>

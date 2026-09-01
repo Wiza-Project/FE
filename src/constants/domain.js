@@ -281,10 +281,12 @@ export const COUNSELING_PUBLIC_RESULT_ERROR_CODE = {
  */
 export const POSTING_TYPE = {
   GENERAL: 'GENERAL',
+  RECOMMENDED: 'RECOMMENDED',
 };
 
 export const POSTING_TYPE_LABEL = {
   [POSTING_TYPE.GENERAL]: '일반채용',
+  [POSTING_TYPE.RECOMMENDED]: '추천채용',
 };
 
 /**

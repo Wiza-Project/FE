@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, Button, Pagination, ConfirmDialog, toast } from '@/components/common';
-import { getJobPostings, getRecommendedPostings, toggleJobScrap } from '@/api/career';
+import { getJobPostings, getRecommendedPostings, toggleJobScrap, getJobPreference, getJobBookmarks } from '@/api/career';
 import { POSTING_TYPE, POSTING_TYPE_LABEL } from '@/constants/domain';
+import { useCommonCode } from '@/hooks/useCommonCode';
 
 const ACCENT = '#059669';
 const PAGE_SIZE = 10;
 
-// D-Day 계산 헬퍼
 function calculateDDay(endDateStr) {
   if (!endDateStr) return { label: '상시', urgent: false };
   const today = new Date();
@@ -23,42 +23,49 @@ function calculateDDay(endDateStr) {
   return { label: `D-${diffDays}`, urgent: diffDays <= 3 };
 }
 
-function DDayBadge({ endDate }) {
-  const { label, urgent } = calculateDDay(endDate);
-  return (
-    <div className="text-center">
-      <div className={`text-[11px] font-black ${urgent ? 'text-[#CF222E]' : 'text-[#656D76]'}`}>
-        {label}
-      </div>
-    </div>
-  );
-}
+function AiRecommendationBanner({ onDetail, onRequireConsent, latestFallbackJobs }) {
+  const [activeTab, setActiveTab] = useState('LATEST');
 
-/**
- * AI 맞춤 매칭 추천 배너 컴포넌트
- * - 동의 여부와 무관하게 상시 노출
- * - 설정 버튼 클릭 시 개인정보 선택동의(PROFILING) 안내 모달 호출
- */
-function AiRecommendationBanner({ onDetail, onRequireConsent }) {
+  const { data: preference } = useQuery({
+    queryKey: ['careerJobPreference'],
+    queryFn: () => getJobPreference(),
+  });
+
   const { data: resData, isLoading } = useQuery({
     queryKey: ['careerRecommendedJobs'],
     queryFn: () => getRecommendedPostings(),
   });
 
-  // resData가 { success: true, data: [...] } 또는 { content: [...] } 또는 일반 배열 형태인 경우 모두 안전하게 처리
+  // 응답 데이터 포맷 정규화
   const rawList = resData?.data || resData?.content || resData;
   const recommendedJobs = Array.isArray(rawList) ? rawList : [];
+  // 최신 공고 탭용 데이터: 추천 API 응답이 없으면 현재 전체 목록(jobList)을 fallback으로 사용
+  const displayLatestJobs = recommendedJobs.length > 0 ? recommendedJobs : (latestFallbackJobs || []);
+
+  const hasPreference = !!(preference?.ncsStandardId || preference?.ncsJobName);
 
   return (
     <div className="bg-gradient-to-r from-[#ECFDF5] to-[#F0FDF4] border border-[#A7F3D0] rounded-[10px] p-4 mb-5 shadow-[0_1px_4px_rgba(5,150,105,0.06)]">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-[16px]">✨</span>
-          <h2 className="text-[14px] font-bold text-[#065F46]">AI 역량 기반 맞춤 추천 공고</h2>
-          <span className="text-[11px] text-[#059669] bg-[#DCFCE7] px-2 py-0.5 rounded-full font-semibold">
-            PROFILING MATCH
-          </span>
+          <button
+            onClick={() => setActiveTab('AI')}
+            className={`px-3 py-1 text-[12px] font-bold rounded-[6px] transition-all ${
+              activeTab === 'AI' ? 'bg-[#065F46] text-white shadow-sm' : 'bg-white text-[#065F46] border border-[#A7F3D0]'
+            }`}
+          >
+            ✨ AI 역량 맞춤 추천
+          </button>
+          <button
+            onClick={() => setActiveTab('LATEST')}
+            className={`px-3 py-1 text-[12px] font-bold rounded-[6px] transition-all ${
+              activeTab === 'LATEST' ? 'bg-[#065F46] text-white shadow-sm' : 'bg-white text-[#065F46] border border-[#A7F3D0]'
+            }`}
+          >
+            🔥 실시간 최신 공고 (전체)
+          </button>
         </div>
+
         <button
           onClick={onRequireConsent}
           className="text-[11px] font-semibold text-[#059669] hover:underline"
@@ -67,68 +74,99 @@ function AiRecommendationBanner({ onDetail, onRequireConsent }) {
         </button>
       </div>
 
-      {isLoading ? (
-        <div className="text-[12px] text-[#059669] py-4 text-center">AI가 최적의 채용공고를 선별 중입니다...</div>
-      ) : recommendedJobs.length === 0 ? (
-        <div className="text-[12px] text-[#656D76] py-4 text-center">
-          현재 등록된 맞춤 추천 공고가 없습니다. 취업 희망 조건을 설정해보세요.
-        </div>
+      {activeTab === 'AI' ? (
+        !hasPreference ? (
+          <div className="bg-white rounded-[8px] border border-[#D1FAE5] p-5 text-center flex flex-col items-center justify-center gap-2">
+            <p className="text-[13px] font-bold text-[#1F2328]">
+              AI 맞춤 공고 추천을 위해 [맞춤 프로파일링(PROFILING)] 동의 및 취업 희망조건 설정이 필요합니다.
+            </p>
+            <Button size="sm" style={{ background: ACCENT }} onClick={onRequireConsent}>
+              개인정보 선택동의 하러 가기 →
+            </Button>
+          </div>
+        ) : (
+          renderCards(recommendedJobs, isLoading, onDetail, '직무맞춤')
+        )
       ) : (
-        <div className="grid grid-cols-3 gap-3">
-          {recommendedJobs.slice(0, 3).map((job) => (
-            <div
-              key={job.jobPostingId}
-              onClick={() => onDetail(job.jobPostingId)}
-              className="bg-white rounded-[8px] border border-[#D1FAE5] p-3 hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-[#059669] bg-[#DCFCE7] px-1.5 py-0.5 rounded">
-                    {job.ncsCodeName || '직무맞춤'}
-                  </span>
-                  <span className="text-[10px] text-[#CF222E] font-bold">
-                    {job.applicationEndsAt ? calculateDDay(job.applicationEndsAt).label : ''}
-                  </span>
-                </div>
-                <p className="text-[12px] font-bold text-[#1F2328] line-clamp-1 hover:text-[#059669]">
-                  {job.postingTitle}
-                </p>
-                <p className="text-[11px] text-[#656D76] mt-0.5">{job.companyName}</p>
-              </div>
-              <div className="mt-2 pt-2 border-t border-[#F3F4F6] flex items-center justify-between text-[10px] text-[#9AA0A6]">
-                <span>{job.employmentType || '고용형태 미지정'}</span>
-                <span className="text-[#059669] font-bold">바로 지원 →</span>
-              </div>
-            </div>
-          ))}
-        </div>
+        // 최신등록 탭에서는 displayLatestJobs를 전달
+        renderCards(displayLatestJobs, isLoading, onDetail, '최신등록')
       )}
     </div>
   );
 }
 
-/**
- * @param {Object} props
- * @param {(id: number) => void} props.onDetail
- * @param {() => void} props.onBookmarks
- */
+function renderCards(jobs, isLoading, onDetail, defaultBadge) {
+  if (isLoading) {
+    return <div className="text-[12px] text-[#059669] py-4 text-center">공고 목록을 불러오는 중입니다...</div>;
+  }
+  if (!jobs || jobs.length === 0) {
+    return <div className="text-[12px] text-[#656D76] py-4 text-center">현재 등록된 공고가 없습니다.</div>;
+  }
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      {jobs.slice(0, 3).map((job) => (
+        <div
+          key={job.jobPostingId}
+          onClick={() => onDetail(job.jobPostingId)}
+          className="bg-white rounded-[8px] border border-[#D1FAE5] p-3 hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-[#059669] bg-[#DCFCE7] px-1.5 py-0.5 rounded">
+                {job.ncsCodeName || defaultBadge}
+              </span>
+              <span className="text-[10px] text-[#CF222E] font-bold">
+                {job.applicationEndsAt ? calculateDDay(job.applicationEndsAt).label : ''}
+              </span>
+            </div>
+            <p className="text-[12px] font-bold text-[#1F2328] line-clamp-1 hover:text-[#059669]">
+              {job.postingTitle}
+            </p>
+            <p className="text-[11px] text-[#656D76] mt-0.5">{job.companyName}</p>
+          </div>
+          <div className="mt-2 pt-2 border-t border-[#F3F4F6] flex items-center justify-between text-[10px] text-[#9AA0A6]">
+            <span>{job.employmentType || '고용형태 미지정'}</span>
+            <span className="text-[#059669] font-bold">상세보기 →</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function JobList({ onDetail, onBookmarks }) {
   const queryClient = useQueryClient();
 
-  // 검색/필터 상태
+  // 학생의 실시간 관심 공고(스크랩) 목록 조회 (별표 색상 판별용)
+  const { data: bookmarkData } = useQuery({
+    queryKey: ['careerMyJobScraps'],
+    queryFn: () => getJobBookmarks(),
+  });
+
+  const rawBookmarks = bookmarkData?.data?.content || bookmarkData?.data || bookmarkData?.content || bookmarkData || [];
+  const myBookmarkedIds = new Set(
+    (Array.isArray(rawBookmarks) ? rawBookmarks : []).map((b) => b.jobPostingId)
+  );
+
   const [activeType, setActiveType] = useState('ALL');
   const [keyword, setKeyword] = useState('');
   const [empType, setEmpType] = useState('');
+  const [ncsId, setNcsId] = useState('');
+  const [regionId, setRegionId] = useState('');
   const [page, setPage] = useState(1);
   const [consentModalOpen, setConsentModalOpen] = useState(false);
 
-  // 일반 채용공고 목록 조회
+  const { data: regions = [] } = useCommonCode('REGION_CODE');
+  const { data: ncsData = [] } = useCommonCode('NCS_CODE');
+
   const searchParams = {
     page: page - 1,
     size: PAGE_SIZE,
     postingType: activeType === 'ALL' ? undefined : activeType,
     companyName: keyword || undefined,
     employmentType: empType || undefined,
+    ncsCodeId: ncsId ? Number(ncsId) : undefined,
+    regionCodeId: regionId ? Number(regionId) : undefined,
   };
 
   const { data: pageData, isLoading, isError } = useQuery({
@@ -137,15 +175,16 @@ export default function JobList({ onDetail, onBookmarks }) {
     keepPreviousData: true,
   });
 
-  const jobList = pageData?.content || [];
-  const totalElements = pageData?.totalElements || 0;
-  const totalPages = pageData?.totalPages || 1;
+  const rawContent = pageData?.data?.content || pageData?.content || [];
+  const jobList = Array.isArray(rawContent) ? rawContent : [];
+  const totalElements = pageData?.data?.totalElements ?? pageData?.totalElements ?? 0;
+  const totalPages = pageData?.data?.totalPages ?? pageData?.totalPages ?? 1;
 
-  // 스크랩(북마크) 토글 Mutation
   const scrapMutation = useMutation({
     mutationFn: (jobId) => toggleJobScrap(jobId),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['careerJobPostings'] });
+      queryClient.invalidateQueries({ queryKey: ['careerMyJobScraps'] });
       toast(res?.isScrapped ? '관심 공고에 저장되었습니다.' : '관심 공고에서 제거되었습니다.', 'success');
     },
     onError: (err) => {
@@ -153,14 +192,11 @@ export default function JobList({ onDetail, onBookmarks }) {
     },
   });
 
-  const handleToggleScrap = (id, e) => {
-    e.stopPropagation();
-    scrapMutation.mutate(id);
-  };
-
   const handleReset = () => {
     setKeyword('');
     setEmpType('');
+    setNcsId('');
+    setRegionId('');
     setActiveType('ALL');
     setPage(1);
   };
@@ -182,20 +218,20 @@ export default function JobList({ onDetail, onBookmarks }) {
         }
       />
 
-      {/* AI 맞춤 매칭 추천 배너 (상시 노출) */}
       <AiRecommendationBanner
         onDetail={onDetail}
         onRequireConsent={() => setConsentModalOpen(true)}
+        latestFallbackJobs={jobList}
       />
 
-      {/* 필터 바 */}
-      <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-3 mb-4 flex items-end flex-wrap gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold text-[#656D76] uppercase">고용형태</label>
+      {/* 4분할 검색 필터 바 */}
+      <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-3 mb-4 flex items-end gap-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="flex flex-col gap-1 w-[120px] flex-shrink-0">
+          <label className="text-[11px] font-semibold text-[#656D76]">고용형태</label>
           <select
             value={empType}
             onChange={(e) => { setEmpType(e.target.value); setPage(1); }}
-            className="h-9 px-3 pr-8 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669] appearance-none min-w-[130px]"
+            className="h-9 px-2.5 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669]"
           >
             <option value="">전체 고용형태</option>
             <option value="정규직">정규직</option>
@@ -204,14 +240,42 @@ export default function JobList({ onDetail, onBookmarks }) {
           </select>
         </div>
 
-        <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
-          <label className="text-[11px] font-semibold text-[#656D76] uppercase">기업명 검색</label>
+        <div className="flex flex-col gap-1 w-[130px] flex-shrink-0">
+          <label className="text-[11px] font-semibold text-[#656D76]">근무지역</label>
+          <select
+            value={regionId}
+            onChange={(e) => { setRegionId(e.target.value); setPage(1); }}
+            className="h-9 px-2.5 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669]"
+          >
+            <option value="">전체 지역</option>
+            {regions.map((r) => (
+              <option key={r.codeId} value={r.codeId}>{r.codeName}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1 w-[140px] flex-shrink-0">
+          <label className="text-[11px] font-semibold text-[#656D76]">NCS 직무</label>
+          <select
+            value={ncsId}
+            onChange={(e) => { setNcsId(e.target.value); setPage(1); }}
+            className="h-9 px-2.5 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669]"
+          >
+            <option value="">전체 직무</option>
+            {ncsData.map((n) => (
+              <option key={n.codeId} value={n.codeId}>{n.codeName}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1 flex-1 min-w-[150px]">
+          <label className="text-[11px] font-semibold text-[#656D76]">기업명 검색</label>
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && setPage(1)}
             placeholder="기업명 입력 후 엔터"
-            className="h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669] w-full"
+            className="h-9 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669] w-full"
           />
         </div>
 
@@ -223,11 +287,11 @@ export default function JobList({ onDetail, onBookmarks }) {
         </Button>
       </div>
 
-      {/* 공고 구분 탭 */}
+      {/* 구분 탭 */}
       <div className="flex gap-1 mb-4 bg-[#F3F4F6] rounded-[8px] p-1 w-fit">
         <button
           onClick={() => { setActiveType('ALL'); setPage(1); }}
-          className={`h-8 px-4 text-[12px] font-semibold rounded-[6px] transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+          className={`h-8 px-4 text-[12px] font-semibold rounded-[6px] transition-colors ${
             activeType === 'ALL' ? 'bg-white text-[#1F2328] shadow-sm' : 'text-[#656D76] hover:text-[#1F2328]'
           }`}
         >
@@ -237,7 +301,7 @@ export default function JobList({ onDetail, onBookmarks }) {
           <button
             key={key}
             onClick={() => { setActiveType(value); setPage(1); }}
-            className={`h-8 px-4 text-[12px] font-semibold rounded-[6px] transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+            className={`h-8 px-4 text-[12px] font-semibold rounded-[6px] transition-colors ${
               activeType === value ? 'bg-white text-[#1F2328] shadow-sm' : 'text-[#656D76] hover:text-[#1F2328]'
             }`}
           >
@@ -321,19 +385,27 @@ export default function JobList({ onDetail, onBookmarks }) {
                     <div className="text-[11px] text-[#9AA0A6]">
                       {j.applicationEndsAt ? String(j.applicationEndsAt).slice(0, 10) : '—'}
                     </div>
-                    <DDayBadge endDate={j.applicationEndsAt} />
+                    <div className="text-[11px] font-black text-[#656D76]">
+                      {calculateDDay(j.applicationEndsAt).label}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-center text-[11px] text-[#656D76]">
                     {j.employmentType || '—'}
                   </td>
                   <td className="px-3 py-3 text-center">
                     <button
-                      onClick={(e) => handleToggleScrap(j.jobPostingId, e)}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        scrapMutation.mutate(j.jobPostingId);
+                      }}
                       className={`text-[18px] transition-colors hover:scale-110 ${
-                        j.isScrapped ? 'text-[#D97706]' : 'text-[#D1D5DB] hover:text-[#D97706]'
+                        myBookmarkedIds.has(j.jobPostingId) || Boolean(j.isScrapped)
+                          ? 'text-[#D97706]'
+                          : 'text-[#D1D5DB] hover:text-[#D97706]'
                       }`}
                     >
-                      {j.isScrapped ? '★' : '☆'}
+                      {myBookmarkedIds.has(j.jobPostingId) || Boolean(j.isScrapped) ? '★' : '☆'}
                     </button>
                   </td>
                 </tr>
@@ -342,9 +414,10 @@ export default function JobList({ onDetail, onBookmarks }) {
           </tbody>
         </table>
 
-        {/* 페이징 */}
+        {/* 페이징 (총 N건으로만 깔끔하게 단일화) */}
         {totalElements > 0 && (
-          <div className="px-4 py-3 border-t border-[#E5E7EB]">
+          <div className="px-4 py-3 border-t border-[#E5E7EB] flex items-center justify-between">
+            <span className="text-[12px] text-[#656D76]">총 {totalElements}건</span>
             <Pagination
               page={page}
               totalPages={totalPages}
@@ -356,7 +429,7 @@ export default function JobList({ onDetail, onBookmarks }) {
         )}
       </div>
 
-      {/* 개인정보 선택동의(PROFILING) 유도 다이얼로그 */}
+      {/* 개인정보 선택동의(PROFILING) - /consent 이동 다이얼로그 */}
       <ConfirmDialog
         open={consentModalOpen}
         title="AI 맞춤 추천 서비스 동의 안내"
@@ -365,7 +438,7 @@ export default function JobList({ onDetail, onBookmarks }) {
         cancelLabel="다음에 하기"
         onConfirm={() => {
           setConsentModalOpen(false);
-          window.location.href = '/mypage/consent';
+          window.location.href = '/consent';
         }}
         onCancel={() => setConsentModalOpen(false)}
       />

@@ -98,23 +98,48 @@ export const reviewJobPosting = (jobPostingId, payload) =>
   apiClient.patch(`/admin/career/job-postings/${jobPostingId}/review`, payload).then((res) => res.data);
 
 /**
- * [교직원] 채용공고 게시 상태 변경 (DRAFT / PUBLISHED / CLOSED)
+ * [교직원] 채용공고 게시 상태 변경 (게시/마감)
  * PATCH /api/admin/career/job-postings/{jobPostingId}/status
- * @param {number} jobPostingId
- * @param {{ postingStatus: 'DRAFT' | 'PUBLISHED' | 'CLOSED' }} payload
- * @returns {Promise<void>}
  */
-export const updateJobPostingStatus = (jobPostingId, payload) =>
-  apiClient.patch(`/admin/career/job-postings/${jobPostingId}/status`, payload).then((res) => res.data);
+export const updateJobPostingStatus = (jobPostingId, { postingStatus }) =>
+  apiClient.patch(`/admin/career/job-postings/${jobPostingId}/status`, { postingStatus }).then((res) => res.data);
 
 /**
- * [교직원] 채용공고 삭제
+ * [교직원] 채용공고 단건 삭제
  * DELETE /api/admin/career/job-postings/{jobPostingId}
- * @param {number} jobPostingId
- * @returns {Promise<void>}
  */
 export const deleteJobPosting = (jobPostingId) =>
   apiClient.delete(`/admin/career/job-postings/${jobPostingId}`).then((res) => res.data);
+
+/**
+ * [교직원] 체크박스 선택 공고 일괄 상태 변경
+ */
+export const bulkUpdateJobPostingStatus = async (jobPostingIds, postingStatus) => {
+  return Promise.all(
+    jobPostingIds.map((id) =>
+      apiClient.patch(`/admin/career/job-postings/${id}/status`, { postingStatus })
+    )
+  );
+};
+
+/**
+ * [교직원] 체크박스 선택 공고 일괄 삭제
+ */
+export const bulkDeleteJobPostings = async (jobPostingIds) => {
+  return Promise.all(
+    jobPostingIds.map((id) =>
+      apiClient.delete(`/admin/career/job-postings/${id}`)
+    )
+  );
+};
+
+/**
+ * [교직원] 채용공고 첨부파일(포스터 이미지 등) 업로드
+ * POST /api/admin/career/job-postings/poster
+ */
+export const uploadJobPostingFile = (formData) =>
+  apiClient.post('/admin/career/job-postings/poster', formData).then((res) => res.data);
+
 
 /**
  * @typedef {Object} ApplicantSearchCondition
@@ -221,6 +246,13 @@ export const registerCompany = (payload) =>
  */
 export const verifyCompany = (companyAccountId, payload) =>
   apiClient.patch(`/admin/career/companies/${companyAccountId}/verify`, payload).then((res) => res.data);
+
+/**
+ * [교직원] 기업 정보 수정 (심사중 상태 또는 일반 정보 수정)
+ * PUT /api/admin/career/companies/{companyAccountId}
+ */
+export const updateCompany = (companyAccountId, payload) =>
+  apiClient.put(`/admin/career/companies/${companyAccountId}`, payload).then((res) => res.data);
 
 /**
  * [교직원] 취업 통계 요약 및 학과/분야별 데이터 조회 (TabEmploymentStats용)

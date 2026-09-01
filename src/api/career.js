@@ -190,7 +190,17 @@ export const getJobPreference = () =>
 export const saveJobPreference = (payload) =>
   apiClient.put('/students/career/preference', payload).then((res) => res.data);
 
+/**
+ * [학생] CAREER 모듈의 PROFILING 동의 상태 및 일시 조회
+ * GET /api/students/consents/status?moduleCode=CAREER&consentType=PROFILING
+ */
+export const getProfilingConsentStatus = () =>
+  apiClient.get('/students/consents/status', {
+    params: { moduleCode: 'CAREER', consentType: 'PROFILING' }
+  }).then((res) => res.data);
+
 // 화면 호환용 별칭 - 불필요 시 삭제
+export const getJobBookmarks = getMyJobScraps;
 export const fetchJobPostings = getJobPostings;
 export const fetchJobPosting = getJobPostingDetail;
 export const fetchRecommendedPostings = getRecommendedPostings;
