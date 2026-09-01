@@ -282,6 +282,18 @@ export const COUNSELING_PUBLIC_RESULT_ERROR_CODE = {
 };
 
 /**
+ * 스트레스 자가진단 문항·제출·이력 API가 반환하는 업무 오류 코드.
+ * 결과 수준(resultLevel)은 서버가 계산한 한국어 문자열을 그대로 표시하므로 별도 enum·라벨을 두지 않는다.
+ */
+export const STRESS_TEST_ERROR_CODE = {
+  INVALID_INPUT: 'C001',
+  REQUIRED_CONSENT_NOT_AGREED: 'U009',
+  NOT_AVAILABLE: 'S014',
+  /** 동일 정책에 동시에 동의 요청이 들어와 충돌한 경우. 제출 직전 동의 재검증 흐름에서 발생할 수 있다. */
+  CONSENT_CONFLICT: 'U012',
+};
+
+/**
  * 백엔드 응답 형태 참고 (JSDoc — 에디터 자동완성용)
  *
  * @typedef {Object} ApiResponse

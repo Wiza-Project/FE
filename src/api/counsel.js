@@ -825,3 +825,111 @@ export const studentCounselingResultDetailQueryKey = (sessionId) => [
   'studentCounselingResultDetail',
   sessionId,
 ];
+
+// ─── 스트레스 자가진단 ───────────────────────────────────────────────────────
+
+/**
+ * @typedef {Object} StressTestOption
+ * @property {number} value 0~3
+ * @property {string} label
+ */
+
+/**
+ * @typedef {Object} StressTestQuestion
+ * @property {number} questionId
+ * @property {number} questionNo
+ * @property {string} questionText
+ * @property {StressTestOption[]} optionData
+ */
+
+/**
+ * @typedef {Object} StressTestQuestionsResponse
+ * @property {string} testType 항상 'STRESS'
+ * @property {string} testVersion 예: '1'
+ * @property {string} instruction
+ * @property {StressTestQuestion[]} questions questionNo ASC 순으로 11개
+ */
+
+/**
+ * 활성 스트레스 검사 문항을 조회한다. 상담 개인정보 동의를 요구하지 않는다(개인정보 저장 액션이 아님).
+ * 문항 구성이 11개·연속 번호·확정 선택지와 다르면 503 S014를 반환한다.
+ *
+ * @returns {Promise<StressTestQuestionsResponse>}
+ */
+export const fetchStressTestQuestions = async () => {
+  const { data } = await apiClient.get('/students/psychological-tests/stress/questions');
+  return data;
+};
+
+/**
+ * @typedef {Object} StressTestAnswer
+ * @property {number} questionId
+ * @property {number} selectedValue 0~3
+ */
+
+/**
+ * @typedef {Object} SubmitStressTestResultRequest
+ * @property {string} testVersion 현재 활성 버전과 같아야 한다.
+ * @property {StressTestAnswer[]} answers 현재 버전의 11개 문항 각각에 정확히 한 번씩 답해야 한다.
+ */
+
+/**
+ * @typedef {Object} StressTestResult
+ * @property {number} resultId
+ * @property {string} testVersion
+ * @property {number} totalScore 서버가 계산한 0~33 정수
+ * @property {string} resultLevel 서버가 판정한 한국어 수준 문자열. FE에서 enum화하지 않는다.
+ * @property {string} resultDescription 서버가 저장한 점수 구간 설명 스냅샷
+ * @property {string} testedAt UTC ISO-8601 Instant
+ */
+
+/**
+ * 학생 본인의 스트레스 검사 응답을 제출해 결과를 저장한다. 제출 직전 유효한
+ * COUNSELING+PERSONAL_INFO 동의가 필요하다(403 U009). 반복 제출을 허용하며 기존 결과를
+ * 덮어쓰지 않고 매번 새 이력을 만든다. 원응답은 이 요청에만 사용되고 서버에도 별도 저장되지 않는다.
+ *
+ * @param {SubmitStressTestResultRequest} request
+ * @returns {Promise<StressTestResult>}
+ */
+export const submitStressTestResult = async (request) => {
+  const { data } = await apiClient.post('/students/psychological-tests/stress/results', request);
+  return data;
+};
+
+/**
+ * @typedef {Object} StressTestResultPage
+ * @property {StressTestResult[]} content
+ * @property {number} page 0부터 시작
+ * @property {number} size
+ * @property {number} totalElements
+ * @property {number} totalPages
+ * @property {boolean} first
+ * @property {boolean} last
+ */
+
+/**
+ * 학생 본인의 스트레스 검사 결과 이력을 testedAt DESC, resultId DESC로 조회한다.
+ * 현재 동의 여부와 무관하게 조회 가능하다(철회 후에도 과거 이력 조회 가능).
+ *
+ * @param {Object} [params]
+ * @param {number} [params.page=0]
+ * @param {number} [params.size=20]
+ * @returns {Promise<StressTestResultPage>}
+ */
+export const fetchStressTestResults = async ({ page = 0, size = 20 } = {}) => {
+  const { data } = await apiClient.get('/students/psychological-tests/stress/results', {
+    params: { page, size },
+  });
+  return data;
+};
+
+// 스트레스 검사 문항 query key. 원응답을 담지 않으므로 유일하게 고정된 키 하나만 쓴다.
+export const stressTestQuestionsQueryKey = ['studentStressTestQuestions'];
+
+// 스트레스 검사 결과 이력 query key. 페이지·크기만 포함하고 답변·동의 ID는 넣지 않는다.
+// 결과 전체를 무효화·제거할 때는 이 함수가 아니라 prefix ['studentStressTestResults']를 쓴다.
+export const stressTestResultsQueryKey = (page, size = 20) => [
+  'studentStressTestResults',
+  page,
+  size,
+];
