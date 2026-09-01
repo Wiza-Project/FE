@@ -26,7 +26,7 @@ function getErrorMessage(error, fallback) {
 }
 
 /**
- * 교직원 공지사항 관리 목록. GET /api/boards/NOTICE/posts 재사용 + DELETE /api/admin/boards/NOTICE/posts/{postId}.
+ * 교직원 공지사항 관리 목록. GET /api/boards/NOTICE/posts 재사용 + DELETE /api/staff/boards/NOTICE/posts/{postId}.
  *
  * @param {Object} props
  * @param {() => void} props.onNew
