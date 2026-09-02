@@ -102,6 +102,9 @@ export default function TabCompanyCert() {
         contactName: payload.contactName || payload.managerName,
         contactEmail: payload.contactEmail,
         contactPhone: payload.contactPhone,
+        industry: payload.industry,
+        companyScale: payload.companyScale,
+        address: payload.address,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staffCompaniesList'] });
@@ -124,6 +127,9 @@ export default function TabCompanyCert() {
         contactName: payload.contactName || payload.managerName,
         contactEmail: payload.contactEmail,
         contactPhone: payload.contactPhone,
+        industry: payload.industry,
+        companyScale: payload.companyScale,
+        address: payload.address,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staffCompaniesList'] });
@@ -666,13 +672,17 @@ export default function TabCompanyCert() {
             <Button
               variant="danger"
               loading={verifyMutation.isPending}
-              onClick={() =>
+              onClick={() => {
+                if (!rejectionReason || !rejectionReason.trim()) {
+                  toast('반려 사유를 입력해 주세요.', 'error');
+                  return;
+                }
                 verifyMutation.mutate({
                   companyAccountId: rejectTarget.companyAccountId,
                   verificationStatus: 'REJECTED',
-                  rejectionReason,
-                })
-              }
+                  rejectionReason: rejectionReason.trim(),
+                });
+              }}
             >
               반려 확정
             </Button>

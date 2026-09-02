@@ -33,6 +33,7 @@ export default function TabJobMatching() {
       () => postingsData?.content || (Array.isArray(postingsData) ? postingsData : []),
       [postingsData]
     );
+    
   useEffect(() => {
     if (postList.length > 0 && !selectedJobId) {
       setSelectedJobId(String(postList[0].jobPostingId));
