@@ -11,6 +11,7 @@ const TABS = ['구인 신청 검수', '공고 게시 관리', '기업 인증', '
 
 // 메인 탭 전환 컨트롤러
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
 export default function StaffEmploymentPage() {
   const location = useLocation();
   const initialTab = location.pathname.endsWith('/statistics') ? 4 : 0;

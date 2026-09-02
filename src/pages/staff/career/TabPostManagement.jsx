@@ -16,6 +16,8 @@ import {
 const ACCENT = '#1F2937';
 const PAGE_SIZE = 10;
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
+
 const POST_STATUS_STYLE = {
   PUBLISHED: { label: '게시', bg: '#D1FAE5', text: '#059669' },
   CLOSED: { label: '마감', bg: '#FEE2E2', text: '#CF222E' },

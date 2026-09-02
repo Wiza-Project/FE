@@ -6,6 +6,8 @@ import { getStaffJobPostings, reviewJobPosting, getCompanies } from '@/api/caree
 const ACCENT = '#1F2937';
 const PAGE_SIZE = 10;
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
+
 const REVIEW_STATUS_STYLE = {
   REQUESTED: { label: '검수 대기', bg: '#FEF3C7', text: '#D97706' },
   APPROVED: { label: '승인(게시)', bg: '#D1FAE5', text: '#059669' },

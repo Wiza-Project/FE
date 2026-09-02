@@ -9,6 +9,8 @@ import {
 
 const ACCENT = '#1F2937';
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
+
 const STATUS_STYLE = {
   APPLIED: { label: '지원완료', bg: '#EFF6FF', text: '#1D4ED8' },
   UNDER_REVIEW: { label: '서류검토중', bg: '#F5F3FF', text: '#7C3AED' },

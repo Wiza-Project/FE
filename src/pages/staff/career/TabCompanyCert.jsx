@@ -12,6 +12,8 @@ import {
 const ACCENT = '#1F2937';
 const PAGE_SIZE = 10;
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
+
 const COMPANY_CERT_STYLE = {
   VERIFIED: { label: '인증', bg: '#D1FAE5', text: '#059669' },
   PENDING: { label: '심사중', bg: '#FEF3C7', text: '#D97706' },
