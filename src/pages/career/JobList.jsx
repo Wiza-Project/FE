@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { PageHeader, Button, Pagination, ConfirmDialog, toast } from '@/components/common';
-import { getJobPostings, getRecommendedPostings, toggleJobScrap, getJobPreference } from '@/api/career';
+import { getJobPostings, getRecommendedPostings, toggleJobScrap, getJobPreference, getJobBookmarks } from '@/api/career';
 import { POSTING_TYPE, POSTING_TYPE_LABEL } from '@/constants/domain';
 import { useCommonCode } from '@/hooks/useCommonCode';
 
@@ -399,11 +399,18 @@ export default function JobList({ onDetail, onBookmarks }) {
                   <td className="px-3 py-3 text-center">
                     <button
                       type="button"
+                      aria-label={
+                        myBookmarkedIds.has(j.jobPostingId) || Boolean(j.isScrapped)
+                          ? '관심 공고에서 제거'
+                          : '관심 공고에 저장'
+                      }
+                      aria-pressed={myBookmarkedIds.has(j.jobPostingId) || Boolean(j.isScrapped)}
+                      disabled={scrapMutation.isPending}
                       onClick={(e) => {
                         e.stopPropagation();
                         scrapMutation.mutate(j.jobPostingId);
                       }}
-                      className={`text-[18px] transition-colors hover:scale-110 ${
+                      className={`text-[18px] transition-colors hover:scale-110 disabled:opacity-50 ${
                         myBookmarkedIds.has(j.jobPostingId) || Boolean(j.isScrapped)
                           ? 'text-[#D97706]'
                           : 'text-[#D1D5DB] hover:text-[#D97706]'
