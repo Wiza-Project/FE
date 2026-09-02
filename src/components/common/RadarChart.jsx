@@ -8,12 +8,37 @@
  * @param {string} [props.color]
  * @param {number} [props.size]
  */
+
+// 긴 축 라벨(예: "자원·정보·기술 활용")이 차트 밖에서 잘리지 않도록 최대 2줄로 나눈다.
+// 공백을 우선 기준으로 삼고, 없으면 가운데에 가장 가까운 '·' 뒤에서, 그것도 없으면 글자 수 절반에서 자른다.
+const wrapLabel = (label) => {
+  if (label.length <= 6) return [label];
+  const mid = Math.round(label.length / 2);
+  const spaceIdx = label.indexOf(' ', 1);
+  let cut;
+  if (spaceIdx > 0 && spaceIdx < label.length - 1) {
+    cut = spaceIdx + 1;
+  } else {
+    const dotCuts = [];
+    for (let i = 0; i < label.length - 1; i++) if (label[i] === '·') dotCuts.push(i + 1);
+    cut = dotCuts.length
+      ? dotCuts.reduce((best, idx) => (Math.abs(idx - mid) < Math.abs(best - mid) ? idx : best))
+      : mid;
+  }
+  return [label.slice(0, cut).trim(), label.slice(cut).trim()];
+};
+
 export function RadarChart({ labels, values, compareValues, color = '#2563EB', size = 260 }) {
   const n = labels.length;
   const cx = size / 2;
   const cy = size / 2;
   const r = (size / 2) * 0.72;
   const levels = 5;
+
+  // 축 라벨은 반지름 바깥(r + 18)에 그려지므로 viewBox와 실제 렌더 크기에 여백을 둬야 잘리지 않는다.
+  // 차트 본체는 size 기준 그대로 그리고, 여백만큼 svg가 더 커진다(좁은 컨테이너에서는 maxWidth로 축소).
+  const padX = 56;
+  const padY = 32;
 
   const angleOf = (i) => (Math.PI * 2 * i) / n - Math.PI / 2;
   const pt = (val, i) => {
@@ -35,7 +60,12 @@ export function RadarChart({ labels, values, compareValues, color = '#2563EB', s
     pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') + 'Z';
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg
+      width={size + padX * 2}
+      height={size + padY * 2}
+      viewBox={`${-padX} ${-padY} ${size + padX * 2} ${size + padY * 2}`}
+      style={{ maxWidth: '100%', height: 'auto' }}
+    >
       {/* Grid */}
       {Array.from({ length: levels }, (_, i) => (
         <polygon
@@ -72,21 +102,26 @@ export function RadarChart({ labels, values, compareValues, color = '#2563EB', s
       {/* Labels */}
       {labels.map((label, i) => {
         const a = angleOf(i);
-        const lx = cx + (r + 22) * Math.cos(a);
-        const ly = cy + (r + 22) * Math.sin(a);
+        const lx = cx + (r + 18) * Math.cos(a);
+        const ly = cy + (r + 18) * Math.sin(a);
         const anchor = Math.abs(lx - cx) < 5 ? 'middle' : lx < cx ? 'end' : 'start';
+        const lines = wrapLabel(label);
         return (
           <text
             key={i}
             x={lx.toFixed(1)}
-            y={(ly + 4).toFixed(1)}
+            y={(ly + 4 - (lines.length - 1) * 6).toFixed(1)}
             textAnchor={anchor}
             fontSize="11"
             fill="#656D76"
             fontFamily="Pretendard, sans-serif"
             fontWeight="600"
           >
-            {label}
+            {lines.map((ln, li) => (
+              <tspan key={li} x={lx.toFixed(1)} dy={li === 0 ? 0 : 12}>
+                {ln}
+              </tspan>
+            ))}
           </text>
         );
       })}
