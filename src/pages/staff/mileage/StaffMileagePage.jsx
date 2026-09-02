@@ -309,7 +309,7 @@ function TabPolicySettings() {
         ...(currentFilter.semesterCode ? { semesterCode: currentFilter.semesterCode } : {}),
         ...(currentFilter.policyStatus ? { policyStatus: currentFilter.policyStatus } : {}),
       };
-      const { data } = await apiClient.get('/admin/mileage/policies', { params });
+      const { data } = await apiClient.get('/staff/mileage/policies', { params });
       setPolicies((data?.content ?? []).map(normalizePolicy));
     } catch (error) {
       setPolicyError(error.message);
@@ -322,7 +322,7 @@ function TabPolicySettings() {
     setActivityTypesLoading(true);
     setActivityTypesError('');
     try {
-      const { data } = await apiClient.get('/admin/mileage/activity-types');
+      const { data } = await apiClient.get('/staff/mileage/activity-types');
       const content = Array.isArray(data) ? data : data?.content ?? [];
       setActivityTypes(content);
     } catch (error) {
@@ -351,7 +351,7 @@ function TabPolicySettings() {
 
     setSaving(true);
     try {
-      await apiClient.post('/admin/mileage/policies', buildPolicyRegisterPayload(pForm));
+      await apiClient.post('/staff/mileage/policies', buildPolicyRegisterPayload(pForm));
       toast('정책이 등록되었습니다.', 'success');
       resetCreateForm();
       await loadPolicies(policyFilter);
@@ -373,7 +373,7 @@ function TabPolicySettings() {
     setEditForm(null);
     setDetailLoading(true);
     try {
-      const { data } = await apiClient.get(`/admin/mileage/policies/${policyId}`);
+      const { data } = await apiClient.get(`/staff/mileage/policies/${policyId}`);
       setEditForm(toPolicyForm(data));
     } catch (error) {
       toast(error.message, 'error');
@@ -404,7 +404,7 @@ function TabPolicySettings() {
 
     setEditSaving(true);
     try {
-      await apiClient.patch(`/admin/mileage/policies/${editId}`, buildPolicyUpdatePayload(editForm));
+      await apiClient.patch(`/staff/mileage/policies/${editId}`, buildPolicyUpdatePayload(editForm));
       toast('정책이 수정되었습니다.', 'success');
       setEditId(null);
       setEditForm(null);
@@ -421,7 +421,7 @@ function TabPolicySettings() {
 
     setActionId(policy.mileagePolicyId);
     try {
-      await apiClient.patch(`/admin/mileage/policies/${policy.mileagePolicyId}`, {
+      await apiClient.patch(`/staff/mileage/policies/${policy.mileagePolicyId}`, {
         policyStatus: 'INACTIVE',
       });
       toast('정책이 비활성화되었습니다.', 'success');
@@ -824,7 +824,7 @@ function TabReviewInbox() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await apiClient.get('/admin/mileage/claims', {
+      const { data } = await apiClient.get('/staff/mileage/claims', {
         params: {
           status: currentFilters.status,
           keyword: currentFilters.keyword || undefined,
@@ -882,7 +882,7 @@ function TabReviewInbox() {
     setDetailLoading(true);
 
     try {
-      const { data } = await apiClient.get(`/admin/mileage/claims/${item.id}`);
+      const { data } = await apiClient.get(`/staff/mileage/claims/${item.id}`);
       setDrawerDetail(data);
       setDrawerItem((current) => (
         current?.id === item.id
@@ -926,10 +926,10 @@ function TabReviewInbox() {
     setReviewSubmitting(true);
     try {
       if (decision === 'APPROVE') {
-        await apiClient.post(`/admin/mileage/claims/${drawerItem.id}/approve`);
+        await apiClient.post(`/staff/mileage/claims/${drawerItem.id}/approve`);
         toast('승인 완료. 마일리지 EARN 거래가 생성되었습니다.', 'success');
       } else {
-        await apiClient.post(`/admin/mileage/claims/${drawerItem.id}/reject`, { reason });
+        await apiClient.post(`/staff/mileage/claims/${drawerItem.id}/reject`, { reason });
         toast('반려 처리되었습니다.', 'info');
       }
 
@@ -954,7 +954,7 @@ function TabReviewInbox() {
 
     setCancelSubmitting(true);
     try {
-      await apiClient.post(`/admin/mileage/claims/${cancelOpen.id}/cancel`, { reason });
+      await apiClient.post(`/staff/mileage/claims/${cancelOpen.id}/cancel`, { reason });
       toast('승인 취소 완료. 마일리지 역분개 거래가 생성되었습니다.', 'info');
       setCancelOpen(null);
       setCancelReason('');
