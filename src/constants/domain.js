@@ -281,6 +281,137 @@ export const COUNSELING_PUBLIC_RESULT_ERROR_CODE = {
   NO_CHANGES: 'S012',
 };
 
+/** ------------------------------ CAREER 취창업 도메인 상수 + 에러코드  ------------------------------ */
+
+/**
+ * 구인공고 구분 (JobPosting.postingType)
+ */
+export const POSTING_TYPE = {
+  GENERAL: 'GENERAL',
+  RECOMMENDED: 'RECOMMENDED',
+};
+
+export const POSTING_TYPE_LABEL = {
+  [POSTING_TYPE.GENERAL]: '일반채용',
+  [POSTING_TYPE.RECOMMENDED]: '추천채용',
+};
+
+/**
+ * 채용공고 게시/진행 상태 (JobPosting.postingStatus)
+ */
+export const JOB_POSTING_STATUS = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  CLOSED: 'CLOSED',
+};
+
+export const JOB_POSTING_STATUS_LABEL = {
+  [JOB_POSTING_STATUS.DRAFT]: '임시저장',
+  [JOB_POSTING_STATUS.PUBLISHED]: '모집중',
+  [JOB_POSTING_STATUS.CLOSED]: '마감',
+};
+
+/**
+ * 교직원 채용공고 검수 상태 (JobPosting.reviewStatus)
+ */
+export const JOB_POSTING_REVIEW_STATUS = {
+  REQUESTED: 'REQUESTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+};
+
+export const JOB_POSTING_REVIEW_STATUS_LABEL = {
+  [JOB_POSTING_REVIEW_STATUS.REQUESTED]: '검수대기',
+  [JOB_POSTING_REVIEW_STATUS.APPROVED]: '승인완료',
+  [JOB_POSTING_REVIEW_STATUS.REJECTED]: '반려',
+};
+
+/**
+ * 학생 온라인 지원 상태 (StudentJobRelation.applicationStatus)
+ */
+export const JOB_APPLICATION_STATUS = {
+  APPLIED: 'APPLIED',
+  CANCELED: 'CANCELED',
+};
+
+export const JOB_APPLICATION_STATUS_LABEL = {
+  [JOB_APPLICATION_STATUS.APPLIED]: '지원완료',
+  [JOB_APPLICATION_STATUS.CANCELED]: '지원취소',
+};
+
+/**
+ * 협약기업 심사 상태 (CompanyAccount.verificationStatus)
+ */
+export const COMPANY_VERIFICATION_STATUS = {
+  PENDING: 'PENDING',
+  VERIFIED: 'VERIFIED',
+  REJECTED: 'REJECTED',
+};
+
+export const COMPANY_VERIFICATION_STATUS_LABEL = {
+  [COMPANY_VERIFICATION_STATUS.PENDING]: '심사대기',
+  [COMPANY_VERIFICATION_STATUS.VERIFIED]: '협약승인',
+  [COMPANY_VERIFICATION_STATUS.REJECTED]: '반려',
+};
+
+/**
+ * 기업 계정 활성 상태 (CompanyAccount.accountStatus)
+ */
+export const COMPANY_ACCOUNT_STATUS = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+};
+
+export const COMPANY_ACCOUNT_STATUS_LABEL = {
+  [COMPANY_ACCOUNT_STATUS.ACTIVE]: '정상',
+  [COMPANY_ACCOUNT_STATUS.INACTIVE]: '정지',
+};
+
+/**
+ * 취창업 도메인 업무 오류 코드 (ErrorCode.java J### 체계 기준)
+ */
+export const CAREER_ERROR_CODE = {
+  /** 구인공고를 찾을 수 없습니다. */
+  JOB_POSTING_NOT_FOUND: 'J001',
+  /** 포트폴리오를 찾을 수 없습니다. */
+  PORTFOLIO_NOT_FOUND: 'J002',
+  /** 이미 제출한 만족도 조사입니다. */
+  SURVEY_ALREADY_SUBMITTED: 'J003',
+  /** 이미 승인/게시된 공고는 수정할 수 없습니다. */
+  CANNOT_MODIFY_APPROVED_POSTING: 'J004',
+  /** 이미 마감된 채용공고입니다. */
+  JOB_POSTING_ALREADY_CLOSED: 'J005',
+  /** 유효하지 않은 검수 상태값입니다. */
+  INVALID_REVIEW_STATUS: 'J006',
+  /** 신청 종료 일시는 시작 일시보다 빠를 수 없습니다. */
+  INVALID_APPLICATION_PERIOD: 'J007',
+  /** 존재하지 않는 기업 계정입니다. */
+  COMPANY_ACCOUNT_NOT_FOUND: 'J008',
+  /** 게시(승인)되지 않은 공고에는 지원할 수 없습니다. */
+  JOB_POSTING_NOT_PUBLISHED: 'J009',
+  /** 접수 마감 기간이 경과하여 지원 또는 취소할 수 없습니다. */
+  APPLICATION_PERIOD_EXPIRED: 'J010',
+  /** 이미 해당 채용공고에 지원 완료된 상태입니다. */
+  JOB_POSTING_ALREADY_APPLIED: 'J011',
+  /** 채용 지원 이력을 찾을 수 없거나 이미 취소된 상태입니다. */
+  JOB_POSTING_APPLICATION_NOT_FOUND: 'J012',
+  /** 이미 등록된 사업자등록번호입니다. */
+  DUPLICATE_COMPANY_ACCOUNT_NO: 'J013',
+  /** 자기소개서를 찾을 수 없습니다. */
+  COVER_LETTER_NOT_FOUND: 'J014',
+  /** 이미 작성된 자기소개서가 있습니다. 버전 관리 기능을 이용해주세요. */
+  COVER_LETTER_ALREADY_EXISTS: 'J015',
+  /** 저장이 동시에 처리되어 실패했습니다. 다시 시도해주세요. */
+  DOCUMENT_VERSION_CONFLICT: 'J016',
+  /** 이력서를 찾을 수 없습니다. */
+  RESUME_NOT_FOUND: 'J017',
+  /** 이미 작성된 이력서가 있습니다. 버전 관리 기능을 이용해주세요. */
+  RESUME_ALREADY_EXISTS: 'J018',
+  /** 최신 이력서 버전만 수정할 수 있습니다. */
+  RESUME_NOT_LATEST_VERSION: 'J019',
+};
+
+
 /**
  * 스트레스 자가진단 문항·제출·이력 API가 반환하는 업무 오류 코드.
  * 결과 수준(resultLevel)은 서버가 계산한 한국어 문자열을 그대로 표시하므로 별도 enum·라벨을 두지 않는다.
