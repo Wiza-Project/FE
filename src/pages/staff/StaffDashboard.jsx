@@ -8,7 +8,7 @@ import { fetchProgramsAdmin, fetchProgramApplications } from '@/api/programs';
 import { fetchPendingCounselorReservations, fetchCounselorSchedules } from '@/api/counsel';
 import { fetchBoardPosts } from '@/api/boards';
 import { formatDate, formatDateTime } from '@/utils/date';
-import { PageHeader, StatTile, Tabs, Button, ProgressBar, EmptyState } from '@/components/common';
+import { PageHeader, Tabs, Button, ProgressBar, EmptyState } from '@/components/common';
 
 const ACCENT = '#374151';
 
@@ -166,30 +166,6 @@ function WorkRow({ item, onProcess }) {
   );
 }
 
-// ── Stat tile async wrapper ───────────────────────────────────────────────────
-
-function StatTileSkeleton() {
-  return <div className="bg-white rounded-[8px] border border-[#E5E7EB] h-28 animate-pulse" />;
-}
-
-function StatTileErrorBox({ label, message, onRetry }) {
-  return (
-    <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-5 py-4 flex flex-col gap-2 justify-center h-28">
-      <span className="text-[12px] font-semibold text-[#656D76] uppercase tracking-wide">
-        {label}
-      </span>
-      <span className="text-[12px] text-[#CF222E] leading-snug">{message}</span>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="self-start text-[11px] font-bold text-[#2563EB] hover:underline"
-      >
-        다시 시도
-      </button>
-    </div>
-  );
-}
-
 // ── Main component ───────────────────────────────────────────────────────────
 
 /**
@@ -255,7 +231,6 @@ export default function StaffDashboard() {
     programsQuery.refetch();
     pendingByProgramQueries.forEach((q) => q.refetch());
   };
-  const operatingPrograms = ownedPrograms.filter((p) => p.programStatusLabel === '운영중');
 
   // ── D100: 마일리지 증빙 심사 ─────────────────────────────────────────────
   const mileageClaimsQuery = useQuery({
@@ -283,7 +258,6 @@ export default function StaffDashboard() {
     enabled: canCounsel,
   });
   const todaySchedules = (schedulesQuery.data ?? []).filter((s) => isToday(s.startsAt));
-  const todaySessionCount = todaySchedules.filter((s) => s.hasReservation).length;
 
   // ── D400: 구인 신청 검수 ─────────────────────────────────────────────────
   const jobPostingsQuery = useQuery({
@@ -354,43 +328,6 @@ export default function StaffDashboard() {
   const totalPending = workTabs.reduce((sum, t) => sum + (t.count || 0), 0);
   const pendingCountsReady = workTabs.length > 0 && workTabs.every((t) => !t.loading && !t.error);
 
-  // ── 상단 통계 타일: 권한 있고 실제 데이터가 있는 것만 구성 ────────────────
-  const statTiles = [
-    workTabs.length > 0 && {
-      key: 'pending',
-      label: '처리 대기',
-      loading: !pendingCountsReady && workTabs.some((t) => t.loading),
-      error: workTabs.some((t) => t.error),
-      errorMessage: '일부 업무의 처리 대기 건수를 불러오지 못했습니다.',
-      onRetry: () => workTabs.forEach((t) => t.onRetry()),
-      value: `${totalPending}건`,
-      sub: '즉시 처리 필요',
-      accentColor: '#D97706',
-    },
-    canCounsel && {
-      key: 'todayCounsel',
-      label: '오늘 상담',
-      loading: schedulesQuery.isLoading,
-      error: schedulesQuery.isError,
-      errorMessage: '오늘 상담 일정을 불러오지 못했습니다.',
-      onRetry: () => schedulesQuery.refetch(),
-      value: `${todaySessionCount}건`,
-      sub: todaySchedules[0] ? `${formatDateTime(todaySchedules[0].startsAt)} 시작` : '오늘 일정 없음',
-      accentColor: ACCENT,
-    },
-    canProgramReview && {
-      key: 'operatingPrograms',
-      label: '운영중 프로그램',
-      loading: programsQuery.isLoading,
-      error: programsQuery.isError,
-      errorMessage: '프로그램 현황을 불러오지 못했습니다.',
-      onRetry: () => programsQuery.refetch(),
-      value: `${operatingPrograms.length}개`,
-      sub: '현재 학기',
-      accentColor: ACCENT,
-    },
-  ].filter(Boolean);
-
   const noWorkPermission = !canProgramReview && !canMileageReview && !canCounsel && !canCareerReview;
 
   const hasLeftColumn = workTabs.length > 0 || canProgramReview;
@@ -414,35 +351,6 @@ export default function StaffDashboard() {
           </Button>
         }
       />
-
-      {/* ── Stat tiles ── */}
-      {statTiles.length > 0 && (
-        <div
-          className="grid gap-4 mb-5"
-          style={{ gridTemplateColumns: `repeat(${Math.min(statTiles.length, 4)}, minmax(0, 1fr))` }}
-        >
-          {statTiles.map((t) =>
-            t.loading ? (
-              <StatTileSkeleton key={t.key} />
-            ) : t.error ? (
-              <StatTileErrorBox
-                key={t.key}
-                label={t.label}
-                message={t.errorMessage}
-                onRetry={t.onRetry}
-              />
-            ) : (
-              <StatTile
-                key={t.key}
-                label={t.label}
-                value={t.value}
-                sub={t.sub}
-                accentColor={t.accentColor}
-              />
-            ),
-          )}
-        </div>
-      )}
 
       {noWorkPermission && (
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-8 mb-5">
