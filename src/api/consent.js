@@ -47,7 +47,10 @@ export const fetchConsentPolicies = async (moduleCode) => {
  */
 export const fetchMyConsents = async () => {
   const { data } = await apiClient.get('/consents/me');
-  return data;
+  // 백엔드가 non_null 직렬화 정책이라 활성 동의의 withdrawnAt(null)은 JSON에서 생략된다.
+  // 호출부가 withdrawnAt === null 로 유효성을 판정하므로, 생략된 값을 경계에서 null로 정규화한다.
+  // 철회된 동의는 실제 시각 문자열이 스프레드로 덮어써져 그대로 유지된다.
+  return data.map((consent) => ({ withdrawnAt: null, ...consent }));
 };
 
 /**

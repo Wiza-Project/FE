@@ -3,17 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import ReservationManage from './ReservationManage';
 import SessionRecord from './SessionRecord';
 import SessionResult from './SessionResult';
-import CenterIntake from './CenterIntake';
 import MySchedule from './MySchedule';
-import { useAuthStore } from '@/stores/authStore';
-import { USER_ROLE } from '@/constants/domain';
 import { fetchPendingCounselorReservations, pendingReservationsQueryKey } from '@/api/counsel';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
-
-// 상담사(ST200) 전용 메뉴. 예약 관리·회기 관리·상담 결과는 상담사 본인 배정만 다루므로 일반 교직원에게는 숨긴다.
-// 이 목록은 UX용 1차 차단일 뿐이며, 실제 데이터 접근 권한은 각 API를 호출하는 BE가 ROLE_ST200으로 최종 판단한다.
-const COUNSELOR_ONLY_KEYS = new Set(['schedule', 'reservation', 'record', 'result']);
 
 const NAV_ITEMS = [
   { key: 'schedule', label: '내 일정', icon: '📅', desc: '가능 시간대 관리' },
@@ -26,30 +19,24 @@ const NAV_ITEMS = [
   { key: 'record', label: '회기 관리', icon: '📝', desc: '회기 목록·후속 생성·출결 완료·취소' },
   // 상담 결과 정정·버전 이력(상담 도메인 체크리스트 10번)을 구현하면 desc에 '· 정정 이력'을 추가한다.
   { key: 'result', label: '상담 결과', icon: '✅', desc: '결과 저장·공개·완료' },
-  { key: 'intake', label: '접수·배정', icon: '🏥', desc: '센터 전용 — 접수 및 상담사 배정' },
 ];
 
 /**
- * 일반 교직원의 상담 운영 화면 허브입니다. 예약 관리·상담 기록·상담 결과·접수·배정을
- * 로컬 상태로 전환합니다. 상담사에게만 본인 일정 탭을 제공합니다.
+ * 상담사(ST200) 전용 상담 운영 화면 허브입니다. 일정·예약 관리·상담 기록·상담 결과를
+ * 로컬 상태로 전환합니다. 이 화면에는 라우트에서 이미 ST200 겸임자만 도달하므로
+ * (routes/router.jsx의 CounselOperationRoute 참고) 여기서 별도의 상담사 여부 분기를
+ * 두지 않는다.
  */
 export default function StaffCounselingPage() {
-  const isCounselor = useAuthStore((state) =>
-    (state.user?.roleCodes ?? []).includes(USER_ROLE.COUNSELOR),
-  );
-  const navItems = isCounselor
-    ? NAV_ITEMS
-    : NAV_ITEMS.filter((item) => !COUNSELOR_ONLY_KEYS.has(item.key));
-  const [nav, setNav] = useState(navItems[0].key);
-  const current = navItems.find((item) => item.key === nav) ?? navItems[0];
+  const [nav, setNav] = useState(NAV_ITEMS[0].key);
+  const current = NAV_ITEMS.find((item) => item.key === nav) ?? NAV_ITEMS[0];
   const selectedNav = current.key;
 
   // ReservationManage의 첫 페이지 조회와 같은 queryKey를 써서 캐시를 공유하므로
-  // 상담사가 예약 관리 탭을 열어도 중복 요청이 발생하지 않는다.
+  // 예약 관리 탭을 열어도 중복 요청이 발생하지 않는다.
   const { data: pendingPage } = useQuery({
     queryKey: pendingReservationsQueryKey(0),
     queryFn: () => fetchPendingCounselorReservations({ page: 0, size: 20 }),
-    enabled: isCounselor,
   });
   const pendingCount = pendingPage?.totalElements ?? 0;
 
@@ -71,7 +58,7 @@ export default function StaffCounselingPage() {
         </div>
 
         <nav className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden">
-          {navItems.map((item, i) => {
+          {NAV_ITEMS.map((item, i) => {
             const active = nav === item.key;
             const badge = item.key === 'reservation' && pendingCount > 0 ? pendingCount : null;
             return (
@@ -132,11 +119,10 @@ export default function StaffCounselingPage() {
           </span>
         </div>
 
-        {isCounselor && selectedNav === 'schedule' && <MySchedule />}
-        {isCounselor && selectedNav === 'reservation' && <ReservationManage />}
-        {isCounselor && selectedNav === 'record' && <SessionRecord />}
-        {isCounselor && selectedNav === 'result' && <SessionResult />}
-        {selectedNav === 'intake' && <CenterIntake />}
+        {selectedNav === 'schedule' && <MySchedule />}
+        {selectedNav === 'reservation' && <ReservationManage />}
+        {selectedNav === 'record' && <SessionRecord />}
+        {selectedNav === 'result' && <SessionResult />}
       </main>
     </div>
   );

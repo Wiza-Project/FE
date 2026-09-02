@@ -1,7 +1,7 @@
 import { apiClient, downloadFile } from './client';
 
 /**
- * 운영계획서 업로드. POST /api/admin/programs/files
+ * 운영계획서 업로드. POST /api/staff/programs/files
  * 프로그램 등록/수정과 별개로 파일을 먼저 올려 fileGroupId를 발급받는다.
  * @param {File} file
  * @returns {Promise<{fileGroupId: number}>} ProgramFileUploadResponseDTO
@@ -9,18 +9,18 @@ import { apiClient, downloadFile } from './client';
 export const uploadProgramOperationPlan = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
-  const { data } = await apiClient.post('/admin/programs/files', formData, {
+  const { data } = await apiClient.post('/staff/programs/files', formData, {
     headers: { 'Content-Type': undefined },
   });
   return data;
 };
 
 /**
- * 비교과 프로그램 등록. POST /api/admin/programs
+ * 비교과 프로그램 등록. POST /api/staff/programs
  * @param {Object} payload ProgramRegisterRequestDTO와 동일한 형태
  */
 export const createProgram = async (payload) => {
-  const { data } = await apiClient.post('/admin/programs', payload);
+  const { data } = await apiClient.post('/staff/programs', payload);
   return data;
 };
 
@@ -96,7 +96,7 @@ export const fetchCompetencyOptionsStudent = async () => {
 };
 
 /**
- * 교직원(본인 소유) 비교과 프로그램 목록 조회. GET /api/admin/programs
+ * 교직원(본인 소유) 비교과 프로그램 목록 조회. GET /api/staff/programs
  * @param {Object} [params]
  * @param {string} [params.status] DRAFT/OPERATING/CLOSED. 생략 시 전체.
  * @param {string} [params.keyword] 프로그램명 부분 일치 검색어.
@@ -106,23 +106,38 @@ export const fetchCompetencyOptionsStudent = async () => {
  * @returns {Promise<{content: object[], page: number, size: number, totalElements: number, totalPages: number, first: boolean, last: boolean}>}
  */
 export const fetchProgramsAdmin = async (params) => {
-  const { data } = await apiClient.get('/admin/programs', { params });
+  const { data } = await apiClient.get('/staff/programs', { params });
   return data;
 };
 
 /**
- * 교직원(본인 소유) 비교과 프로그램 단건 상세 조회. GET /api/admin/programs/{programId}
+ * 교직원(본인 소유) 비교과 프로그램 단건 상세 조회. GET /api/staff/programs/{programId}
  * 수정 폼 프리필용. 본인이 등록한 프로그램이 아니면 403(A004)이 내려온다.
  * @param {number} programId
  * @returns {Promise<Object>} ProgramAdminDetailResponseDTO
  */
 export const fetchProgramDetailAdmin = async (programId) => {
-  const { data } = await apiClient.get(`/admin/programs/${programId}`);
+  const { data } = await apiClient.get(`/staff/programs/${programId}`);
   return data;
 };
 
 /**
- * 비교과 프로그램 수정. PUT /api/admin/programs/{programId}
+ * 프로그램 유형에 매핑되는 마일리지 정책 미리보기.
+ * GET /api/staff/programs/mileage-policy-preview
+ * 등록 폼에서 아직 저장하지 않은 프로그램 유형 선택값 기준으로 어떤 정책이
+ * 자동 적용될지 보여주기 위해 사용. 매핑되는 정책이 없으면 필드가 응답에서 생략된다(에러 아님).
+ * @param {number} programTypeCodeId
+ * @returns {Promise<{mileagePolicyId?: number, mileagePoints?: number, mileageActivityName?: string}>}
+ */
+export const fetchMileagePolicyPreview = async (programTypeCodeId) => {
+  const { data } = await apiClient.get('/staff/programs/mileage-policy-preview', {
+    params: { programTypeCodeId },
+  });
+  return data;
+};
+
+/**
+ * 비교과 프로그램 수정. PUT /api/staff/programs/{programId}
  * 모집중이며 본인 소유인 프로그램만 가능. 실패 시 403(A004) 또는 400(PROGRAM_NOT_EDITABLE/P009).
  * @param {number} programId
  * @param {Object} payload ProgramUpdateRequestDTO와 동일한 형태.
@@ -137,21 +152,21 @@ export const fetchProgramDetailAdmin = async (programId) => {
  * @param {boolean} [payload.clearFileGroup]
  */
 export const updateProgram = async (programId, payload) => {
-  const { data } = await apiClient.put(`/admin/programs/${programId}`, payload);
+  const { data } = await apiClient.put(`/staff/programs/${programId}`, payload);
   return data;
 };
 
 /**
- * 비교과 프로그램 삭제. DELETE /api/admin/programs/{programId}
+ * 비교과 프로그램 삭제. DELETE /api/staff/programs/{programId}
  * 모집중이며 본인 소유인 프로그램만 가능. 실패 시 403(A004) 또는 400(PROGRAM_NOT_DELETABLE/P010).
  * @param {number} programId
  */
 export const deleteProgram = async (programId) => {
-  await apiClient.delete(`/admin/programs/${programId}`);
+  await apiClient.delete(`/staff/programs/${programId}`);
 };
 
 /**
- * 프로그램 신청자 목록 조회. GET /api/admin/programs/{programId}/applications
+ * 프로그램 신청자 목록 조회. GET /api/staff/programs/{programId}/applications
  * @param {number} programId
  * @param {Object} [params]
  * @param {string} [params.status] APPLIED/WAITLISTED/APPROVED/REJECTED/CANCELLED
@@ -159,54 +174,54 @@ export const deleteProgram = async (programId) => {
  * @returns {Promise<{content: object[], page: number, size: number, totalElements: number, totalPages: number}>}
  */
 export const fetchProgramApplications = async (programId, params) => {
-  const { data } = await apiClient.get(`/admin/programs/${programId}/applications`, { params });
+  const { data } = await apiClient.get(`/staff/programs/${programId}/applications`, { params });
   return data;
 };
 
 /**
- * 신청 단건 승인. POST /api/admin/programs/{programId}/applications/{applicationId}/approve
+ * 신청 단건 승인. POST /api/staff/programs/{programId}/applications/{applicationId}/approve
  */
 export const approveApplication = async (programId, applicationId) => {
   const { data } = await apiClient.post(
-    `/admin/programs/${programId}/applications/${applicationId}/approve`,
+    `/staff/programs/${programId}/applications/${applicationId}/approve`,
   );
   return data;
 };
 
 /**
- * 신청 단건 반려. POST /api/admin/programs/{programId}/applications/{applicationId}/reject
+ * 신청 단건 반려. POST /api/staff/programs/{programId}/applications/{applicationId}/reject
  * @param {number} programId
  * @param {number} applicationId
  * @param {string} reason
  */
 export const rejectApplication = async (programId, applicationId, reason) => {
   const { data } = await apiClient.post(
-    `/admin/programs/${programId}/applications/${applicationId}/reject`,
+    `/staff/programs/${programId}/applications/${applicationId}/reject`,
     { reason },
   );
   return data;
 };
 
 /**
- * 신청 일괄 승인. POST /api/admin/programs/{programId}/applications/bulk-approve
+ * 신청 일괄 승인. POST /api/staff/programs/{programId}/applications/bulk-approve
  * @param {number} programId
  * @param {number[]} applicationIds
  */
 export const bulkApproveApplications = async (programId, applicationIds) => {
-  const { data } = await apiClient.post(`/admin/programs/${programId}/applications/bulk-approve`, {
+  const { data } = await apiClient.post(`/staff/programs/${programId}/applications/bulk-approve`, {
     applicationIds,
   });
   return data;
 };
 
 /**
- * 신청 일괄 반려. POST /api/admin/programs/{programId}/applications/bulk-reject
+ * 신청 일괄 반려. POST /api/staff/programs/{programId}/applications/bulk-reject
  * @param {number} programId
  * @param {number[]} applicationIds
  * @param {string} reason
  */
 export const bulkRejectApplications = async (programId, applicationIds, reason) => {
-  const { data } = await apiClient.post(`/admin/programs/${programId}/applications/bulk-reject`, {
+  const { data } = await apiClient.post(`/staff/programs/${programId}/applications/bulk-reject`, {
     applicationIds,
     reason,
   });
