@@ -257,11 +257,11 @@ const validatePolicyForm = (form, activityType, { requireActivityType = false } 
   return '';
 };
 const COMP_MAP = [
-  { act: '해외 어학연수', comp: '글로벌역량', sub: '언어소통', weight: 50 },
-  { act: '국가공인자격증', comp: '전문역량', sub: '전공지식', weight: 70 },
-  { act: '자원봉사', comp: '공동체역량', sub: '사회참여', weight: 30 },
-  { act: '비교과 프로그램 이수', comp: '자기개발', sub: '진로설계', weight: 40 },
-  { act: '학생회·동아리 임원', comp: '리더십역량', sub: '조직관리', weight: 45 },
+  { act: '해외 어학연수', comp: '글로벌역량', weight: 50 },
+  { act: '국가공인자격증', comp: '전문역량', weight: 70 },
+  { act: '자원봉사', comp: '공동체역량', weight: 30 },
+  { act: '비교과 프로그램 이수', comp: '자기개발', weight: 40 },
+  { act: '학생회·동아리 임원', comp: '리더십역량', weight: 45 },
 ];
 const CERT_CRITERIA = [
   { cat: '취업지원장학', range: '300~499점', amount: '30만원', tie: '동등지급' },
@@ -764,11 +764,11 @@ function TabPolicySettings() {
         <SCard title="활동유형–핵심역량 매핑">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
-              <thead><tr className="border-b border-[#E5E7EB]"><TH>활동유형</TH><TH>핵심역량</TH><TH>하위역량</TH><TH center>가중치</TH></tr></thead>
+              <thead><tr className="border-b border-[#E5E7EB]"><TH>활동유형</TH><TH>핵심역량</TH><TH center>가중치</TH></tr></thead>
               <tbody>
                 {COMP_MAP.map((r) => (
                   <tr key={r.act} className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA]">
-                    <TD cls="text-[#444D56]">{r.act}</TD><TD cls="font-semibold text-[#1F2328]">{r.comp}</TD><TD cls="text-[#656D76]">{r.sub}</TD>
+                    <TD cls="text-[#444D56]">{r.act}</TD><TD cls="font-semibold text-[#1F2328]">{r.comp}</TD>
                     <TD center><div className="flex items-center gap-2 justify-center"><div className="w-16 h-1.5 rounded-full bg-[#E5E7EB] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${r.weight}%`, background: A }} /></div><span className="text-[10px] font-bold" style={{ color: A }}>{r.weight}%</span></div></TD>
                   </tr>
                 ))}
