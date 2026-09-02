@@ -6,6 +6,8 @@ import ApplicationBoard from './ApplicationBoard';
 
 const ACCENT = '#059669';
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
+
 const NAV_ITEMS = [
   {
     key: 'resume',
