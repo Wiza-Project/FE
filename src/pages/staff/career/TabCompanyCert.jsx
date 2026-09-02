@@ -69,7 +69,7 @@ export default function TabCompanyCert() {
         size: PAGE_SIZE,
         verificationStatus: statusFilter === 'ALL' ? undefined : statusFilter,
       }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   const rows = pageData?.content || (Array.isArray(pageData) ? pageData : []);
@@ -94,7 +94,12 @@ export default function TabCompanyCert() {
 
   // 3. 신규 기업 등록 Mutation
   const registerMutation = useMutation({
-    mutationFn: (payload) => registerCompany(payload),
+    mutationFn: (payload) =>
+      registerCompany({
+        ...payload,
+        businessNumber: payload.businessNumber || payload.businessRegistrationNo,
+        ceoName: payload.ceoName || payload.representativeName,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staffCompaniesList'] });
       setIsRegisterOpen(false);
@@ -108,7 +113,12 @@ export default function TabCompanyCert() {
 
   // 4. 심사중 기업 정보 수정 Mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }) => updateCompany(id, payload),
+    mutationFn: ({ id, payload }) =>
+      updateCompany(id, {
+        ...payload,
+        businessNumber: payload.businessNumber || payload.businessRegistrationNo,
+        ceoName: payload.ceoName || payload.representativeName,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staffCompaniesList'] });
       setDetailTarget(null);
@@ -658,18 +668,20 @@ export default function TabCompanyCert() {
                 })
               }
             >
-              반려 처리
+              반려 확정
             </Button>
           </div>
         }
       >
         <div className="flex flex-col gap-3 text-[12px]">
-          <p><strong>{rejectTarget?.companyName}</strong>의 인증 요청을 반려하시겠습니까?</p>
+          <p className="text-[#656D76]">
+            [{rejectTarget?.companyName}] 기업의 제휴 심사를 반려 처리합니다. 반려 사유를 입력하세요.
+          </p>
           <textarea
             value={rejectionReason}
             onChange={(e) => setRejectionReason(e.target.value)}
-            placeholder="사업자등록번호 불일치 등 구체적인 반려 사유를 입력하세요."
             rows={3}
+            placeholder="반려 사유 입력 (필수)"
             className="w-full p-2.5 rounded-[6px] border border-[#E5E7EB] focus:outline-none resize-none"
           />
         </div>

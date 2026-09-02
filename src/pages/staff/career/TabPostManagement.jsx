@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Button, Modal, Pagination, toast } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
 import { apiClient } from '@/api/client';
@@ -65,7 +65,7 @@ export default function TabPostManagement() {
         size: PAGE_SIZE,
         postingStatus: statusFilter === 'ALL' ? undefined : statusFilter,
       }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   // 2. 기업 목록 조회
@@ -90,6 +90,13 @@ export default function TabPostManagement() {
     const text = `${c.companyName} ${c.businessRegistrationNo || c.businessNumber || ''}`;
     return text.toLowerCase().includes(companySearchText.toLowerCase());
   });
+
+  const formatToIso = (dateStr, defaultTime) => {
+      if (!dateStr) return null;
+      const dateOnly = String(dateStr).slice(0, 10);
+      // KST(+09:00) 기준으로 생성 후 표준 ISO UTC 문자열로 변환
+      return new Date(`${dateOnly}T${defaultTime}:00+09:00`).toISOString();
+  };
 
   // 3. Mutation 정의
   const createMutation = useMutation({
@@ -165,15 +172,11 @@ export default function TabPostManagement() {
       return;
     }
 
-    const formatToIso = (dateStr, defaultTime) => {
-      if (!dateStr) return null;
-      if (dateStr.includes('T')) return dateStr;
-      // KST(+09:00) 기준으로 생성 후 표준 ISO UTC 문자열로 변환
-      return new Date(`${dateStr}T${defaultTime}:00+09:00`).toISOString();
-    };
 
     createMutation.mutate({
       ...createForm,
+      salaryInfo: createForm.salaryText,
+      workLocation: createForm.workLocation || '상세 근무지 협의',
       applicationStartsAt: formatToIso(createForm.applicationStartsAt, '09:00'),
       applicationEndsAt: formatToIso(createForm.applicationEndsAt, '18:00'),
       companyAccountId: Number(createForm.companyAccountId),
@@ -191,16 +194,12 @@ export default function TabPostManagement() {
       return;
     }
 
-    const formatToIso = (dateStr, defaultTime) => {
-      if (!dateStr) return null;
-      if (dateStr.includes('T')) return dateStr;
-      return `${dateStr}T${defaultTime}:00Z`;
-    };
-
     updateMutation.mutate({
       id: detailTarget.jobPostingId,
       payload: {
         ...editForm,
+        salaryInfo: editForm.salaryText,
+        workLocation: editForm.workLocation || '상세 근무지 협의',
         applicationStartsAt: formatToIso(editForm.applicationStartsAt, '09:00'),
         applicationEndsAt: formatToIso(editForm.applicationEndsAt, '18:00'),
         ncsCodeId: editForm.ncsCodeId ? Number(editForm.ncsCodeId) : undefined,
@@ -222,11 +221,12 @@ export default function TabPostManagement() {
     formData.append('file', file);
 
     try {
-      const res = await apiClient.post('/admin/career/job-postings/poster', formData, {
+      const res = await apiClient.post('/staff/career/job-postings/poster', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const resData = res.data?.data || res.data;
-      const uploadedFileGroupId = resData?.fileGroupId || resData;
+      const rawId = resData?.fileGroupId ?? resData?.id ?? resData;
+      const uploadedFileGroupId = (typeof rawId === 'number' || typeof rawId === 'string') ? rawId : null;
 
       if (uploadedFileGroupId) {
         if (isEdit) {
@@ -235,10 +235,14 @@ export default function TabPostManagement() {
           setCreateForm((p) => ({ ...p, fileGroupId: uploadedFileGroupId }));
         }
         toast('포스터 이미지가 성공적으로 첨부되었습니다.', 'success');
+      } else {
+        toast('업로드 응답 식별자를 확인할 수 없습니다.', 'error');
       }
     } catch {
       toast('파일 업로드 중 오류가 발생했습니다.', 'error');
     }
+
+    e.target.value = ''; // 이 1줄만 맨 끝에 두시면 됩니다.
   };
 
   // 상세 모달 열기 (기존 목록 데이터를 기반으로 안전하게 초기화)
@@ -619,7 +623,7 @@ export default function TabPostManagement() {
                 type="date"
                 value={createForm.applicationStartsAt ? createForm.applicationStartsAt.slice(0, 10) : ''}
                 onChange={(e) =>
-                  setCreateForm((p) => ({ ...p, applicationStartsAt: `${e.target.value}T09:00:00Z` }))
+                  setCreateForm((p) => ({ ...p, applicationStartsAt: e.target.value }))
                 }
                 className="w-full h-9 px-3 rounded-[6px] border border-[#E5E7EB] focus:outline-none"
               />
@@ -632,7 +636,7 @@ export default function TabPostManagement() {
                 type="date"
                 value={createForm.applicationEndsAt ? createForm.applicationEndsAt.slice(0, 10) : ''}
                 onChange={(e) =>
-                  setCreateForm((p) => ({ ...p, applicationEndsAt: `${e.target.value}T18:00:00Z` }))
+                  setCreateForm((p) => ({ ...p, applicationEndsAt: e.target.value }))
                 }
                 className="w-full h-9 px-3 rounded-[6px] border border-[#E5E7EB] focus:outline-none"
               />
