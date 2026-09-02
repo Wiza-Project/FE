@@ -89,8 +89,9 @@ function nextAttStatus(current) {
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function attRate(att) {
-  const present = att.filter((a) => a === 'PRESENT').length;
-  return att.length === 0 ? 0 : Math.round((present / att.length) * 100);
+  const recorded = att.filter((a) => a === 'PRESENT' || a === 'ABSENT');
+  const present = recorded.filter((a) => a === 'PRESENT').length;
+  return recorded.length === 0 ? 0 : Math.round((present / recorded.length) * 100);
 }
 
 // ─── ① 신청 심사 ─────────────────────────────────────────────────────────────
@@ -624,7 +625,8 @@ function AttendanceManage({ programId }) {
                     (sess) => attendanceMap.get(`${a.applicationId}-${sess.programSessionId}`) ?? null,
                   );
                   const rate = attRate(statuses);
-                  const fail = rate < 80;
+                  const hasUnrecorded = statuses.some((s) => s === null);
+                  const fail = !hasUnrecorded && rate < 80;
                   return (
                     <tr
                       key={a.applicationId}
