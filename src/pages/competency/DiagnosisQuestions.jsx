@@ -12,7 +12,7 @@ const LIKERT = [
   { value: 5, label: '매우\n그렇다' },
 ];
 
-const QUESTIONS_PER_PAGE = 3;
+const QUESTIONS_PER_PAGE = 10;
 
 // 역량마다 처음 등장하는 순서대로 순환 배정하는 팔레트
 const COMP_PALETTE = ['#2563EB', '#7C3AED', '#0891B2', '#059669', '#D97706', '#6B7280'];
@@ -303,7 +303,7 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
       </div>
 
       {/* ── Question cards ── */}
-      <div className="flex-1 px-6 py-6 flex flex-col gap-4 max-w-[880px] w-full mx-auto">
+      <div className="flex-1 px-6 py-6 flex flex-col gap-2.5 max-w-[880px] w-full mx-auto">
         {currentQs.map((q, i) => {
           const selected = answers[q.questionId];
           const questionNo = page * QUESTIONS_PER_PAGE + i + 1;
@@ -313,9 +313,9 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
               className="bg-white rounded-[10px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden"
             >
               {/* Question header */}
-              <div className="px-6 py-4 border-b border-[#F3F4F6] flex items-start gap-3">
+              <div className="px-5 py-2.5 border-b border-[#F3F4F6] flex items-start gap-2.5">
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-black text-white flex-shrink-0"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black text-white flex-shrink-0"
                   style={{ background: competencyColor[q.competencyId] }}
                 >
                   {questionNo}
@@ -323,22 +323,22 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span
-                      className="text-[11px] font-bold px-2 py-0.5 rounded-full text-white"
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
                       style={{ background: competencyColor[q.competencyId] }}
                     >
                       {q.competencyName}
                     </span>
                   </div>
-                  <p className="text-[14px] font-semibold text-[#1F2328] leading-snug">
+                  <p className="text-[13px] font-semibold text-[#1F2328] leading-snug">
                     {q.questionText}
                   </p>
                 </div>
               </div>
 
               {/* Likert options — 5개 중 하나만 고르는 상호배타적 선택지라 radiogroup/radio 시맨틱을 쓴다 */}
-              <div className="px-6 py-5">
+              <div className="px-5 py-3">
                 <div
-                  className="flex gap-3"
+                  className="flex gap-2"
                   role="radiogroup"
                   aria-label={`${q.questionText} 응답`}
                 >
@@ -353,18 +353,18 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
                         aria-checked={isSelected}
                         disabled={isPending}
                         onClick={() => setAnswer(q.questionId, opt.value)}
-                        className={`flex-1 flex flex-col items-center gap-2 py-3 px-2 rounded-[8px] border-2 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed
+                        className={`flex-1 flex flex-col items-center gap-1 py-2 px-1.5 rounded-[8px] border-2 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed
                           ${isSelected ? 'border-[#7C3AED] bg-[#F5F3FF]' : 'border-[#E5E7EB] hover:border-[#C4B5FD] hover:bg-[#FAFAFA]'}`}
                       >
                         {/* Number circle */}
                         <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-[14px] font-black border-2 transition-colors
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-[13px] font-black border-2 transition-colors
                           ${isSelected ? 'bg-[#7C3AED] border-[#7C3AED] text-white' : 'border-[#E5E7EB] text-[#9AA0A6]'}`}
                         >
                           {opt.value}
                         </div>
                         <span
-                          className={`text-[11px] font-semibold text-center leading-tight whitespace-pre-line transition-colors ${isSelected ? 'text-[#7C3AED]' : 'text-[#9AA0A6]'}`}
+                          className={`flex items-start justify-center min-h-[24px] text-[10px] font-semibold text-center leading-tight whitespace-pre-line transition-colors ${isSelected ? 'text-[#7C3AED]' : 'text-[#9AA0A6]'}`}
                         >
                           {opt.label}
                         </span>
@@ -373,7 +373,7 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
                   })}
                 </div>
                 {/* Scale hint */}
-                <div className="flex justify-between mt-2 px-1">
+                <div className="flex justify-between mt-1.5 px-1">
                   <span className="text-[10px] text-[#C4C9CF]">← 동의하지 않음</span>
                   <span className="text-[10px] text-[#C4C9CF]">동의함 →</span>
                 </div>
