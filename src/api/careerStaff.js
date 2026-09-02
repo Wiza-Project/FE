@@ -6,6 +6,7 @@ import { apiClient } from '@/api/client';
  * 1. 채용공고 운영 관리 & 검수 (Staff Job Posting Operations)
  * 2. 공고별 지원자 목록 & 전형 관리 (Applicant Management)
  * 3. 협약기업 메타데이터 신규 등록 & 제휴 심사 (Company Management)
+ * 4. 취업 통계 및 매칭 추천 현황 추가(Stats & Matching Operations)
  */
 
 /**
@@ -36,6 +37,15 @@ import { apiClient } from '@/api/client';
  */
 export const getStaffJobPostings = (params) =>
   apiClient.get('/staff/career/job-postings', { params }).then((res) => res.data);
+
+/**
+ * [교직원] 채용공고 단건 상세 조회
+ * GET /api/staff/career/job-postings/{jobPostingId}
+ * @param {number} jobPostingId
+ * @returns {Promise<Object>}
+ */
+export const getStaffJobPostingDetail = (jobPostingId) =>
+  apiClient.get(`/staff/career/job-postings/${jobPostingId}`).then((res) => res.data);
 
 /**
  * @typedef {Object} JobPostingCreateRequest
@@ -88,13 +98,48 @@ export const reviewJobPosting = (jobPostingId, payload) =>
   apiClient.patch(`/staff/career/job-postings/${jobPostingId}/review`, payload).then((res) => res.data);
 
 /**
- * [교직원] 채용공고 삭제
+ * [교직원] 채용공고 게시 상태 변경 (게시/마감)
+ * PATCH /api/staff/career/job-postings/{jobPostingId}/status
+ */
+export const updateJobPostingStatus = (jobPostingId, { postingStatus }) =>
+  apiClient.patch(`/staff/career/job-postings/${jobPostingId}/status`, { postingStatus }).then((res) => res.data);
+
+/**
+ * [교직원] 채용공고 단건 삭제
  * DELETE /api/staff/career/job-postings/{jobPostingId}
- * @param {number} jobPostingId
- * @returns {Promise<void>}
  */
 export const deleteJobPosting = (jobPostingId) =>
   apiClient.delete(`/staff/career/job-postings/${jobPostingId}`).then((res) => res.data);
+
+/**
+ * [교직원] 체크박스 선택 공고 일괄 상태 변경
+ */
+export const bulkUpdateJobPostingStatus = async (jobPostingIds, postingStatus) => {
+  return Promise.all(
+    jobPostingIds.map((id) =>
+      apiClient.patch(`/staff/career/job-postings/${id}/status`, { postingStatus })
+    )
+  );
+};
+
+/**
+ * [교직원] 체크박스 선택 공고 일괄 삭제
+ */
+export const bulkDeleteJobPostings = async (jobPostingIds) => {
+  return Promise.all(
+    jobPostingIds.map((id) =>
+      apiClient.delete(`/staff/career/job-postings/${id}`)
+    )
+  );
+};
+
+/**
+ * [교직원] 채용공고 첨부파일(포스터 이미지 등) 업로드
+ * POST /api/staff/career/job-postings/poster
+ */
+export const uploadJobPostingFile = (formData) =>
+  apiClient.post('/staff/career/job-postings/poster', formData).then((res) => res.data);
+
 
 /**
  * @typedef {Object} ApplicantSearchCondition
@@ -112,6 +157,16 @@ export const deleteJobPosting = (jobPostingId) =>
  */
 export const getApplicantsByJobPosting = (jobPostingId, params) =>
   apiClient.get(`/staff/career/postings/${jobPostingId}/applicants`, { params }).then((res) => res.data);
+
+/**
+ * [교직원] 지원자 전형 상태 변경 (합격/불합격/서류통과 등)
+ * PATCH /api/staff/career/applications/{applicationId}/status
+ * @param {number} applicationId
+ * @param {{ applicationStatus: string, remarks?: string }} payload
+ * @returns {Promise<void>}
+ */
+export const updateApplicantStatus = (applicationId, payload) =>
+  apiClient.patch(`/staff/career/applications/${applicationId}/status`, payload).then((res) => res.data);
 
 /**
  * @typedef {Object} CompanySearchCondition
@@ -192,8 +247,37 @@ export const registerCompany = (payload) =>
 export const verifyCompany = (companyAccountId, payload) =>
   apiClient.patch(`/staff/career/companies/${companyAccountId}/verify`, payload).then((res) => res.data);
 
-// 화면 호환용 별칭 - 불필요 시 삭제
+/**
+ * [교직원] 기업 정보 수정 (심사중 상태 또는 일반 정보 수정)
+ * PUT /api/staff/career/companies/{companyAccountId}
+ */
+export const updateCompany = (companyAccountId, payload) =>
+  apiClient.put(`/staff/career/companies/${companyAccountId}`, payload).then((res) => res.data);
+
+/**
+ * [교직원] 취업 통계 요약 및 학과/분야별 데이터 조회 (TabEmploymentStats용)
+ * GET /api/staff/career/stats/employment
+ * @param {{ year?: number, departmentId?: number }} [params]
+ * @returns {Promise<Object>}
+ */
+export const getEmploymentStats = (params) =>
+  apiClient.get('/staff/career/stats/employment', { params }).then((res) => res.data);
+
+/**
+ * [교직원] 학생-기업 자동 매칭 추천 리스트 조회 (TabJobMatching용)
+ * GET /api/staff/career/matchings
+ * @param {{ studentId?: number, jobPostingId?: number, page?: number, size?: number }} [params]
+ * @returns {Promise<PageResponse>}
+ */
+export const getJobMatchings = (params) =>
+  apiClient.get('/staff/career/matchings', { params }).then((res) => res.data);
+
+// 화면 호환용 별칭 (컴포넌트 바인딩 안정성 확보)
 export const fetchStaffJobPostings = getStaffJobPostings;
+export const fetchStaffJobPostingDetail = getStaffJobPostingDetail;
 export const fetchApplicantsByJobPosting = getApplicantsByJobPosting;
 export const fetchCompanies = getCompanies;
 export const fetchCompanyDetail = getCompanyDetail;
+export const fetchEmploymentStats = getEmploymentStats;
+export const fetchJobMatchings = getJobMatchings;
+export const getApplicantsByPosting = getApplicantsByJobPosting;

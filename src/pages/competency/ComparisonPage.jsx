@@ -207,7 +207,7 @@ export default function ComparisonPage({ pair, onBack }) {
               values={afterValues}
               compareValues={beforeValues}
               color={AFTER_COLOR}
-              size={300}
+              size={340}
             />
           </div>
           <div className="flex items-center gap-6 justify-center mt-3">

@@ -5,7 +5,7 @@ import QuestionManage from './QuestionManage';
 import DiagnosisOps from './DiagnosisOps';
 
 const NAV_ITEMS = [
-  { key: 'competency', label: '역량 관리', icon: '⬡', desc: '핵심·하위역량 코드 및 구조 관리' },
+  { key: 'competency', label: '역량 관리', icon: '⬡', desc: '핵심역량 코드 및 구조 관리' },
   { key: 'scale', label: '척도 관리', icon: '⊞', desc: '리커트 척도 템플릿 관리' },
   { key: 'question', label: '문항 관리', icon: '❓', desc: '역량 측정 문항 등록·버전 관리' },
   { key: 'diagnosis', label: '진단 운영', icon: '▷', desc: '진단 회차 개설·결과 확인' },
@@ -82,7 +82,6 @@ export default function StaffCompetencyPage() {
           <p className="text-[10px] font-bold text-[#656D76] mb-1">현황</p>
           {[
             { label: '핵심역량', value: '6개' },
-            { label: '하위역량', value: '19개' },
             { label: '문항', value: '90개' },
             { label: '척도 템플릿', value: '3개' },
           ].map((s) => (
