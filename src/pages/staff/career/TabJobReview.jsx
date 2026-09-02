@@ -219,21 +219,36 @@ export default function TabJobReview() {
       {/* 반려 사유 입력 모달 */}
       <Modal
         open={!!rejectTarget}
-        onClose={() => setRejectTarget(null)}
-        title="구인 신청 공고 반려"
+        onClose={() => {
+          setRejectTarget(null);
+          setRejectionReason('');
+        }}
+        title="채용공고 승인 반려"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setRejectTarget(null)}>취소</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectTarget(null);
+                setRejectionReason('');
+              }}
+            >
+              취소
+            </Button>
             <Button
               variant="danger"
               loading={reviewMutation.isPending}
-              onClick={() =>
+              onClick={() => {
+                if (!rejectionReason.trim()) {
+                  toast('반려 사유를 입력해 주세요.', 'error');
+                  return;
+                }
                 reviewMutation.mutate({
                   jobPostingId: rejectTarget.jobPostingId,
                   reviewStatus: 'REJECTED',
-                  rejectionReason,
-                })
-              }
+                  rejectionReason: rejectionReason.trim(),
+                });
+              }}
             >
               반려 확정
             </Button>

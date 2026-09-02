@@ -96,9 +96,12 @@ export default function TabCompanyCert() {
   const registerMutation = useMutation({
     mutationFn: (payload) =>
       registerCompany({
-        ...payload,
+        companyName: payload.companyName,
         businessNumber: payload.businessNumber || payload.businessRegistrationNo,
         ceoName: payload.ceoName || payload.representativeName,
+        contactName: payload.contactName || payload.managerName,
+        contactEmail: payload.contactEmail,
+        contactPhone: payload.contactPhone,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staffCompaniesList'] });
@@ -115,9 +118,12 @@ export default function TabCompanyCert() {
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }) =>
       updateCompany(id, {
-        ...payload,
+        companyName: payload.companyName,
         businessNumber: payload.businessNumber || payload.businessRegistrationNo,
         ceoName: payload.ceoName || payload.representativeName,
+        contactName: payload.contactName || payload.managerName,
+        contactEmail: payload.contactEmail,
+        contactPhone: payload.contactPhone,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staffCompaniesList'] });

@@ -174,15 +174,20 @@ export default function TabPostManagement() {
 
 
     createMutation.mutate({
-      ...createForm,
-      salaryInfo: createForm.salaryText,
-      workLocation: createForm.workLocation || '상세 근무지 협의',
-      applicationStartsAt: formatToIso(createForm.applicationStartsAt, '09:00'),
-      applicationEndsAt: formatToIso(createForm.applicationEndsAt, '18:00'),
       companyAccountId: Number(createForm.companyAccountId),
+      postingTitle: createForm.postingTitle,
       ncsCodeId: Number(createForm.ncsCodeId),
       regionCodeId: Number(createForm.regionCodeId),
+      workLocation: createForm.workLocation || '상세 근무지 협의',
+      jobDescription: createForm.jobDescription,
+      employmentType: createForm.employmentType,
+      salaryInfo: createForm.salaryText,
       recruitmentCount: Number(createForm.recruitmentCount) || 1,
+      postingType: createForm.postingType,
+      benefitType: createForm.benefitType || undefined,
+      fileGroupId: createForm.fileGroupId || undefined,
+      applicationStartsAt: formatToIso(createForm.applicationStartsAt, '09:00'),
+      applicationEndsAt: formatToIso(createForm.applicationEndsAt, '18:00'),
     });
   };
 
@@ -197,14 +202,19 @@ export default function TabPostManagement() {
     updateMutation.mutate({
       id: detailTarget.jobPostingId,
       payload: {
-        ...editForm,
-        salaryInfo: editForm.salaryText,
-        workLocation: editForm.workLocation || '상세 근무지 협의',
-        applicationStartsAt: formatToIso(editForm.applicationStartsAt, '09:00'),
-        applicationEndsAt: formatToIso(editForm.applicationEndsAt, '18:00'),
+        postingTitle: editForm.postingTitle,
         ncsCodeId: editForm.ncsCodeId ? Number(editForm.ncsCodeId) : undefined,
         regionCodeId: editForm.regionCodeId ? Number(editForm.regionCodeId) : undefined,
+        workLocation: editForm.workLocation || detailTarget.workLocation || '상세 근무지 협의',
+        jobDescription: editForm.jobDescription,
+        employmentType: editForm.employmentType,
+        salaryInfo: editForm.salaryText,
         recruitmentCount: Number(editForm.recruitmentCount) || 1,
+        postingType: editForm.postingType,
+        benefitType: editForm.benefitType || undefined,
+        fileGroupId: editForm.fileGroupId || undefined,
+        applicationStartsAt: formatToIso(editForm.applicationStartsAt, '09:00'),
+        applicationEndsAt: formatToIso(editForm.applicationEndsAt, '18:00'),
       },
     });
   };
@@ -253,9 +263,10 @@ export default function TabPostManagement() {
       postingTitle: post.postingTitle || '',
       ncsCodeId: post.ncsCodeId || '',
       regionCodeId: post.regionCodeId || '',
+      workLocation: post.workLocation || '',
       jobDescription: post.jobDescription || (post.postingTitle ? `${post.postingTitle} 관련 상세 업무 및 자격 요건` : ''),
       employmentType: post.employmentType || '정규직',
-      salaryText: post.salaryText || '',
+      salaryText: post.salaryText || post.salaryInfo || '',
       recruitmentCount: post.recruitmentCount || 1,
       applicationStartsAt: post.applicationStartsAt ? String(post.applicationStartsAt).slice(0, 10) : '',
       applicationEndsAt: post.applicationEndsAt ? String(post.applicationEndsAt).slice(0, 10) : '',
