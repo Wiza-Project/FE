@@ -23,7 +23,7 @@ export const fetchAdminCompetencies = async () => {
 };
 
 /**
- * 핵심역량 등록 (SCR-A01). 역량코드(C1~C6)와 축순서는 서버가 자동 결정한다.
+ * 핵심역량 등록 (SCR-A01). 역량코드(C100~C600)와 축순서는 서버가 자동 결정한다.
  *
  * @param {Object} params
  * @param {string} params.competencyName
@@ -41,14 +41,14 @@ export const registerCompetency = async ({ competencyName, englishName, descript
 };
 
 /**
- * 축순서 지정 (SCR-A01). 결과 화면 방사형 차트에 표시될 위치를 1~6 중에서 지정한다.
- * 지정하려는 번호가 비어 있으면 해당 역량만 변경된다. 다른 역량이 이미 그 번호를
- * 쓰고 있으면 서버가 두 역량의 축순서를 서로 맞바꾼다(스왑) — 이 경우 응답 배열에
- * 두 역량이 모두 담겨 온다.
+ * 축순서 지정 (SCR-A01). 결과 화면 방사형 차트에 표시될 위치를 지정한다. 값은 100·200·…·600
+ * (역량 코드 C100~C600과 1:1 대응, 교직원 화면에는 1~6으로 축약 표시). 지정하려는 번호가
+ * 비어 있으면 해당 역량만 변경된다. 다른 역량이 이미 그 번호를 쓰고 있으면 서버가 두 역량의
+ * 축순서를 서로 맞바꾼다(스왑) — 이 경우 응답 배열에 두 역량이 모두 담겨 온다.
  *
  * @param {Object} params
  * @param {number} params.competencyId
- * @param {number} params.displayOrder 1~6
+ * @param {number} params.displayOrder 100·200·…·600 (BE CompetencyDisplayOrderRequest @Min(100) @Max(600))
  * @returns {Promise<Array<{competencyId: number, competencyCode: string, competencyName: string, englishName: string|null, description: string|null, displayOrder: number, active: boolean}>>}
  *   빈 슬롯으로 이동한 경우 1개, 스왑이 일어난 경우 2개([이동한 역량, 자리를 내준 역량] 순서)
  */
