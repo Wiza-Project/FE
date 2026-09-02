@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Tabs } from '@/components/common';
+import { ApiError } from '@/api/client';
+import { EmptyState, SkeletonLoader, Tabs } from '@/components/common';
 import { COMP_COLOR } from '@/data/competencyData';
-import { fetchStudentAssessmentRounds } from '@/api/competency';
+import { fetchAssessmentHistory, fetchStudentAssessmentRounds } from '@/api/competency';
 import DiagnosisGuide from './DiagnosisGuide';
 import DiagnosisQuestions from './DiagnosisQuestions';
 import DiagnosisResult from './DiagnosisResult';
@@ -21,6 +22,47 @@ const TAB_CONFIG = [
 ];
 
 const SUB_VIEWS = ['guide', 'questions', 'result', 'history', 'compare', 'recommend'];
+
+/**
+ * 진단 결과·추천 프로그램 화면에 탭으로 바로 들어와 볼 회차(attemptId)가 아직 없을 때,
+ * 가장 최근 제출 회차를 자동으로 불러오는 동안 / 실패했을 때 / 응시 이력이 아예 없을 때
+ * 보여줄 대체 화면.
+ */
+function LatestAttemptFallback({ query, onGoGuide }) {
+  if (query.isPending) {
+    return (
+      <div className="px-6 py-6">
+        <SkeletonLoader rows={3} cols={2} />
+      </div>
+    );
+  }
+
+  const isError = query.isError;
+  return (
+    <EmptyState
+      message={
+        isError
+          ? query.error instanceof ApiError
+            ? query.error.message
+            : '진단 결과를 불러오지 못했습니다.'
+          : '아직 응시를 완료한 진단이 없습니다.'
+      }
+      sub={
+        isError ? '잠시 후 다시 시도해 주세요.' : '진단을 응시하고 제출하면 결과를 확인할 수 있습니다.'
+      }
+      action={
+        <button
+          type="button"
+          onClick={isError ? () => query.refetch() : onGoGuide}
+          className="h-9 px-5 text-[13px] font-bold text-white rounded-[6px] transition-opacity hover:opacity-90"
+          style={{ background: COMP_COLOR }}
+        >
+          {isError ? '다시 시도' : '진단 안내로 이동'}
+        </button>
+      }
+    />
+  );
+}
 
 /**
  * 핵심역량 진단 화면 허브. 하위 화면들은 별도 라우트가 아니라 탭/버튼으로 전환되는
@@ -53,6 +95,25 @@ export default function CompetencyPage() {
     (deepLinkIsAvailable ? deepLinkRoundId : null) ??
     pickedRoundId ??
     (openRounds.length === 1 ? openRounds[0].assessmentRoundId : null);
+
+  // 진단 결과·추천 탭에 바로 들어와 attemptId가 없으면, 가장 최근 제출 회차를 자동으로 불러온다.
+  // 이력 화면을 거쳐 회차를 고른 경우(attemptId 존재)에는 조회하지 않는다.
+  const needsLatestAttempt = (view === 'result' || view === 'recommend') && attemptId == null;
+  const latestAttemptQuery = useQuery({
+    queryKey: ['assessmentHistory', { page: 0, size: 1 }],
+    queryFn: () => fetchAssessmentHistory({ page: 0, size: 1 }),
+    enabled: needsLatestAttempt,
+  });
+  const latestAttemptId = latestAttemptQuery.data?.content?.[0]?.attemptId ?? null;
+  // 결과/추천 화면에 넘길 회차: 사용자가 고른 것 > 자동으로 찾은 최근 회차.
+  const resultAttemptId = attemptId ?? latestAttemptId;
+
+  // 자동으로 찾은 회차를 state로 승격해, 이후 탭 이동·재조회·추천 화면에서도 그대로 이어지게 한다.
+  useEffect(() => {
+    if (attemptId == null && latestAttemptId != null) {
+      setAttemptId(latestAttemptId);
+    }
+  }, [attemptId, latestAttemptId]);
 
   // Tab keys that map to sub-views
   const tabKey = SUB_VIEWS.includes(view) && view !== 'questions' ? view : 'guide';
@@ -117,15 +178,21 @@ export default function CompetencyPage() {
         />
       )}
 
-      {view === 'result' && (
-        <DiagnosisResult
-          attemptId={attemptId}
-          onBack={() => setView('history')}
-          // 비교는 두 회차를 골라야 하므로 결과 화면에서는 이력으로 보내 선택하게 한다.
-          onCompare={() => setView('history')}
-          onRecommend={() => setView('recommend')}
-        />
-      )}
+      {view === 'result' &&
+        (resultAttemptId != null ? (
+          <DiagnosisResult
+            attemptId={resultAttemptId}
+            onBack={() => setView('history')}
+            // 비교는 두 회차를 골라야 하므로 결과 화면에서는 이력으로 보내 선택하게 한다.
+            onCompare={() => setView('history')}
+            onRecommend={() => setView('recommend')}
+          />
+        ) : (
+          <LatestAttemptFallback
+            query={latestAttemptQuery}
+            onGoGuide={() => setView('guide')}
+          />
+        ))}
 
       {view === 'history' && (
         <DiagnosisHistory
@@ -144,9 +211,15 @@ export default function CompetencyPage() {
         <ComparisonPage pair={comparePair} onBack={() => setView('history')} />
       )}
 
-      {view === 'recommend' && (
-        <RecommendedPrograms attemptId={attemptId} onBack={() => setView('history')} />
-      )}
+      {view === 'recommend' &&
+        (resultAttemptId != null ? (
+          <RecommendedPrograms attemptId={resultAttemptId} onBack={() => setView('history')} />
+        ) : (
+          <LatestAttemptFallback
+            query={latestAttemptQuery}
+            onGoGuide={() => setView('guide')}
+          />
+        ))}
     </div>
   );
 }

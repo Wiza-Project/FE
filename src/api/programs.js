@@ -122,6 +122,21 @@ export const fetchProgramDetailAdmin = async (programId) => {
 };
 
 /**
+ * 프로그램 유형에 매핑되는 마일리지 정책 미리보기.
+ * GET /api/staff/programs/mileage-policy-preview
+ * 등록 폼에서 아직 저장하지 않은 프로그램 유형 선택값 기준으로 어떤 정책이
+ * 자동 적용될지 보여주기 위해 사용. 매핑되는 정책이 없으면 필드가 응답에서 생략된다(에러 아님).
+ * @param {number} programTypeCodeId
+ * @returns {Promise<{mileagePolicyId?: number, mileagePoints?: number, mileageActivityName?: string}>}
+ */
+export const fetchMileagePolicyPreview = async (programTypeCodeId) => {
+  const { data } = await apiClient.get('/staff/programs/mileage-policy-preview', {
+    params: { programTypeCodeId },
+  });
+  return data;
+};
+
+/**
  * 비교과 프로그램 수정. PUT /api/staff/programs/{programId}
  * 모집중이며 본인 소유인 프로그램만 가능. 실패 시 403(A004) 또는 400(PROGRAM_NOT_EDITABLE/P009).
  * @param {number} programId
