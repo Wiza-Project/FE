@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Button, Modal, Pagination, toast } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
 import {

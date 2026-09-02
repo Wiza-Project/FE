@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/common';
 import {
@@ -29,8 +29,10 @@ export default function TabJobMatching() {
     queryFn: () => getStaffJobPostings({ size: 100 }),
   });
 
-  const postList = postingsData?.content || (Array.isArray(postingsData) ? postingsData : []);
-
+  const postList = useMemo(
+      () => postingsData?.content || (Array.isArray(postingsData) ? postingsData : []),
+      [postingsData]
+    );
   useEffect(() => {
     if (postList.length > 0 && !selectedJobId) {
       setSelectedJobId(String(postList[0].jobPostingId));
