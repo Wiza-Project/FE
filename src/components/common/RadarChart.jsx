@@ -10,21 +10,17 @@
  */
 
 // 긴 축 라벨(예: "자원·정보·기술 활용")이 차트 밖에서 잘리지 않도록 최대 2줄로 나눈다.
-// 공백을 우선 기준으로 삼고, 없으면 가운데에 가장 가까운 '·' 뒤에서, 그것도 없으면 글자 수 절반에서 자른다.
+// 두 줄 길이가 최대한 비슷해지도록, 가운데에 가장 가까운 구분자에서 자른다.
+// 공백이 있으면 공백만 후보로 삼고, 없을 때만 '·'를 쓴다. 둘 다 없으면 글자 수 절반에서 자른다.
 const wrapLabel = (label) => {
   if (label.length <= 6) return [label];
-  const mid = Math.round(label.length / 2);
-  const spaceIdx = label.indexOf(' ', 1);
-  let cut;
-  if (spaceIdx > 0 && spaceIdx < label.length - 1) {
-    cut = spaceIdx + 1;
-  } else {
-    const dotCuts = [];
-    for (let i = 0; i < label.length - 1; i++) if (label[i] === '·') dotCuts.push(i + 1);
-    cut = dotCuts.length
-      ? dotCuts.reduce((best, idx) => (Math.abs(idx - mid) < Math.abs(best - mid) ? idx : best))
-      : mid;
-  }
+  const mid = label.length / 2;
+  const sep = label.includes(' ') ? ' ' : '·';
+  const cuts = [];
+  for (let i = 1; i < label.length - 1; i++) if (label[i] === sep) cuts.push(i + 1);
+  const cut = cuts.length
+    ? cuts.reduce((best, idx) => (Math.abs(idx - mid) < Math.abs(best - mid) ? idx : best))
+    : Math.round(mid);
   return [label.slice(0, cut).trim(), label.slice(cut).trim()];
 };
 
