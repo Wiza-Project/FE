@@ -664,7 +664,10 @@ export default function TabCompanyCert() {
       {/* 반려 사유 모달 */}
       <Modal
         open={!!rejectTarget}
-        onClose={() => setRejectTarget(null)}
+        onClose={() => {
+          setRejectTarget(null);
+          setRejectionReason('');
+        }}
         title="기업 인증 심사 반려"
         footer={
           <div className="flex justify-end gap-2">
