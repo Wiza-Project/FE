@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { Button, Modal, Drawer, Pagination, StatTile, toast } from '@/components/common';
+import StaffScholarshipTab from './StaffScholarshipTab';
 
 const A = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
@@ -256,19 +257,6 @@ const validatePolicyForm = (form, activityType, { requireActivityType = false } 
 
   return '';
 };
-const COMP_MAP = [
-  { act: '해외 어학연수', comp: '글로벌역량', weight: 50 },
-  { act: '국가공인자격증', comp: '전문역량', weight: 70 },
-  { act: '자원봉사', comp: '공동체역량', weight: 30 },
-  { act: '비교과 프로그램 이수', comp: '자기개발', weight: 40 },
-  { act: '학생회·동아리 임원', comp: '리더십역량', weight: 45 },
-];
-const CERT_CRITERIA = [
-  { cat: '취업지원장학', range: '300~499점', amount: '30만원', tie: '동등지급' },
-  { cat: '취업지원장학', range: '500점 이상', amount: '60만원', tie: '동등지급' },
-  { cat: '졸업인증', range: '200점 이상', amount: '—', tie: '—' },
-  { cat: '인증서 A등급', range: '400점 이상', amount: '—', tie: '선착순' },
-];
 const REJECT_CODES = ['선택하세요', '허위 증빙', '유효기간 초과', '중복 적립 해당', '기타'];
 
 // ─── Tab ① 기준 설정 ─────────────────────────────────────────────────────────────
@@ -759,39 +747,6 @@ function TabPolicySettings() {
         </SCard>
       )}
 
-      {/* These two sections are outside the currently confirmed policy APIs. */}
-      <div className="grid grid-cols-2 gap-5">
-        <SCard title="활동유형–핵심역량 매핑">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead><tr className="border-b border-[#E5E7EB]"><TH>활동유형</TH><TH>핵심역량</TH><TH center>가중치</TH></tr></thead>
-              <tbody>
-                {COMP_MAP.map((r) => (
-                  <tr key={r.act} className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA]">
-                    <TD cls="text-[#444D56]">{r.act}</TD><TD cls="font-semibold text-[#1F2328]">{r.comp}</TD>
-                    <TD center><div className="flex items-center gap-2 justify-center"><div className="w-16 h-1.5 rounded-full bg-[#E5E7EB] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${r.weight}%`, background: A }} /></div><span className="text-[10px] font-bold" style={{ color: A }}>{r.weight}%</span></div></TD>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </SCard>
-
-        <SCard title="인증·장학 기준">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead><tr className="border-b border-[#E5E7EB]"><TH>구분</TH><TH>기준 구간</TH><TH center>지급액</TH><TH center>동점 처리</TH></tr></thead>
-              <tbody>
-                {CERT_CRITERIA.map((r, i) => (
-                  <tr key={i} className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA]">
-                    <TD cls="font-semibold text-[#1F2328]">{r.cat}</TD><TD cls="font-mono text-[11px]"><span style={{ color: A }}>{r.range}</span></TD><TD center cls="font-bold text-[#1F2328]">{r.amount}</TD><TD center cls="text-[#9AA0A6]">{r.tie}</TD>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </SCard>
-      </div>
     </div>
   );
 }
@@ -1506,11 +1461,11 @@ function TabReviewInbox() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 /**
- * 교직원 마일리지 관리 화면. 기준 설정과 심사 접수함 2개 탭으로 구성됩니다.
+ * 교직원 마일리지 관리 화면. 기준 설정·심사 접수함·장학금 기준 3개 탭으로 구성됩니다.
  */
 export default function StaffMileagePage() {
   const [tab, setTab] = useState(0);
-  const TABS = ['기준 설정', '심사 접수함'];
+  const TABS = ['기준 설정', '심사 접수함', '장학금 기준'];
 
   return (
     <div className="flex flex-col gap-5">
@@ -1518,7 +1473,7 @@ export default function StaffMileagePage() {
         <div>
           <h1 className="text-[20px] font-black text-[#1F2328]">마일리지 관리</h1>
           <p className="text-[12px] text-[#9AA0A6] mt-0.5">
-            기준 설정 · 증빙 심사 · 적립 취소(역분개)
+            기준 설정 · 증빙 심사 · 장학금 기준 · 적립 취소(역분개)
           </p>
         </div>
         <Chip label="2026-v1 적용중" bg="#FEF3C7" text={A} />
@@ -1540,6 +1495,7 @@ export default function StaffMileagePage() {
 
       {tab === 0 && <TabPolicySettings />}
       {tab === 1 && <TabReviewInbox />}
+      {tab === 2 && <StaffScholarshipTab />}
     </div>
   );
 }
