@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { PageHeader, Button, Pagination, ConfirmDialog, toast } from '@/components/common';
 import { getJobPostings, getRecommendedPostings, toggleJobScrap, getJobPreference } from '@/api/career';
 import { POSTING_TYPE, POSTING_TYPE_LABEL } from '@/constants/domain';
@@ -137,6 +138,7 @@ function renderCards(jobs, isLoading, onDetail, defaultBadge) {
 }
 
 export default function JobList({ onDetail, onBookmarks }) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   // 학생의 실시간 관심 공고(스크랩) 목록 조회 (별표 색상 판별용)
@@ -174,7 +176,7 @@ export default function JobList({ onDetail, onBookmarks }) {
   const { data: pageData, isLoading, isError } = useQuery({
     queryKey: ['careerJobPostings', searchParams],
     queryFn: () => getJobPostings(searchParams),
-    keepPreviousData: true,
+    keepPreviousData: keepPreviousData,
   });
 
   const rawContent = pageData?.data?.content || pageData?.content || [];
@@ -440,7 +442,7 @@ export default function JobList({ onDetail, onBookmarks }) {
         cancelLabel="다음에 하기"
         onConfirm={() => {
           setConsentModalOpen(false);
-          window.location.href = '/consent';
+          navigate('/consent');
         }}
         onCancel={() => setConsentModalOpen(false)}
       />

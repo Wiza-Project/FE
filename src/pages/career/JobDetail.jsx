@@ -56,7 +56,7 @@ export default function JobDetail({ jobId, onBack }) {
   const applyMutation = useMutation({
     mutationFn: () => applyJobPosting({
       jobPostingId: jobId,
-      isThirdPartyConsent: true,
+      isThirdPartyConsent: Boolean(agreed),
       coverLetter: coverLetter || undefined,
       portfolioUrl: portfolioUrl || undefined,
     }),
@@ -320,6 +320,7 @@ export default function JobDetail({ jobId, onBack }) {
         title="입사지원 확인"
         message={`[${job.postingTitle}] — ${job.companyName}\n\n해당 채용공고에 입사지원을 진행하시겠습니까?`}
         confirmLabel="지원하기"
+        loading={applyMutation.isPending}
         onConfirm={() => applyMutation.mutate()}
         onCancel={() => setConfirmOpen(false)}
       />
@@ -330,6 +331,8 @@ export default function JobDetail({ jobId, onBack }) {
         title="지원 취소"
         message="온라인 입사지원을 취소하시겠습니까?"
         confirmLabel="지원 취소"
+        danger
+        loading={cancelMutation.isPending}
         onConfirm={() => cancelMutation.mutate()}
         onCancel={() => setCancelConfirm(false)}
       />

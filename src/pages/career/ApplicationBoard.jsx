@@ -90,7 +90,7 @@ export default function ApplicationBoard() {
       <div className="grid grid-cols-4 gap-3">
         {BOARD_COLUMNS.map((col) => {
           const count = getColumnItems(col.key).length;
-          const label = JOB_APPLICATION_STATUS_LABEL[col.key] || col.key;
+          const label = JOB_APPLICATION_STATUS_LABEL[col.key] || col.label;
           return (
             <div
               key={col.key}
@@ -159,6 +159,8 @@ export default function ApplicationBoard() {
         title="지원 취소 확인"
         message={`[${selectedPosting?.title || ''}]\n해당 공고의 지원을 취소하시겠습니까?`}
         confirmLabel="지원 취소"
+        danger
+        loading={cancelMutation.isPending}
         onConfirm={() => cancelMutation.mutate(selectedPosting.id)}
         onCancel={() => setSelectedPosting(null)}
       />
