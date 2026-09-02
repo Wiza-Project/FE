@@ -168,7 +168,8 @@ export default function TabPostManagement() {
     const formatToIso = (dateStr, defaultTime) => {
       if (!dateStr) return null;
       if (dateStr.includes('T')) return dateStr;
-      return `${dateStr}T${defaultTime}:00Z`;
+      // KST(+09:00) 기준으로 생성 후 표준 ISO UTC 문자열로 변환
+      return new Date(`${dateStr}T${defaultTime}:00+09:00`).toISOString();
     };
 
     createMutation.mutate({
@@ -270,6 +271,8 @@ export default function TabPostManagement() {
               key={st}
               onClick={() => {
                 setStatusFilter(st);
+                // 상태 필터 바꿀 때 이전 체크박스 비움 처리
+                setSelected([]);
                 setPage(1);
               }}
               className={`h-8 px-3 text-[12px] font-bold rounded-[6px] transition-colors ${
@@ -309,7 +312,12 @@ export default function TabPostManagement() {
               <Button
                 size="sm"
                 variant="danger"
-                onClick={() => bulkDeleteMutation.mutate(selected)}
+                disabled={selected.length === 0 || bulkDeleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`선택한 ${selected.length}건의 공고를 정말 삭제하시겠습니까?`)) {
+                    bulkDeleteMutation.mutate(selected);
+                  }
+                }}
               >
                 선택 삭제 ({selected.length})
               </Button>
@@ -429,7 +437,11 @@ export default function TabPostManagement() {
             <Pagination
               page={page}
               totalPages={totalPages}
-              onChange={setPage}
+              onChange={(newPage) => {
+                setPage(newPage);
+                // 페이지 바꿀 때 이전 페이지 체크박스 비움 처리
+                setSelected([]);
+              }}
               totalItems={totalElements}
               pageSize={PAGE_SIZE}
             />

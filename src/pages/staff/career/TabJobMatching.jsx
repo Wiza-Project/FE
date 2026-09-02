@@ -127,6 +127,8 @@ export default function TabJobMatching() {
                       <td className="px-4 py-3 text-center">
                         <select
                           value={a.applicationStatus}
+                          aria-label={`${a.userName || '학생'} 전형 상태 변경`}
+                          disabled={a.applicationStatus === 'CANCELED'}
                           onChange={(e) =>
                             statusMutation.mutate({ applicationId: appId, applicationStatus: e.target.value })
                           }
@@ -136,6 +138,7 @@ export default function TabJobMatching() {
                           <option value="UNDER_REVIEW">서류검토중</option>
                           <option value="PASSED">최종합격</option>
                           <option value="REJECTED">불합격</option>
+                          <option value="CANCELED" disabled>지원취소</option>
                         </select>
                       </td>
                     </tr>
