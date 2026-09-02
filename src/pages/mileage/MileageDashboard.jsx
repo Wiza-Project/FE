@@ -76,8 +76,9 @@ function TrendChart({ data = [] }) {
 
   const max = Math.max(...chartData.map((d) => d.value), 1);
   const pointDenominator = Math.max(chartData.length - 1, 1);
+  const isSinglePoint = chartData.length === 1;
   const pts = chartData.map((d, i) => ({
-    x: PAD.l + (i / pointDenominator) * cW,
+    x: isSinglePoint ? PAD.l + cW / 2 : PAD.l + (i / pointDenominator) * cW,
     y: PAD.t + cH - (d.value / max) * cH * 0.88,
     d,
   }));
@@ -112,17 +113,17 @@ function TrendChart({ data = [] }) {
         />
       ))}
       {/* Y labels */}
-      {[0, 150, 300, 450].map((v, i) => (
+      {[0, 0.25, 0.5, 0.75, 1].map((r) => (
         <text
-          key={i}
+          key={r}
           x={PAD.l - 4}
-          y={PAD.t + cH - (v / max) * cH * 0.88 + 4}
+          y={PAD.t + cH - cH * r * 0.88 + 4}
           textAnchor="end"
           fontSize="9"
           fill="#9AA0A6"
           fontFamily="Pretendard, sans-serif"
         >
-          {v}
+          {Math.round(max * r)}
         </text>
       ))}
       {/* Area */}
@@ -292,7 +293,12 @@ export default function MileageDashboard({ onExternal }) {
 
     apiClient
       .get('/students/mileage/transactions', {
-        params: { page: page - 1, size: PAGE_SIZE },
+        params: {
+          page: page - 1,
+          size: PAGE_SIZE,
+          academicYear: DASHBOARD_PERIOD.academicYear,
+          semesterCode: DASHBOARD_PERIOD.semesterCode,
+        },
       })
       .then(({ data }) => {
         if (mounted) {
@@ -432,10 +438,7 @@ export default function MileageDashboard({ onExternal }) {
   const semesterLabel = dashboardData?.period
     ? `${dashboardData.period.academicYear}-${dashboardData.period.semesterCode}학기`
     : '-';
-  const shortenCompetencyLabel = (name) => {
-    const base = (name ?? '').replace(/역량$/, '').trim() || name || '';
-    return base.length > 4 ? `${base.slice(0, 4).trim()}…` : base;
-  };
+  const shortenCompetencyLabel = (name) => (name ?? '').replace(/역량$/, '').trim() || name || '';
   const competencyData = (dashboardData?.competencyBreakdown ?? []).map((item) => ({
     label: shortenCompetencyLabel(item.competencyName),
     value: Number(item.points ?? 0),
@@ -573,7 +576,7 @@ export default function MileageDashboard({ onExternal }) {
               }
               sub={
                 scholarshipTarget == null
-                  ? '백엔드 기준 없음'
+                  ? '등록된 기준 없음'
                   : `목표 ${formatPoints(scholarshipTarget)}점`
               }
               accentColor="#CF222E"
@@ -659,7 +662,7 @@ export default function MileageDashboard({ onExternal }) {
               <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
                 <div className="w-1 h-4 rounded-full bg-[#D97706]" />
                 <h2 className="text-[14px] font-bold text-[#1F2328]">역량별 적립 분포</h2>
-                <span className="ml-auto text-[11px] text-[#9AA0A6]">단위: 점</span>
+                <span className="ml-auto text-[12px] font-medium text-[#656D76]">단위: 점</span>
               </div>
               <div className="flex min-h-[188px] justify-center overflow-x-auto px-4 py-4">
                 {competencyData.length > 0 ? (
@@ -678,7 +681,7 @@ export default function MileageDashboard({ onExternal }) {
             <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
               <div className="w-1 h-4 rounded-full bg-[#D97706]" />
               <h2 className="text-[14px] font-bold text-[#1F2328]">학기별 적립 추이</h2>
-              <span className="ml-auto text-[11px] text-[#9AA0A6]">단위: 점</span>
+              <span className="ml-auto text-[12px] font-medium text-[#656D76]">단위: 점</span>
             </div>
             <div className="overflow-x-auto px-6 py-4">
               <div className="min-w-[560px]">
@@ -696,9 +699,9 @@ export default function MileageDashboard({ onExternal }) {
         <div className="flex flex-col gap-4">
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-3 flex items-center gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
             <div>
-              <p className="text-[13px] font-bold text-[#1F2328]">확정 적립 원장</p>
+              <p className="text-[13px] font-bold text-[#1F2328]">적립 내역</p>
               <p className="text-[11px] text-[#9AA0A6] mt-0.5">
-                백엔드에 저장된 POSTED 적립 거래를 최신순으로 조회합니다.
+                확정된 적립 내역을 최신순으로 보여드립니다.
               </p>
             </div>
             <span className="ml-auto text-[12px] text-[#656D76]">
@@ -800,7 +803,7 @@ export default function MileageDashboard({ onExternal }) {
             </div>
             <div className="px-4 py-3 border-t border-[#E5E7EB] flex items-center gap-3">
               <p className="text-[11px] text-[#9AA0A6]">
-                ※ 백엔드의 확정(EARN·POSTED) 적립 거래 기준입니다. 행을 클릭하면 상세 정보를 확인할 수 있습니다.
+                ※ 확정된 적립 내역만 표시됩니다. 행을 클릭하면 상세 정보를 확인할 수 있습니다.
               </p>
               {ledgerTotalItems > 0 && (
                 <Pagination
