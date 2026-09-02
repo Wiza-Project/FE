@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
-import { USER_TYPE, USER_ROLE } from '@/constants/domain';
+import { USER_TYPE, USER_ROLE, DEPARTMENT } from '@/constants/domain';
 import { UNIVERSITY_NAME } from '@/data/dummy';
 import { toast } from '@/components/common';
 import { fetchMyAcademicRecord } from '@/api/students';
@@ -219,11 +219,17 @@ export default function PortalShell() {
 
   const portal = user?.userType === USER_TYPE.STAFF ? 'staff' : 'student';
   const isCounselor = (user?.roleCodes ?? []).includes(USER_ROLE.COUNSELOR);
-  // 교직원이지만 상담사(ST200)가 아니면 '상담 운영' 메뉴를 숨긴다. 이는 UX용 1차 숨김이고
-  // 실제 진입 차단은 라우트의 CounselOperationRoute, 최종 권한은 BE가 판단한다.
+  const isProgramStaff = user?.department === DEPARTMENT.NON_SUBJECT_OPERATION;
+  // 교직원이지만 상담사(ST200)가 아니면 '상담 운영'을, 비교과운영부서(D200)가 아니면
+  // '비교과 운영'을 숨긴다. 이는 UX용 1차 숨김이고 실제 진입 차단은 라우트의
+  // CounselOperationRoute, 최종 권한은 BE가 판단한다.
   const nav =
-    portal === 'staff' && !isCounselor
-      ? NAV_STAFF.filter((item) => item.key !== 'counseling')
+    portal === 'staff'
+      ? NAV_STAFF.filter(
+          (item) =>
+            (item.key !== 'counseling' || isCounselor) &&
+            (item.key !== 'extracurr' || isProgramStaff),
+        )
       : PORTAL_NAVS[portal];
   const portalColor = PORTAL_COLORS[portal];
 
@@ -369,11 +375,11 @@ export default function PortalShell() {
                 {isActive && (
                   <span
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
-                    style={{ background: item.accent ?? portalColor }}
+                    style={{ background: item.accent ?? '#9CA3AF' }}
                   />
                 )}
                 <span
-                  style={{ color: isActive ? (item.accent ?? portalColor) : undefined }}
+                  style={{ color: isActive ? (item.accent ?? '#9CA3AF') : undefined }}
                   className="transition-colors"
                 >
                   <item.icon />
