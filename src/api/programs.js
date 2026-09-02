@@ -71,6 +71,36 @@ export const fetchMyAttendance = async (programId) => {
 };
 
 /**
+ * 스태프 - 특정 회차의 출석 목록 조회. GET /api/staff/programs/{programId}/sessions/{sessionId}/attendances
+ * 아직 기록되지 않은 학생은 목록에 포함되지 않는다(응답엔 "기록된 건"만 존재) — 부재 시 미기록으로 간주한다.
+ * @param {number} programId
+ * @param {number} sessionId
+ * @returns {Promise<Array<{attendanceId: number, applicationId: number, programSessionId: number, attendanceStatus: 'PRESENT'|'ABSENT', attendedMinutes: number|null, note: string|null, recordedBy: number, recordedAt: string}>>}
+ */
+export const fetchSessionAttendance = async (programId, sessionId) => {
+  const { data } = await apiClient.get(
+    `/staff/programs/${programId}/sessions/${sessionId}/attendances`,
+  );
+  return data;
+};
+
+/**
+ * 스태프 - 학생 1명의 출석 기록/정정(upsert). PUT /api/staff/programs/{programId}/sessions/{sessionId}/attendances/{applicationId}
+ * 대상 신청 건이 APPROVED가 아니면 400(APPLICATION_NOT_APPROVED/P015). attendanceStatus는 PRESENT/ABSENT만 허용.
+ * @param {number} programId
+ * @param {number} sessionId
+ * @param {number} applicationId
+ * @param {{attendanceStatus: 'PRESENT'|'ABSENT', attendedMinutes?: number, note?: string}} payload
+ */
+export const recordAttendance = async (programId, sessionId, applicationId, payload) => {
+  const { data } = await apiClient.put(
+    `/staff/programs/${programId}/sessions/${sessionId}/attendances/${applicationId}`,
+    payload,
+  );
+  return data;
+};
+
+/**
  * 프로그램 등록/수정 폼의 "연계 핵심역량" select용 목록 조회. GET /api/competencies
  * (핵심역량 도메인 공용 조회 API, WP-230) 최상위(상위역량 없음) + 사용 중인 역량만
  * displayOrder 순으로 내려온다.

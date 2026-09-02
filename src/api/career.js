@@ -191,6 +191,7 @@ export const saveJobPreference = (payload) =>
   apiClient.put('/students/career/preference', payload).then((res) => res.data);
 
 // 화면 호환용 별칭 - 불필요 시 삭제
+export const getJobBookmarks = getMyJobScraps;
 export const fetchJobPostings = getJobPostings;
 export const fetchJobPosting = getJobPostingDetail;
 export const fetchRecommendedPostings = getRecommendedPostings;
