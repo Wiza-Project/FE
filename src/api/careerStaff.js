@@ -30,12 +30,12 @@ import { apiClient } from '@/api/client';
 
 /**
  * [교직원] 채용공고 전체 및 검수 목록 조회
- * GET /api/admin/career/job-postings
+ * GET /api/staff/career/job-postings
  * @param {StaffJobPostingSearchCondition} [params]
  * @returns {Promise<PageResponse>}
  */
 export const getStaffJobPostings = (params) =>
-  apiClient.get('/admin/career/job-postings', { params }).then((res) => res.data);
+  apiClient.get('/staff/career/job-postings', { params }).then((res) => res.data);
 
 /**
  * @typedef {Object} JobPostingCreateRequest
@@ -54,22 +54,22 @@ export const getStaffJobPostings = (params) =>
 
 /**
  * [교직원] 채용공고 신규 등록 (구인 신청 접수)
- * POST /api/admin/career/job-postings
+ * POST /api/staff/career/job-postings
  * @param {JobPostingCreateRequest} payload
  * @returns {Promise<number>} 생성된 jobPostingId
  */
 export const createJobPosting = (payload) =>
-  apiClient.post('/admin/career/job-postings', payload).then((res) => res.data);
+  apiClient.post('/staff/career/job-postings', payload).then((res) => res.data);
 
 /**
  * [교직원] 채용공고 내용 수정
- * PUT /api/admin/career/job-postings/{jobPostingId}
+ * PUT /api/staff/career/job-postings/{jobPostingId}
  * @param {number} jobPostingId
  * @param {JobPostingCreateRequest} payload
  * @returns {Promise<void>}
  */
 export const updateJobPosting = (jobPostingId, payload) =>
-  apiClient.put(`/admin/career/job-postings/${jobPostingId}`, payload).then((res) => res.data);
+  apiClient.put(`/staff/career/job-postings/${jobPostingId}`, payload).then((res) => res.data);
 
 /**
  * @typedef {Object} JobPostingReviewRequest
@@ -79,22 +79,22 @@ export const updateJobPosting = (jobPostingId, payload) =>
 
 /**
  * [교직원] 채용공고 검수 (승인/반려) 처리
- * PATCH /api/admin/career/job-postings/{jobPostingId}/review
+ * PATCH /api/staff/career/job-postings/{jobPostingId}/review
  * @param {number} jobPostingId
  * @param {JobPostingReviewRequest} payload
  * @returns {Promise<void>}
  */
 export const reviewJobPosting = (jobPostingId, payload) =>
-  apiClient.patch(`/admin/career/job-postings/${jobPostingId}/review`, payload).then((res) => res.data);
+  apiClient.patch(`/staff/career/job-postings/${jobPostingId}/review`, payload).then((res) => res.data);
 
 /**
  * [교직원] 채용공고 삭제
- * DELETE /api/admin/career/job-postings/{jobPostingId}
+ * DELETE /api/staff/career/job-postings/{jobPostingId}
  * @param {number} jobPostingId
  * @returns {Promise<void>}
  */
 export const deleteJobPosting = (jobPostingId) =>
-  apiClient.delete(`/admin/career/job-postings/${jobPostingId}`).then((res) => res.data);
+  apiClient.delete(`/staff/career/job-postings/${jobPostingId}`).then((res) => res.data);
 
 /**
  * @typedef {Object} ApplicantSearchCondition
@@ -105,13 +105,13 @@ export const deleteJobPosting = (jobPostingId) =>
 
 /**
  * [교직원] 공고별 지원자 목록 및 전형 단계 조회
- * GET /api/admin/career/postings/{jobPostingId}/applicants
+ * GET /api/staff/career/postings/{jobPostingId}/applicants
  * @param {number} jobPostingId
  * @param {ApplicantSearchCondition} [params]
  * @returns {Promise<PageResponse>}
  */
 export const getApplicantsByJobPosting = (jobPostingId, params) =>
-  apiClient.get(`/admin/career/postings/${jobPostingId}/applicants`, { params }).then((res) => res.data);
+  apiClient.get(`/staff/career/postings/${jobPostingId}/applicants`, { params }).then((res) => res.data);
 
 /**
  * @typedef {Object} CompanySearchCondition
@@ -123,12 +123,12 @@ export const getApplicantsByJobPosting = (jobPostingId, params) =>
 
 /**
  * [교직원] 기업 목록 검색 및 페이징 조회
- * GET /api/admin/career/companies
+ * GET /api/staff/career/companies
  * @param {CompanySearchCondition} [params]
  * @returns {Promise<PageResponse>}
  */
 export const getCompanies = (params) =>
-  apiClient.get('/admin/career/companies', { params }).then((res) => res.data);
+  apiClient.get('/staff/career/companies', { params }).then((res) => res.data);
 
 /**
  * @typedef {Object} CompanyDetailResponse
@@ -148,12 +148,12 @@ export const getCompanies = (params) =>
 
 /**
  * [교직원] 협약기업 단건 상세 조회
- * GET /api/admin/career/companies/{companyAccountId}
+ * GET /api/staff/career/companies/{companyAccountId}
  * @param {number} companyAccountId
  * @returns {Promise<CompanyDetailResponse>}
  */
 export const getCompanyDetail = (companyAccountId) =>
-  apiClient.get(`/admin/career/companies/${companyAccountId}`).then((res) => res.data);
+  apiClient.get(`/staff/career/companies/${companyAccountId}`).then((res) => res.data);
 
 /**
  * @typedef {Object} CompanyRegisterRequest
@@ -169,12 +169,12 @@ export const getCompanyDetail = (companyAccountId) =>
 
 /**
  * [교직원] 협약기업 신규 등록
- * POST /api/admin/career/companies
+ * POST /api/staff/career/companies
  * @param {CompanyRegisterRequest} payload
  * @returns {Promise<number>} 생성된 companyAccountId
  */
 export const registerCompany = (payload) =>
-  apiClient.post('/admin/career/companies', payload).then((res) => res.data);
+  apiClient.post('/staff/career/companies', payload).then((res) => res.data);
 
 /**
  * @typedef {Object} CompanyVerifyRequest
@@ -184,13 +184,13 @@ export const registerCompany = (payload) =>
 
 /**
  * [교직원] 협약기업 제휴 심사 (승인/반려)
- * PATCH /api/admin/career/companies/{companyAccountId}/verify
+ * PATCH /api/staff/career/companies/{companyAccountId}/verify
  * @param {number} companyAccountId
  * @param {CompanyVerifyRequest} payload
  * @returns {Promise<void>}
  */
 export const verifyCompany = (companyAccountId, payload) =>
-  apiClient.patch(`/admin/career/companies/${companyAccountId}/verify`, payload).then((res) => res.data);
+  apiClient.patch(`/staff/career/companies/${companyAccountId}/verify`, payload).then((res) => res.data);
 
 // 화면 호환용 별칭 - 불필요 시 삭제
 export const fetchStaffJobPostings = getStaffJobPostings;
