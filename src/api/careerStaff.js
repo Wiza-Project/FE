@@ -6,7 +6,7 @@ import { apiClient } from '@/api/client';
  * 1. 채용공고 운영 관리 & 검수 (Staff Job Posting Operations)
  * 2. 공고별 지원자 목록 & 전형 관리 (Applicant Management)
  * 3. 협약기업 메타데이터 신규 등록 & 제휴 심사 (Company Management)
- * 4. 취업 통계 및 매칭 추천 현황 (Stats & Matching Operations)
+ * 4. 취업 통계 및 매칭 추천 현황 추가(Stats & Matching Operations)
  */
 
 /**

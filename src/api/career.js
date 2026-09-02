@@ -5,7 +5,7 @@ import { apiClient } from '@/api/client';
  * 
  * 1. 채용공고 탐색 & AI 추천 (Job Postings & Recommendations)
  * 2. 온라인 입사지원 & 스크랩 (Applications & Scraps)
- * 3. 취업 희망조건 (Career Preference - 단건 Upsert)
+ * 3. 취업 희망조건 (Career Preference - 단건 Upsert 처리)
  */
 
 /**
