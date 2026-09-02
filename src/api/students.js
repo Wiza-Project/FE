@@ -21,7 +21,7 @@ import { apiClient } from './client';
 
 /**
  * 학생 본인 조회(GET /students/academic-record)와 교직원 상세 조회
- * (GET /admin/students/{userId})가 공통으로 쓰는 응답 모양.
+ * (GET /staff/students/{userId})가 공통으로 쓰는 응답 모양.
  *
  * `student_academic_detail` 행이 없는 학생도 404가 아니라 이 모양 그대로 받고,
  * 신상정보 관련 필드만 전부 null이 된다 — `value ?? '-'` 폴백으로 처리하면 된다.
@@ -66,7 +66,7 @@ export const fetchMyAcademicRecord = async () => {
 
 /**
  * @typedef {Object} StudentListItem
- * @property {number} userId      상세 조회(GET /admin/students/{userId})에 쓰는 내부 PK. 학번이 아님
+ * @property {number} userId      상세 조회(GET /staff/students/{userId})에 쓰는 내부 PK. 학번이 아님
  * @property {string} studentId   화면 표시용 학번
  * @property {string} name
  * @property {string} phone
@@ -79,7 +79,7 @@ export const fetchMyAcademicRecord = async () => {
  */
 
 /**
- * 교직원용 학생 목록 조회(학적 조회 화면). GET /api/admin/students
+ * 교직원용 학생 목록 조회(학적 조회 화면). GET /api/staff/students
  * @param {Object} [params]
  * @param {number} [params.majorCodeId] MAJOR 공통코드의 codeId. 생략 시 전체.
  * @param {number} [params.grade]       1~4. 생략 시 전체.
@@ -91,22 +91,22 @@ export const fetchMyAcademicRecord = async () => {
  *   totalElements: number, totalPages: number, first: boolean, last: boolean}>}
  */
 export const fetchStudentList = async (params) => {
-  const { data } = await apiClient.get('/admin/students', { params });
+  const { data } = await apiClient.get('/staff/students', { params });
   return data;
 };
 
 /**
- * 교직원용 학적 상태 요약(상단 통계 타일). GET /api/admin/students/summary
+ * 교직원용 학적 상태 요약(상단 통계 타일). GET /api/staff/students/summary
  * `byStatus`는 재학/휴학/졸업/제적/자퇴 5개 라벨을 항상 포함한다(0명이어도 0).
  * @returns {Promise<{total: number, byStatus: Record<'재학'|'휴학'|'졸업'|'제적'|'자퇴', number>}>}
  */
 export const fetchStudentStatusSummary = async () => {
-  const { data } = await apiClient.get('/admin/students/summary');
+  const { data } = await apiClient.get('/staff/students/summary');
   return data;
 };
 
 /**
- * 교직원용 학적부관리 모달 상세 조회. GET /api/admin/students/{userId}
+ * 교직원용 학적부관리 모달 상세 조회. GET /api/staff/students/{userId}
  * `AcademicRecordResponse`와 응답 모양이 같다. 대상 user_id가 없거나 학생이 아니면
  * U001(USER_NOT_FOUND, HTTP 404) — 이건 `student_academic_detail` 행이 없는 것과는
  * 다른 케이스(그건 404가 아니라 필드가 null인 200 응답).
@@ -114,6 +114,6 @@ export const fetchStudentStatusSummary = async () => {
  * @returns {Promise<AcademicRecordResponse>}
  */
 export const fetchStudentDetail = async (userId) => {
-  const { data } = await apiClient.get(`/admin/students/${userId}`);
+  const { data } = await apiClient.get(`/staff/students/${userId}`);
   return data;
 };
