@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Button, Modal, Pagination, toast } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
 import {
@@ -69,7 +69,7 @@ export default function TabCompanyCert() {
         size: PAGE_SIZE,
         verificationStatus: statusFilter === 'ALL' ? undefined : statusFilter,
       }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   const rows = pageData?.content || (Array.isArray(pageData) ? pageData : []);
@@ -94,7 +94,18 @@ export default function TabCompanyCert() {
 
   // 3. 신규 기업 등록 Mutation
   const registerMutation = useMutation({
-    mutationFn: (payload) => registerCompany(payload),
+    mutationFn: (payload) =>
+      registerCompany({
+        companyName: payload.companyName,
+        businessNumber: payload.businessNumber || payload.businessRegistrationNo,
+        ceoName: payload.ceoName || payload.representativeName,
+        contactName: payload.contactName || payload.managerName,
+        contactEmail: payload.contactEmail,
+        contactPhone: payload.contactPhone,
+        industry: payload.industry,
+        companyScale: payload.companyScale,
+        address: payload.address,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staffCompaniesList'] });
       setIsRegisterOpen(false);
@@ -108,7 +119,18 @@ export default function TabCompanyCert() {
 
   // 4. 심사중 기업 정보 수정 Mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }) => updateCompany(id, payload),
+    mutationFn: ({ id, payload }) =>
+      updateCompany(id, {
+        companyName: payload.companyName,
+        businessNumber: payload.businessNumber || payload.businessRegistrationNo,
+        ceoName: payload.ceoName || payload.representativeName,
+        contactName: payload.contactName || payload.managerName,
+        contactEmail: payload.contactEmail,
+        contactPhone: payload.contactPhone,
+        industry: payload.industry,
+        companyScale: payload.companyScale,
+        address: payload.address,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staffCompaniesList'] });
       setDetailTarget(null);
@@ -642,34 +664,51 @@ export default function TabCompanyCert() {
       {/* 반려 사유 모달 */}
       <Modal
         open={!!rejectTarget}
-        onClose={() => setRejectTarget(null)}
+        onClose={() => {
+          setRejectTarget(null);
+          setRejectionReason('');
+        }}
         title="기업 인증 심사 반려"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setRejectTarget(null)}>취소</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectTarget(null);
+                setRejectionReason('');
+              }}
+            >
+              취소
+            </Button>
             <Button
               variant="danger"
               loading={verifyMutation.isPending}
-              onClick={() =>
+              onClick={() => {
+                if (!rejectionReason || !rejectionReason.trim()) {
+                  toast('반려 사유를 입력해 주세요.', 'error');
+                  return;
+                }
                 verifyMutation.mutate({
                   companyAccountId: rejectTarget.companyAccountId,
                   verificationStatus: 'REJECTED',
-                  rejectionReason,
-                })
-              }
+                  rejectionReason: rejectionReason.trim(),
+                });
+              }}
             >
-              반려 처리
+              반려 확정
             </Button>
           </div>
         }
       >
         <div className="flex flex-col gap-3 text-[12px]">
-          <p><strong>{rejectTarget?.companyName}</strong>의 인증 요청을 반려하시겠습니까?</p>
+          <p className="text-[#656D76]">
+            [{rejectTarget?.companyName}] 기업의 제휴 심사를 반려 처리합니다. 반려 사유를 입력하세요.
+          </p>
           <textarea
             value={rejectionReason}
             onChange={(e) => setRejectionReason(e.target.value)}
-            placeholder="사업자등록번호 불일치 등 구체적인 반려 사유를 입력하세요."
             rows={3}
+            placeholder="반려 사유 입력 (필수)"
             className="w-full p-2.5 rounded-[6px] border border-[#E5E7EB] focus:outline-none resize-none"
           />
         </div>

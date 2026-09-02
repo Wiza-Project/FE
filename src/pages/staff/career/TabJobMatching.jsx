@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/common';
 import {
@@ -29,8 +29,11 @@ export default function TabJobMatching() {
     queryFn: () => getStaffJobPostings({ size: 100 }),
   });
 
-  const postList = postingsData?.content || (Array.isArray(postingsData) ? postingsData : []);
-
+  const postList = useMemo(
+      () => postingsData?.content || (Array.isArray(postingsData) ? postingsData : []),
+      [postingsData]
+    );
+    
   useEffect(() => {
     if (postList.length > 0 && !selectedJobId) {
       setSelectedJobId(String(postList[0].jobPostingId));
@@ -127,6 +130,8 @@ export default function TabJobMatching() {
                       <td className="px-4 py-3 text-center">
                         <select
                           value={a.applicationStatus}
+                          aria-label={`${a.userName || '학생'} 전형 상태 변경`}
+                          disabled={a.applicationStatus === 'CANCELED'}
                           onChange={(e) =>
                             statusMutation.mutate({ applicationId: appId, applicationStatus: e.target.value })
                           }
@@ -136,6 +141,7 @@ export default function TabJobMatching() {
                           <option value="UNDER_REVIEW">서류검토중</option>
                           <option value="PASSED">최종합격</option>
                           <option value="REJECTED">불합격</option>
+                          <option value="CANCELED" disabled>지원취소</option>
                         </select>
                       </td>
                     </tr>

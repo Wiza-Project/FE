@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Button, Modal, Pagination, toast } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
 import { apiClient } from '@/api/client';
@@ -65,7 +65,7 @@ export default function TabPostManagement() {
         size: PAGE_SIZE,
         postingStatus: statusFilter === 'ALL' ? undefined : statusFilter,
       }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   // 2. 기업 목록 조회
@@ -90,6 +90,13 @@ export default function TabPostManagement() {
     const text = `${c.companyName} ${c.businessRegistrationNo || c.businessNumber || ''}`;
     return text.toLowerCase().includes(companySearchText.toLowerCase());
   });
+
+  const formatToIso = (dateStr, defaultTime) => {
+      if (!dateStr) return null;
+      const dateOnly = String(dateStr).slice(0, 10);
+      // KST(+09:00) 기준으로 생성 후 표준 ISO UTC 문자열로 변환
+      return new Date(`${dateOnly}T${defaultTime}:00+09:00`).toISOString();
+  };
 
   // 3. Mutation 정의
   const createMutation = useMutation({
@@ -165,20 +172,22 @@ export default function TabPostManagement() {
       return;
     }
 
-    const formatToIso = (dateStr, defaultTime) => {
-      if (!dateStr) return null;
-      if (dateStr.includes('T')) return dateStr;
-      return `${dateStr}T${defaultTime}:00Z`;
-    };
 
     createMutation.mutate({
-      ...createForm,
-      applicationStartsAt: formatToIso(createForm.applicationStartsAt, '09:00'),
-      applicationEndsAt: formatToIso(createForm.applicationEndsAt, '18:00'),
       companyAccountId: Number(createForm.companyAccountId),
+      postingTitle: createForm.postingTitle,
       ncsCodeId: Number(createForm.ncsCodeId),
       regionCodeId: Number(createForm.regionCodeId),
+      workLocation: createForm.workLocation || '상세 근무지 협의',
+      jobDescription: createForm.jobDescription,
+      employmentType: createForm.employmentType,
+      salaryInfo: createForm.salaryText,
       recruitmentCount: Number(createForm.recruitmentCount) || 1,
+      postingType: createForm.postingType,
+      benefitType: createForm.benefitType || undefined,
+      fileGroupId: createForm.fileGroupId || undefined,
+      applicationStartsAt: formatToIso(createForm.applicationStartsAt, '09:00'),
+      applicationEndsAt: formatToIso(createForm.applicationEndsAt, '18:00'),
     });
   };
 
@@ -190,21 +199,22 @@ export default function TabPostManagement() {
       return;
     }
 
-    const formatToIso = (dateStr, defaultTime) => {
-      if (!dateStr) return null;
-      if (dateStr.includes('T')) return dateStr;
-      return `${dateStr}T${defaultTime}:00Z`;
-    };
-
     updateMutation.mutate({
       id: detailTarget.jobPostingId,
       payload: {
-        ...editForm,
-        applicationStartsAt: formatToIso(editForm.applicationStartsAt, '09:00'),
-        applicationEndsAt: formatToIso(editForm.applicationEndsAt, '18:00'),
+        postingTitle: editForm.postingTitle,
         ncsCodeId: editForm.ncsCodeId ? Number(editForm.ncsCodeId) : undefined,
         regionCodeId: editForm.regionCodeId ? Number(editForm.regionCodeId) : undefined,
+        workLocation: editForm.workLocation || detailTarget.workLocation || '상세 근무지 협의',
+        jobDescription: editForm.jobDescription,
+        employmentType: editForm.employmentType,
+        salaryInfo: editForm.salaryText,
         recruitmentCount: Number(editForm.recruitmentCount) || 1,
+        postingType: editForm.postingType,
+        benefitType: editForm.benefitType || undefined,
+        fileGroupId: editForm.fileGroupId || undefined,
+        applicationStartsAt: formatToIso(editForm.applicationStartsAt, '09:00'),
+        applicationEndsAt: formatToIso(editForm.applicationEndsAt, '18:00'),
       },
     });
   };
@@ -221,11 +231,12 @@ export default function TabPostManagement() {
     formData.append('file', file);
 
     try {
-      const res = await apiClient.post('/admin/career/job-postings/poster', formData, {
+      const res = await apiClient.post('/staff/career/job-postings/poster', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const resData = res.data?.data || res.data;
-      const uploadedFileGroupId = resData?.fileGroupId || resData;
+      const rawId = resData?.fileGroupId ?? resData?.id ?? resData;
+      const uploadedFileGroupId = (typeof rawId === 'number' || typeof rawId === 'string') ? rawId : null;
 
       if (uploadedFileGroupId) {
         if (isEdit) {
@@ -234,10 +245,14 @@ export default function TabPostManagement() {
           setCreateForm((p) => ({ ...p, fileGroupId: uploadedFileGroupId }));
         }
         toast('포스터 이미지가 성공적으로 첨부되었습니다.', 'success');
+      } else {
+        toast('업로드 응답 식별자를 확인할 수 없습니다.', 'error');
       }
     } catch {
       toast('파일 업로드 중 오류가 발생했습니다.', 'error');
     }
+
+    e.target.value = ''; // 이 1줄만 맨 끝에 두시면 됩니다.
   };
 
   // 상세 모달 열기 (기존 목록 데이터를 기반으로 안전하게 초기화)
@@ -248,9 +263,10 @@ export default function TabPostManagement() {
       postingTitle: post.postingTitle || '',
       ncsCodeId: post.ncsCodeId || '',
       regionCodeId: post.regionCodeId || '',
+      workLocation: post.workLocation || '',
       jobDescription: post.jobDescription || (post.postingTitle ? `${post.postingTitle} 관련 상세 업무 및 자격 요건` : ''),
       employmentType: post.employmentType || '정규직',
-      salaryText: post.salaryText || '',
+      salaryText: post.salaryText || post.salaryInfo || '',
       recruitmentCount: post.recruitmentCount || 1,
       applicationStartsAt: post.applicationStartsAt ? String(post.applicationStartsAt).slice(0, 10) : '',
       applicationEndsAt: post.applicationEndsAt ? String(post.applicationEndsAt).slice(0, 10) : '',
@@ -270,6 +286,8 @@ export default function TabPostManagement() {
               key={st}
               onClick={() => {
                 setStatusFilter(st);
+                // 상태 필터 바꿀 때 이전 체크박스 비움 처리
+                setSelected([]);
                 setPage(1);
               }}
               className={`h-8 px-3 text-[12px] font-bold rounded-[6px] transition-colors ${
@@ -309,7 +327,12 @@ export default function TabPostManagement() {
               <Button
                 size="sm"
                 variant="danger"
-                onClick={() => bulkDeleteMutation.mutate(selected)}
+                disabled={selected.length === 0 || bulkDeleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`선택한 ${selected.length}건의 공고를 정말 삭제하시겠습니까?`)) {
+                    bulkDeleteMutation.mutate(selected);
+                  }
+                }}
               >
                 선택 삭제 ({selected.length})
               </Button>
@@ -429,7 +452,11 @@ export default function TabPostManagement() {
             <Pagination
               page={page}
               totalPages={totalPages}
-              onChange={setPage}
+              onChange={(newPage) => {
+                setPage(newPage);
+                // 페이지 바꿀 때 이전 페이지 체크박스 비움 처리
+                setSelected([]);
+              }}
               totalItems={totalElements}
               pageSize={PAGE_SIZE}
             />
@@ -607,7 +634,7 @@ export default function TabPostManagement() {
                 type="date"
                 value={createForm.applicationStartsAt ? createForm.applicationStartsAt.slice(0, 10) : ''}
                 onChange={(e) =>
-                  setCreateForm((p) => ({ ...p, applicationStartsAt: `${e.target.value}T09:00:00Z` }))
+                  setCreateForm((p) => ({ ...p, applicationStartsAt: e.target.value }))
                 }
                 className="w-full h-9 px-3 rounded-[6px] border border-[#E5E7EB] focus:outline-none"
               />
@@ -620,7 +647,7 @@ export default function TabPostManagement() {
                 type="date"
                 value={createForm.applicationEndsAt ? createForm.applicationEndsAt.slice(0, 10) : ''}
                 onChange={(e) =>
-                  setCreateForm((p) => ({ ...p, applicationEndsAt: `${e.target.value}T18:00:00Z` }))
+                  setCreateForm((p) => ({ ...p, applicationEndsAt: e.target.value }))
                 }
                 className="w-full h-9 px-3 rounded-[6px] border border-[#E5E7EB] focus:outline-none"
               />
