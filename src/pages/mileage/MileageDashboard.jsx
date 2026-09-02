@@ -432,8 +432,12 @@ export default function MileageDashboard({ onExternal }) {
   const semesterLabel = dashboardData?.period
     ? `${dashboardData.period.academicYear}-${dashboardData.period.semesterCode}학기`
     : '-';
+  const shortenCompetencyLabel = (name) => {
+    const base = (name ?? '').replace(/역량$/, '').trim() || name || '';
+    return base.length > 4 ? `${base.slice(0, 4).trim()}…` : base;
+  };
   const competencyData = (dashboardData?.competencyBreakdown ?? []).map((item) => ({
-    label: item.competencyName,
+    label: shortenCompetencyLabel(item.competencyName),
     value: Number(item.points ?? 0),
   }));
   const trendData = (dashboardData?.semesterTrend ?? []).map((item) => ({
