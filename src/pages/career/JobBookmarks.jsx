@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { PageHeader, Button, Pagination, toast } from '@/components/common';
 import { getMyJobScraps, toggleJobScrap } from '@/api/career';
 
@@ -29,11 +29,14 @@ function DeadlineCalendar({ scrapList }) {
   const today = new Date();
   const daysOfWeek = ['일', '월', '화', '수', '목', '금', '토'];
 
+  const toLocalDateStr = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const upcomingDays = Array.from({ length: 7 }, (_, i) => {
     const target = new Date(today);
     target.setDate(today.getDate() + i);
-    const dateStr = target.toISOString().slice(5, 10);
-    const fullDateStr = target.toISOString().slice(0, 10);
+    const fullDateStr = toLocalDateStr(target);
+    const dateStr = fullDateStr.slice(5, 10);
     const dayLabel = daysOfWeek[target.getDay()];
 
     const matchedJobs = scrapList.filter(
@@ -99,7 +102,7 @@ export default function JobBookmarks({ onBack, onDetail }) {
   const { data: pageData, isLoading, isError } = useQuery({
     queryKey: ['careerMyJobScraps', page],
     queryFn: () => getMyJobScraps({ page: page - 1, size: PAGE_SIZE }),
-    keepPreviousData: true,
+    keepPreviousData: keepPreviousData,
   });
 
   const scrapList = pageData?.content || [];

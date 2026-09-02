@@ -110,7 +110,7 @@ export default function CareerPreferenceSettings({ onComplete }) {
       if (onComplete) onComplete();
     },
     onError: (err) => {
-      toast(err?.message || err?.response?.data?.message || '저장에 실패했습니다.', 'error');
+      toast(err?.response?.data?.message || err?.message || '저장에 실패했습니다.', 'error');
     },
   });
 
