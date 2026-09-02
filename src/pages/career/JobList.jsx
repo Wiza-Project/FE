@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, Button, Pagination, ConfirmDialog, toast } from '@/components/common';
-import { getJobPostings, getRecommendedPostings, toggleJobScrap, getJobPreference, getJobBookmarks } from '@/api/career';
+import { getJobPostings, getRecommendedPostings, toggleJobScrap, getJobPreference } from '@/api/career';
 import { POSTING_TYPE, POSTING_TYPE_LABEL } from '@/constants/domain';
 import { useCommonCode } from '@/hooks/useCommonCode';
 
