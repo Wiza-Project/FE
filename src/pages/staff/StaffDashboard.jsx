@@ -33,7 +33,7 @@ const fetchStaffJobPostings = async (params) => {
 
 function getErrorMessage(error, fallback) {
   if (error instanceof ApiError) return error.message || fallback;
-  return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  return fallback;
 }
 
 function isToday(iso) {
@@ -218,6 +218,8 @@ export default function StaffDashboard() {
     (programsQuery.isLoading || pendingByProgramQueries.some((q) => q.isLoading));
   const programApplicationsError =
     canProgramReview && (programsQuery.isError || pendingByProgramQueries.some((q) => q.isError));
+  const programApplicationsErrorObj =
+    programsQuery.error ?? pendingByProgramQueries.find((q) => q.isError)?.error;
   const programApplicationRows = ownedPrograms.flatMap((program, i) =>
     (pendingByProgramQueries[i]?.data?.content ?? []).map((app) =>
       toProgramApplicationRow(app, program),
@@ -282,7 +284,7 @@ export default function StaffDashboard() {
       count: programApplicationsCount,
       loading: programApplicationsLoading,
       error: programApplicationsError,
-      errorObj: programsQuery.error,
+      errorObj: programApplicationsErrorObj,
       rows: programApplicationRows,
       onRetry: retryProgramApplications,
       onProcess: () => navigate('/staff/programs'),
