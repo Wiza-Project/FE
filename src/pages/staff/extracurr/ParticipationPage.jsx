@@ -653,7 +653,7 @@ function AttendanceManage({ programId }) {
                               }
                               aria-label={`${a.studentName} ${ri + 1}회차 출결 상태: ${
                                 status === 'PRESENT' ? '출석' : status === 'ABSENT' ? '결석' : '미기록'
-                              }. 클릭하면 ${status === 'ABSENT' ? '출석' : '결석'}으로 변경됩니다.`}
+                              }. 클릭하면 ${nextAttStatus(status) === 'PRESENT' ? '출석' : '결석'}으로 변경됩니다.`}
                               className="w-7 h-7 rounded-full text-[10px] font-black transition-all hover:scale-110 hover:shadow-md"
                               style={{ background: style.bg, color: style.text }}
                             >
