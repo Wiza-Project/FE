@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { fetchMileageSimulationOptions, simulateMileage } from '@/api/mileage';
+import { resolveCurrentAcademicPeriod, SEMESTER_LABELS } from '@/utils/academicPeriod';
 import {
   PageHeader,
   StatTile,
@@ -12,7 +13,7 @@ import {
 } from '@/components/common';
 
 const ACCENT = '#D97706';
-const DASHBOARD_PERIOD = { academicYear: 2026, semesterCode: '1' };
+const DASHBOARD_PERIOD = resolveCurrentAcademicPeriod();
 
 const PAGE_SIZE = 10;
 const SOURCE_LABELS = {
@@ -29,13 +30,6 @@ const TRANSACTION_STATUS_LABELS = {
   POSTED: '확정',
   REQUESTED: '처리중',
   REJECTED: '반려',
-};
-const BENEFIT_STATUS_LABELS = {
-  ELIGIBLE: '가능',
-  APPLIED: '신청완료',
-  INSUFFICIENT_POINTS: '점수 부족',
-  APPLICATION_NOT_OPEN: '신청 전',
-  APPLICATION_CLOSED: '신청 마감',
 };
 
 const formatPoints = (value) => Number(value ?? 0).toLocaleString('ko-KR');
@@ -74,97 +68,93 @@ function TrendChart({ data = [] }) {
     );
   }
 
-  const max = Math.max(...chartData.map((d) => d.value), 1);
+  const max = 50;
   const pointDenominator = Math.max(chartData.length - 1, 1);
   const isSinglePoint = chartData.length === 1;
   const pts = chartData.map((d, i) => ({
-    x: isSinglePoint ? PAD.l + cW / 2 : PAD.l + (i / pointDenominator) * cW,
+    x: isSinglePoint ? PAD.l + 24 : PAD.l + (i / pointDenominator) * cW,
     y: PAD.t + cH - (d.value / max) * cH * 0.88,
     d,
   }));
   const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
   const areaD = `${pathD} L${pts[pts.length - 1].x},${PAD.t + cH} L${pts[0].x},${PAD.t + cH} Z`;
 
+  // SVG 좌표(x, y)를 컨테이너 기준 % 위치로 변환 — 그래픽(선/점/그리드)은 SVG로 폭에 맞춰 스케일되지만,
+  // 텍스트는 HTML로 겹쳐 그려서 카드 폭이 넓어져도 글씨 크기가 함께 커지지 않도록 분리한다.
+  const toPct = (x, y) => ({ left: `${(x / W) * 100}%`, top: `${(y / H) * 100}%` });
+
   return (
-    <svg
-      width="100%"
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="xMidYMid meet"
-      role="img"
-      aria-label="학기별 적립 추이 그래프"
-    >
-      <defs>
-        <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={ACCENT} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={ACCENT} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      {/* Y gridlines */}
-      {[0.25, 0.5, 0.75, 1].map((r) => (
-        <line
-          key={r}
-          x1={PAD.l}
-          y1={PAD.t + cH * (1 - r * 0.88)}
-          x2={W - PAD.r}
-          y2={PAD.t + cH * (1 - r * 0.88)}
-          stroke="#E5E7EB"
-          strokeWidth="1"
-          strokeDasharray="3 3"
+    <div className="relative w-full" style={{ paddingTop: `${(H / W) * 100}%` }}>
+      <svg
+        className="absolute inset-0 h-full w-full"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="학기별 적립 추이 그래프"
+      >
+        <defs>
+          <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={ACCENT} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={ACCENT} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {/* Y gridlines */}
+        {[0.2, 0.4, 0.6, 0.8, 1].map((r) => (
+          <line
+            key={r}
+            x1={PAD.l}
+            y1={PAD.t + cH * (1 - r * 0.88)}
+            x2={W - PAD.r}
+            y2={PAD.t + cH * (1 - r * 0.88)}
+            stroke="#E5E7EB"
+            strokeWidth="1"
+            strokeDasharray="3 3"
+          />
+        ))}
+        {/* Area */}
+        <path d={areaD} fill="url(#trendGrad)" />
+        {/* Line */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke={ACCENT}
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
-      ))}
+      </svg>
       {/* Y labels */}
-      {[0, 0.25, 0.5, 0.75, 1].map((r) => (
-        <text
+      {[0, 0.2, 0.4, 0.6, 0.8, 1].map((r) => (
+        <span
           key={r}
-          x={PAD.l - 4}
-          y={PAD.t + cH - cH * r * 0.88 + 4}
-          textAnchor="end"
-          fontSize="9"
-          fill="#9AA0A6"
-          fontFamily="Pretendard, sans-serif"
+          className="absolute -translate-x-full -translate-y-1/2 text-[14px] text-[#9AA0A6]"
+          style={toPct(PAD.l - 4, PAD.t + cH - cH * r * 0.88)}
         >
           {Math.round(max * r)}
-        </text>
+        </span>
       ))}
-      {/* Area */}
-      <path d={areaD} fill="url(#trendGrad)" />
-      {/* Line */}
-      <path
-        d={pathD}
-        fill="none"
-        stroke={ACCENT}
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* Points + labels */}
+      {/* Points + point value + x-axis labels */}
       {pts.map((p) => (
-        <g key={p.d.label}>
-          <circle cx={p.x} cy={p.y} r="4" fill={ACCENT} stroke="white" strokeWidth="2" />
-          <text
-            x={p.x}
-            y={p.y - 9}
-            textAnchor="middle"
-            fontSize="10"
-            fill={ACCENT}
-            fontFamily="Pretendard, sans-serif"
-            fontWeight="700"
+        <span key={p.d.label}>
+          <span
+            className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
+            style={{ ...toPct(p.x, p.y), background: ACCENT }}
+          />
+          <span
+            className="absolute -translate-x-full -translate-y-1/2 text-[13px] font-bold"
+            style={{ ...toPct(p.x - 8, p.y), color: ACCENT }}
           >
-            {p.d.value}점
-          </text>
-          <text
-            x={p.x}
-            y={PAD.t + cH + 14}
-            textAnchor="middle"
-            fontSize="9"
-            fill="#656D76"
-            fontFamily="Pretendard, sans-serif"
+            {p.d.value}
+          </span>
+          <span
+            className="absolute -translate-x-1/2 -translate-y-1/2 text-[14px] text-[#656D76]"
+            style={toPct(p.x, PAD.t + cH + 14)}
           >
             {p.d.label}
-          </text>
-        </g>
+          </span>
+        </span>
       ))}
-    </svg>
+    </div>
   );
 }
 
@@ -296,8 +286,6 @@ export default function MileageDashboard({ onExternal }) {
         params: {
           page: page - 1,
           size: PAGE_SIZE,
-          academicYear: DASHBOARD_PERIOD.academicYear,
-          semesterCode: DASHBOARD_PERIOD.semesterCode,
         },
       })
       .then(({ data }) => {
@@ -443,8 +431,12 @@ export default function MileageDashboard({ onExternal }) {
     label: shortenCompetencyLabel(item.competencyName),
     value: Number(item.points ?? 0),
   }));
+  const programTypeData = (dashboardData?.programTypeBreakdown ?? []).map((item) => ({
+    label: item.programTypeName ?? '-',
+    value: Number(item.points ?? 0),
+  }));
   const trendData = (dashboardData?.semesterTrend ?? []).map((item) => ({
-    label: `${item.academicYear}-${item.semesterCode}`,
+    label: `${item.academicYear}년 ${item.semesterCode}학기`,
     value: Number(item.points ?? 0),
   }));
   const benefitProgress = dashboardData?.benefitProgress ?? [];
@@ -583,77 +575,23 @@ export default function MileageDashboard({ onExternal }) {
             />
           </div>
 
-          {/* Mid row: criteria table + bar chart */}
+          {/* Mid row: program type + competency bar charts */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_1fr]">
-            {/* Criteria table */}
+            {/* Bar chart: program type distribution */}
             <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
               <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
                 <div className="w-1 h-4 rounded-full bg-[#D97706]" />
-                <h2 className="text-[14px] font-bold text-[#1F2328]">마일리지 인증·장학 기준</h2>
+                <h2 className="text-[14px] font-bold text-[#1F2328]">프로그램 유형별 분포</h2>
+                <span className="ml-auto text-[12px] font-medium text-[#656D76]">단위: 점</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px] border-collapse text-[12px]">
-                <thead>
-                  <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                    {['구분', '기준 점수', '혜택', '현재 상태'].map((h) => (
-                      <th
-                        key={h}
-                        className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {benefitProgress.length > 0 ? (
-                    benefitProgress.map((row) => {
-                      const rowNeeded = Number(row.shortagePoints ?? 0);
-                      const attainable = Boolean(row.canApply) || row.progressStatus === 'ELIGIBLE';
-                      const statusLabel = attainable
-                        ? '가능'
-                        : BENEFIT_STATUS_LABELS[row.progressStatus] ??
-                          `${formatPoints(rowNeeded)}점 부족`;
-
-                      return (
-                        <tr
-                          key={row.benefitPolicyId}
-                          className={`border-b border-[#F3F4F6] last:border-0 ${attainable ? 'bg-[#F0FDF4]' : ''}`}
-                        >
-                          <td className="px-4 py-3 font-semibold text-[#1F2328]">
-                            {row.benefitName}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-[#1F2328]">
-                            {formatPoints(row.targetPoints)}점
-                          </td>
-                          <td className="px-4 py-3 text-[#656D76]">
-                            {row.benefitAmount == null ? '-' : `${formatPoints(row.benefitAmount)}원`}
-                          </td>
-                          <td className="px-4 py-3">
-                            {attainable ? (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#1A7F37]">
-                                {statusLabel}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                                {statusLabel}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-[12px] text-[#9AA0A6]">
-                        {dashboardLoading
-                          ? '기준을 불러오는 중입니다.'
-                          : '등록된 인증·장학 기준이 없습니다.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                </table>
+              <div className="flex min-h-[188px] justify-center overflow-x-auto px-4 py-4">
+                {programTypeData.length > 0 ? (
+                  <BarChart data={programTypeData} color={ACCENT} height={140} unit="점" />
+                ) : (
+                  <div className="flex items-center text-[12px] text-[#9AA0A6]">
+                    프로그램 유형별 적립 내역이 없습니다.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -684,7 +622,7 @@ export default function MileageDashboard({ onExternal }) {
               <span className="ml-auto text-[12px] font-medium text-[#656D76]">단위: 점</span>
             </div>
             <div className="overflow-x-auto px-6 py-4">
-              <div className="min-w-[560px]">
+              <div className="w-full min-w-[560px]">
                 <TrendChart data={trendData} />
               </div>
             </div>
@@ -700,7 +638,7 @@ export default function MileageDashboard({ onExternal }) {
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-3 flex items-center gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
             <div>
               <p className="text-[13px] font-bold text-[#1F2328]">적립 내역</p>
-              <p className="text-[11px] text-[#9AA0A6] mt-0.5">
+              <p className="text-[13px] text-[#9AA0A6] mt-0.5">
                 확정된 적립 내역을 최신순으로 보여드립니다.
               </p>
             </div>
@@ -802,7 +740,7 @@ export default function MileageDashboard({ onExternal }) {
               </table>
             </div>
             <div className="px-4 py-3 border-t border-[#E5E7EB] flex items-center gap-3">
-              <p className="text-[11px] text-[#9AA0A6]">
+              <p className="text-[13px] text-[#9AA0A6]">
                 ※ 확정된 적립 내역만 표시됩니다. 행을 클릭하면 상세 정보를 확인할 수 있습니다.
               </p>
               {ledgerTotalItems > 0 && (
@@ -882,7 +820,7 @@ export default function MileageDashboard({ onExternal }) {
                   />
                   <span className="text-[13px] text-[#656D76]">점</span>
                   {selectedTargetBenefitPolicyId == null && (
-                    <span className="text-[11px] text-[#9AA0A6]">직접 입력 목표</span>
+                    <span className="text-[13px] text-[#9AA0A6]">직접 입력 목표</span>
                   )}
                 </div>
 
@@ -995,7 +933,7 @@ export default function MileageDashboard({ onExternal }) {
                   ['부족 점수', simulationResultShortage],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-[8px] bg-[#F9FAFB] p-3">
-                    <p className="text-[11px] text-[#9AA0A6]">{label}</p>
+                    <p className="text-[13px] text-[#9AA0A6]">{label}</p>
                     <p className="mt-1 text-[16px] font-black text-[#D97706]">
                       {formatPoints(value)}점
                     </p>

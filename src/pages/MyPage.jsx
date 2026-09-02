@@ -13,6 +13,7 @@ import { fetchCounselingReservations, fetchCounselingTypes } from '@/api/counsel
 import { fetchBoardPosts } from '@/api/boards';
 import { COUNSELING_RESERVATION_STATUS_LABEL } from '@/constants/domain';
 import { formatDate } from '@/utils/date';
+import { resolveCurrentAcademicPeriod } from '@/utils/academicPeriod';
 import {
   StatTile,
   PageHeader,
@@ -34,8 +35,8 @@ const NAV_PATH = {
 };
 
 // 마일리지 현황 조회 기준 학기. "현재 학기 자동 판별" API가 아직 없어 마일리지 화면
-// (src/pages/mileage/MileageDashboard.jsx)과 동일한 값을 그대로 사용한다.
-const MILEAGE_PERIOD = { academicYear: 2026, semesterCode: '1' };
+// (src/pages/mileage/MileageDashboard.jsx)과 동일한 유틸로 계산한다.
+const MILEAGE_PERIOD = resolveCurrentAcademicPeriod();
 
 // 대시보드 요약 카드용으로 넉넉히 끌어오는 신청 내역 건수. 승인/진행중 집계용 API가
 // 따로 없어 이 범위 안에서 근사치를 낸다 (src/pages/program/MyApplications.jsx와 동일한 한계).
