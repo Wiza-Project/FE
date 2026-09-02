@@ -141,7 +141,7 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
           </div>
 
           <div className="flex justify-center">
-            <RadarChart labels={labels} values={values} compareValues={compareValues} color={COMP_COLOR} size={300} />
+            <RadarChart labels={labels} values={values} compareValues={compareValues} color={COMP_COLOR} size={340} />
           </div>
 
           {/* Legend */}
