@@ -31,7 +31,7 @@ function getErrorMessage(error, fallback) {
 
 /**
  * 교직원 공지사항 등록/수정 폼.
- * POST /api/admin/boards/NOTICE/posts, PATCH /api/admin/boards/NOTICE/posts/{postId}
+ * POST /api/staff/boards/NOTICE/posts, PATCH /api/staff/boards/NOTICE/posts/{postId}
  *
  * @param {Object} props
  * @param {number} [props.postId] 편집 대상. 있으면 수정 모드.

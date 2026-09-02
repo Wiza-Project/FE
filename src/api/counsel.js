@@ -182,6 +182,7 @@ export const changeCounselingReservationSchedule = async (reservationId, request
  * @property {string|null} location
  * @property {'OPEN'|'CLOSED'} status
  * @property {boolean} hasReservation
+ * @property {number} remainingCapacity max(0, capacity - (REJECTED·CANCELED 제외 예약 수)). 조회 시점 참고값이며 POST가 최종 검증한다.
  */
 
 /**
@@ -191,6 +192,52 @@ export const changeCounselingReservationSchedule = async (reservationId, request
  */
 export const fetchCounselorSchedules = async () => {
   const { data } = await apiClient.get('/counselors/schedules');
+  return data;
+};
+
+/**
+ * @typedef {Object} CounselorStudentLookup
+ * @property {number} studentId
+ * @property {string} universityNo
+ * @property {string} studentName
+ */
+
+/**
+ * 상담사가 대행 예약을 위해 학번으로 활성 학생 한 명을 정확히 조회한다.
+ * 학번 없음·비활성 계정·학생이 아닌 계정은 서버가 모두 404 U001로 통일해 응답하므로
+ * FE에서 실패 사유를 구분하지 않는다.
+ *
+ * @param {string} universityNo
+ * @returns {Promise<CounselorStudentLookup>}
+ */
+export const fetchCounselorStudentByUniversityNo = async (universityNo) => {
+  const { data } = await apiClient.get('/counselors/students/lookup', {
+    params: { universityNo: universityNo.trim() },
+  });
+  return data;
+};
+
+/**
+ * @typedef {Object} CreateCounselorProxyReservationRequest
+ * @property {number} studentId
+ * @property {number} counselingTypeId 선택한 일정 객체의 counselingTypeId(서버가 다시 검증)
+ * @property {number} scheduleId
+ * @property {string} requestContent 앞뒤 공백 제거 후 1~3,000자
+ */
+
+/**
+ * 상담사가 자신의 예약 가능한 DIRECT 일정에 학생을 대신해 예약을 생성한다.
+ * 생성과 동시에 서버가 즉시 APPROVED로 승인하고 최초 배정·1회기를 같은 트랜잭션에서 만든다.
+ * consentId·counselorId·처리자 ID는 서버가 로그인 상담사 기준으로 직접 채우므로 요청에 포함하지 않는다.
+ *
+ * @param {CreateCounselorProxyReservationRequest} request
+ * @returns {Promise<CounselorReservationDecisionResponse>}
+ */
+export const createCounselorProxyReservation = async (request) => {
+  const { data } = await apiClient.post('/counselors/counseling-reservations', {
+    ...request,
+    requestContent: request?.requestContent?.trim?.() ?? '',
+  });
   return data;
 };
 
