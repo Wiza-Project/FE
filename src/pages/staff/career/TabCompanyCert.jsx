@@ -341,13 +341,7 @@ export default function TabCompanyCert() {
         title="신규 협약 기업 등록"
         footer={
           <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setRejectTarget(null);
-                setRejectionReason('');
-              }}
-            >
+            <Button variant="outline" onClick={() => { setIsRegisterOpen(false); setRegForm(INITIAL_REG_FORM); }}>
               취소
             </Button>
             <Button style={{ background: ACCENT }} loading={registerMutation.isPending} onClick={handleRegisterSubmit}>
@@ -677,7 +671,15 @@ export default function TabCompanyCert() {
         title="기업 인증 심사 반려"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setRejectTarget(null)}>취소</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectTarget(null);
+                setRejectionReason('');
+              }}
+            >
+              취소
+            </Button>
             <Button
               variant="danger"
               loading={verifyMutation.isPending}
