@@ -16,8 +16,10 @@ const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 
 // BE CompetencyService.MAX_TOP_LEVEL_COMPETENCY 와 동일 (핵심역량은 최대 6개, 서버에서도 검증함)
 const MAX_CORE_COMPETENCY = 6;
 
-// 축순서 후보 (BE CompetencyDisplayOrderRequest @Min(1) @Max(6))
-const AXIS_ORDERS = Array.from({ length: MAX_CORE_COMPETENCY }, (_, i) => i + 1);
+// 축순서 후보. DB·BE(CompetencyDisplayOrderRequest @Min(100) @Max(600))의 실제 값은
+// 100·200·…·600이고 역량 코드 C100~C600과 1:1로 대응한다. 화면에는 1~6으로 축약해 보여준다.
+const AXIS_ORDERS = Array.from({ length: MAX_CORE_COMPETENCY }, (_, i) => (i + 1) * 100);
+const axisLabel = (displayOrder) => displayOrder / 100;
 
 // ─── Toggle ──────────────────────────────────────────────────────────────────
 
@@ -92,11 +94,14 @@ export default function CompetencyManage() {
       const [mover, swapped] = updatedList;
       if (swapped) {
         toast(
-          `'${mover.competencyName}' ↔ '${swapped.competencyName}' 축순서가 서로 맞바뀌었습니다 (${mover.displayOrder}번 ↔ ${swapped.displayOrder}번).`,
+          `'${mover.competencyName}' ↔ '${swapped.competencyName}' 축순서가 서로 맞바뀌었습니다 (${axisLabel(mover.displayOrder)}번 ↔ ${axisLabel(swapped.displayOrder)}번).`,
           'success',
         );
       } else {
-        toast(`'${mover.competencyName}' 축순서가 ${mover.displayOrder}번으로 변경되었습니다.`, 'success');
+        toast(
+          `'${mover.competencyName}' 축순서가 ${axisLabel(mover.displayOrder)}번으로 변경되었습니다.`,
+          'success',
+        );
       }
     },
     onError: (e) => {
@@ -271,7 +276,7 @@ export default function CompetencyManage() {
                           const takenBy = cores.find((x) => x.id !== c.id && x.axisOrder === o);
                           return (
                             <option key={o} value={o}>
-                              {takenBy ? `${o} (${takenBy.code} 교체)` : o}
+                              {takenBy ? `${axisLabel(o)} (${takenBy.code} 교체)` : axisLabel(o)}
                             </option>
                           );
                         })}
@@ -415,7 +420,7 @@ export default function CompetencyManage() {
       >
         <div className="flex flex-col gap-5">
           <p className="text-[11px] text-[#9AA0A6] bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
-            역량 코드는 등록 순서에 따라 자동 채번(C1~C6)되고, 축순서도 등록 순서로 자동
+            역량 코드는 등록 순서에 따라 자동 채번(C100~C600)되고, 축순서도 등록 순서로 자동
             지정됩니다. 등록 후 이 화면에 표시됩니다.
           </p>
           {[
