@@ -6,6 +6,8 @@ import { useCommonCode } from '@/hooks/useCommonCode';
 
 const ACCENT = '#059669';
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
+
 // 17개 광역시/도 폴백
 const FALLBACK_REGIONS = [
   { codeId: 101, code: 'RG100', codeName: '서울' },
@@ -127,7 +129,7 @@ export default function CareerPreferenceSettings({ onComplete }) {
         <div>
           <h2 className="text-[16px] font-bold text-[#1F2328]">취업 희망 조건 설정</h2>
           <p className="text-[12px] text-[#656D76] mt-1">
-            설정하신 직무와 지역은 <strong>NCS 임베딩 코사인 유사도 잡매칭(PROFILING)</strong>의 기준 데이터로 즉시 동기화됩니다.
+            설정하신 직무와 지역은 <strong> AI 잡매칭(PROFILING)</strong>의 기준 데이터로 즉시 동기화됩니다.
           </p>
         </div>
       </div>
@@ -241,7 +243,7 @@ export default function CareerPreferenceSettings({ onComplete }) {
         </div>
 
         <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded-[6px] p-3 text-[11px] text-[#14532D] leading-relaxed">
-          💡 희망 직무를 저장하면 백엔드에서 <strong>{selectedNcs?.codeName || '선택 직무'}</strong>의 임베딩 벡터를 학생 프로필에 동기화하여 실시간 코사인 유사도 맞춤 공고를 산출합니다.
+          희망 직무를 저장하면 <strong>{selectedNcs?.codeName || '선택 직무'}</strong>와의 실시간 AI 맞춤 공고를 제공합니다.
         </div>
 
         <div className="flex justify-end gap-2 pt-3 border-t border-[#E5E7EB]">

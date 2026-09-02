@@ -11,6 +11,8 @@ import { POSTING_TYPE_LABEL } from '@/constants/domain';
 
 const ACCENT = '#059669';
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
+
 function SectionTitle({ children, color = ACCENT }) {
   return (
     <h3 className="flex items-center gap-2 text-[14px] font-bold text-[#1F2328] mb-3">

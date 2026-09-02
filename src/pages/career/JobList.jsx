@@ -8,6 +8,8 @@ import { useCommonCode } from '@/hooks/useCommonCode';
 const ACCENT = '#059669';
 const PAGE_SIZE = 10;
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
+
 function calculateDDay(endDateStr) {
   if (!endDateStr) return { label: '상시', urgent: false };
   const today = new Date();

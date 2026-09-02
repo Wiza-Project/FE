@@ -6,6 +6,8 @@ import { getMyJobScraps, toggleJobScrap } from '@/api/career';
 const ACCENT = '#059669';
 const PAGE_SIZE = 10;
 
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
+
 // D-Day 계산 헬퍼
 function calculateDDay(endDateStr) {
   if (!endDateStr) return { diffDays: null, label: '상시', urgent: false };
