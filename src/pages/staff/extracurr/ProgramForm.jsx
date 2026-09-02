@@ -4,13 +4,13 @@ import { Button, FileUpload, StatusBadge, Tabs, toast } from '@/components/commo
 import {
   createProgram,
   fetchCompetencyOptions,
+  fetchMileagePolicyPreview,
   fetchProgramDetailAdmin,
   updateProgram,
   uploadProgramOperationPlan,
 } from '@/api/programs';
 import { ApiError } from '@/api/client';
 import { useCommonCode } from '@/hooks/useCommonCode';
-import { MILEAGE_POLICY_OPTIONS } from '@/data/programOptions';
 import { formatDate } from '@/utils/date';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
@@ -64,7 +64,7 @@ function Field({ label, required, error, htmlFor, children }) {
   );
 }
 
-function TextInput({ id, value, onChange, placeholder = '', error, maxLength }) {
+function TextInput({ id, value, onChange, placeholder = '', error, maxLength, disabled }) {
   return (
     <input
       id={id}
@@ -72,7 +72,9 @@ function TextInput({ id, value, onChange, placeholder = '', error, maxLength }) 
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       maxLength={maxLength}
-      className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+      disabled={disabled}
+      aria-invalid={!!error}
+      className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors disabled:bg-[#F3F4F6] disabled:text-[#9AA0A6] disabled:cursor-not-allowed ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
 }
@@ -105,7 +107,10 @@ function NumberInput({ id, value, onChange, min = 0, max, placeholder = '', erro
   );
 }
 
-/** 백엔드 FK(operatingUnitCodeId 등)를 받는 select. options는 {id, label}[] 형태. */
+/**
+ * 백엔드 FK(operatingUnitCodeId 등)를 받는 select. options는 {id, label, active?}[] 형태.
+ * active가 false인 옵션은 비활성 표시(회색 텍스트 + "(비활성)" 접미사)만 하고 선택은 계속 허용한다.
+ */
 function IdSelect({ id, value, onChange, options, placeholder = '선택하세요', error, disabled }) {
   return (
     <select
@@ -117,8 +122,12 @@ function IdSelect({ id, value, onChange, options, placeholder = '선택하세요
     >
       <option value="">{placeholder}</option>
       {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.label}
+        <option
+          key={o.id}
+          value={o.id}
+          className={o.active === false ? 'text-[#9AA0A6]' : undefined}
+        >
+          {o.active === false ? `${o.label} (비활성)` : o.label}
         </option>
       ))}
     </select>
@@ -139,17 +148,57 @@ function DateInput({ id, value, onChange, error, ariaLabel }) {
   );
 }
 
+function TimeInput({ id, value, onChange, error, ariaLabel }) {
+  return (
+    <input
+      id={id}
+      type="time"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+      aria-invalid={!!error}
+      className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+    />
+  );
+}
+
+/** 2택 라디오 그룹. 옵션이 항상 2개뿐인 날짜/장소 입력 방식 선택에 사용한다. */
+function SessionRadioGroup({ name, options, value, onChange, ariaLabel }) {
+  return (
+    <div role="radiogroup" aria-label={ariaLabel} className="flex items-center gap-4">
+      {options.map((opt) => (
+        <label
+          key={opt.value}
+          className="flex items-center gap-1.5 text-[12px] text-[#1F2328] cursor-pointer"
+        >
+          <input
+            type="radio"
+            name={name}
+            checked={value === opt.value}
+            onChange={() => onChange(opt.value)}
+            className="w-3.5 h-3.5 accent-[#374151]"
+          />
+          {opt.label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 // ─── 회차(세션) 카드 ──────────────────────────────────────────────────────────
 
 /**
  * @param {Object} props
  * @param {number} props.index 0-based 배열 위치. 표시 라벨("n회차")과 sessionNo는 여기서 파생된다.
- * @param {{localId: string|number, sessionName: string, startsAt: string, endsAt: string, location: string}} props.session
+ * @param {{localId: string|number, sessionName: string, dateMode: 'RANGE'|'SINGLE', startsAt: string, startsAtTime: string, endsAt: string, endsAtTime: string, locationType: 'DIRECT_INPUT'|'SAME_AS_PREVIOUS', location: string}} props.session
  * @param {(patch: Object) => void} props.onChange
  * @param {() => void} props.onRemove
  * @param {boolean} props.removable
  * @param {boolean} [props.startsAtError]
  * @param {boolean} [props.endsAtError]
+ * @param {boolean} [props.startsAtTimeError]
+ * @param {boolean} [props.endsAtTimeError]
+ * @param {boolean} [props.locationError]
  */
 function SessionCard({
   index,
@@ -159,7 +208,11 @@ function SessionCard({
   removable,
   startsAtError,
   endsAtError,
+  startsAtTimeError,
+  endsAtTimeError,
+  locationError,
 }) {
+  const isSingle = session.dateMode === 'SINGLE';
   return (
     <div className="border border-[#E5E7EB] rounded-[8px] p-4 bg-white">
       <div className="flex items-center justify-between mb-3">
@@ -174,42 +227,122 @@ function SessionCard({
           </button>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
-          <Field label="회차명" htmlFor={`session-${session.localId}-name`}>
-            <TextInput
-              id={`session-${session.localId}-name`}
-              value={session.sessionName}
-              onChange={(v) => onChange({ sessionName: v })}
-              placeholder="예) 1주차 오리엔테이션"
-              maxLength={200}
-            />
-          </Field>
-        </div>
-        <Field label="시작 ~ 종료" required>
-          <div className="flex items-center gap-2">
-            <DateInput
-              value={session.startsAt}
-              onChange={(v) => onChange({ startsAt: v })}
-              ariaLabel={`${index + 1}회차 시작일`}
-              error={startsAtError}
-            />
-            <span className="text-[12px] text-[#9AA0A6]">~</span>
-            <DateInput
-              value={session.endsAt}
-              onChange={(v) => onChange({ endsAt: v })}
-              ariaLabel={`${index + 1}회차 종료일`}
-              error={endsAtError}
-            />
-          </div>
+      <div className="flex flex-col gap-4">
+        <Field label="회차명" htmlFor={`session-${session.localId}-name`}>
+          <TextInput
+            id={`session-${session.localId}-name`}
+            value={session.sessionName}
+            onChange={(v) => onChange({ sessionName: v })}
+            placeholder="예) 1주차 오리엔테이션"
+            maxLength={200}
+          />
         </Field>
-        <Field label="장소" htmlFor={`session-${session.localId}-location`}>
+
+        <Field label="날짜 설정" required>
+          <SessionRadioGroup
+            name={`date-mode-${session.localId}`}
+            ariaLabel={`${index + 1}회차 날짜 설정`}
+            value={session.dateMode}
+            onChange={(v) =>
+              onChange(v === 'SINGLE' ? { dateMode: v, endsAt: session.startsAt } : { dateMode: v })
+            }
+            options={[
+              { value: 'RANGE', label: '기간설정' },
+              { value: 'SINGLE', label: '단일일자설정' },
+            ]}
+          />
+        </Field>
+
+        {isSingle ? (
+          <Field label="날짜" required htmlFor={`session-${session.localId}-date`}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <DateInput
+                id={`session-${session.localId}-date`}
+                value={session.startsAt}
+                onChange={(v) => onChange({ startsAt: v, endsAt: v })}
+                ariaLabel={`${index + 1}회차 날짜`}
+                error={startsAtError}
+              />
+              <TimeInput
+                value={session.startsAtTime}
+                onChange={(v) => onChange({ startsAtTime: v })}
+                ariaLabel={`${index + 1}회차 시작 시각`}
+                error={startsAtTimeError}
+              />
+              <span className="text-[12px] text-[#9AA0A6]">~</span>
+              <TimeInput
+                value={session.endsAtTime}
+                onChange={(v) => onChange({ endsAtTime: v })}
+                ariaLabel={`${index + 1}회차 종료 시각`}
+                error={endsAtTimeError}
+              />
+            </div>
+          </Field>
+        ) : (
+          <Field label="시작 ~ 종료" required>
+            <div className="flex items-center gap-2 flex-wrap">
+              <DateInput
+                value={session.startsAt}
+                onChange={(v) => onChange({ startsAt: v })}
+                ariaLabel={`${index + 1}회차 시작일`}
+                error={startsAtError}
+              />
+              <TimeInput
+                value={session.startsAtTime}
+                onChange={(v) => onChange({ startsAtTime: v })}
+                ariaLabel={`${index + 1}회차 시작 시각`}
+                error={startsAtTimeError}
+              />
+              <span className="text-[12px] text-[#9AA0A6]">~</span>
+              <DateInput
+                value={session.endsAt}
+                onChange={(v) => onChange({ endsAt: v })}
+                ariaLabel={`${index + 1}회차 종료일`}
+                error={endsAtError}
+              />
+              <TimeInput
+                value={session.endsAtTime}
+                onChange={(v) => onChange({ endsAtTime: v })}
+                ariaLabel={`${index + 1}회차 종료 시각`}
+                error={endsAtTimeError}
+              />
+            </div>
+          </Field>
+        )}
+
+        <Field
+          label="장소"
+          htmlFor={`session-${session.localId}-location`}
+          error={locationError}
+          required={session.locationType === 'DIRECT_INPUT'}
+        >
+          {index > 0 && (
+            <div className="mb-2">
+              <SessionRadioGroup
+                name={`location-type-${session.localId}`}
+                ariaLabel={`${index + 1}회차 장소 입력 방식`}
+                value={session.locationType}
+                onChange={(v) =>
+                  onChange({
+                    locationType: v,
+                    location: v === 'SAME_AS_PREVIOUS' ? '' : session.location,
+                  })
+                }
+                options={[
+                  { value: 'DIRECT_INPUT', label: '직접입력' },
+                  { value: 'SAME_AS_PREVIOUS', label: '전회차와 동일' },
+                ]}
+              />
+            </div>
+          )}
           <TextInput
             id={`session-${session.localId}-location`}
             value={session.location}
             onChange={(v) => onChange({ location: v })}
             placeholder="예) 학생회관 3층 세미나실"
             maxLength={300}
+            error={locationError}
+            disabled={session.locationType === 'SAME_AS_PREVIOUS'}
           />
         </Field>
       </div>
@@ -218,16 +351,35 @@ function SessionCard({
 }
 
 function emptySession(localId) {
-  return { localId, sessionName: '', startsAt: '', endsAt: '', location: '' };
+  return {
+    localId,
+    sessionName: '',
+    dateMode: 'RANGE',
+    startsAt: '',
+    startsAtTime: '',
+    endsAt: '',
+    endsAtTime: '',
+    locationType: 'DIRECT_INPUT',
+    location: '',
+  };
+}
+
+// 1회차는 "전회차와 동일"을 선택할 대상이 없으므로 항상 DIRECT_INPUT이어야 한다.
+// 프리페치 데이터나 회차 삭제로 인덱스 0이 바뀌는 경우 모두 이 정규화를 거친다.
+function normalizeFirstSession(list) {
+  if (list.length === 0 || list[0].locationType === 'DIRECT_INPUT') return list;
+  const [first, ...rest] = list;
+  return [{ ...first, locationType: 'DIRECT_INPUT' }, ...rest];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** 'YYYY-MM-DD' → 자정 기준 UTC ISO 문자열(Instant). 4개 날짜를 모두 같은 기준으로 변환해야
- * 백엔드의 "모집종료 ≤ 운영시작" 규칙이 같은 날짜 입력에서도 자연스럽게 성립한다. */
-function toInstant(dateStr) {
+/** 'YYYY-MM-DD' (+ 선택적 'HH:mm') → UTC ISO 문자열(Instant). 시각을 생략하면 자정으로 채운다.
+ * 4개 날짜를 모두 같은 기준으로 변환해야 백엔드의 "모집종료 ≤ 운영시작" 규칙이 같은 날짜
+ * 입력에서도 자연스럽게 성립한다. */
+function toInstant(dateStr, timeStr) {
   if (!dateStr) return null;
-  return new Date(`${dateStr}T00:00:00Z`).toISOString();
+  return new Date(`${dateStr}T${timeStr || '00:00'}:00Z`).toISOString();
 }
 
 function getDetailErrorMessage(error) {
@@ -282,7 +434,7 @@ const TABS = [
 /**
  * 비교과 프로그램 등록/수정 폼. ProgramRegisterRequestDTO/ProgramUpdateRequestDTO(백엔드)에
  * 맞춘 5개 탭으로 구성: 기본정보 / 모집·운영·정원 / 회차 관리 / 역량·정책 / 첨부.
- * 수정 모드는 GET /admin/programs/{id}로 상세를 받아와 프리필한 뒤 PUT으로 저장한다.
+ * 수정 모드는 GET /staff/programs/{id}로 상세를 받아와 프리필한 뒤 PUT으로 저장한다.
  * 회차(장소 포함)는 등록/수정 요청 바디의 `sessions` 배열로 함께 전송되며, 최소 1개가
  * 없거나 카드의 시작/종료일이 비어있으면 저장을 막고 토스트로 안내한다(백엔드는 회차가
  * 아예 없을 때 P022(PROGRAM_SESSION_REQUIRED)로 거부하며, 이 경우도 동일하게 토스트 처리).
@@ -315,10 +467,13 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   const [sessions, setSessions] = useState(() => (isEdit ? [] : [emptySession('new-1')]));
   // 시작/종료일이 비어있는 카드의 localId — SessionCard에 빨간 테두리로 표시하기 위함
   const [sessionFieldErrors, setSessionFieldErrors] = useState(new Set());
+  // 당일 시각 부분 입력/순서 오류가 있는 카드의 localId — 시각 입력란에 빨간 테두리로 표시
+  const [sessionTimeErrors, setSessionTimeErrors] = useState(new Set());
+  // 직접입력인데 장소가 비어있는 카드의 localId
+  const [sessionLocationErrors, setSessionLocationErrors] = useState(new Set());
 
   // 역량·정책
   const [competencyId, setCompetencyId] = useState('');
-  const [mileagePolicyId, setMileagePolicyId] = useState('');
   const [completionRate, setCompletionRate] = useState(80);
 
   // Validation / submit state
@@ -340,17 +495,34 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     enabled: isEdit,
   });
 
+  // 수정 모드에서는 상세조회 완료(=competencyId 확정) 전까지 대기했다가, 확정된 id를
+  // includeCompetencyId로 넘겨 비활성 상태라도 현재 값이 옵션에 포함되도록 한다.
+  // 등록 모드는 기존과 동일하게 파라미터 없이 즉시 호출한다.
+  const competencyIncludeId = isEdit ? detailData?.competencyId : undefined;
+
   const {
     data: competencyData,
-    isLoading: competencyLoading,
+    isPending: competencyLoading,
     isError: competencyErrored,
   } = useQuery({
-    queryKey: ['competencyOptions'],
-    queryFn: fetchCompetencyOptions,
+    queryKey: isEdit
+      ? ['competencyOptions', 'edit', competencyIncludeId]
+      : ['competencyOptions', 'create'],
+    queryFn: () => fetchCompetencyOptions({ includeCompetencyId: competencyIncludeId }),
+    enabled: isEdit ? !!detailData : true,
   });
+  // 활성 목록에는 없지만 기존 프로그램이 참조 중인(비활성화된) 값을 셀렉트에 표시하기 위해
+  // 상세 응답의 원본 id/label을 옵션 끝에 병합한다. (역량은 BE가 includeCompetencyId로
+  // 현재 값을 직접 포함해 내려주므로 이 병합 로직을 타지 않는다 — 분류/부서에서만 계속 사용.)
+  const mergeCurrentOption = (options, currentId, currentLabel) =>
+    isEdit && currentId != null && !options.some((o) => o.id === currentId)
+      ? [...options, { id: currentId, label: currentLabel }]
+      : options;
+
   const competencyOptions = (competencyData ?? []).map((c) => ({
     id: c.competencyId,
     label: c.competencyName,
+    active: c.active,
   }));
   const competencyPlaceholder = competencyLoading
     ? '불러오는 중…'
@@ -363,7 +535,24 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     isLoading: programTypeLoading,
     isError: programTypeErrored,
   } = useCommonCode('PROGRAM_TYPE');
-  const programTypeOptions = programTypeCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
+  const programTypeOptions = mergeCurrentOption(
+    programTypeCodes.map((c) => ({ id: c.codeId, label: c.codeName })),
+    detailData?.programTypeCodeId,
+    detailData?.programTypeCodeName,
+  );
+
+  // 등록 모드에서만 사용 — 아직 저장 전이라 매핑된 정책을 알 수 없으므로 프로그램 유형
+  // 선택값이 바뀔 때마다 미리보기 API로 실시간 조회한다. 수정 모드는 detailData에 이미
+  // 매핑된 정책이 내려오므로 이 조회를 쓰지 않는다.
+  const {
+    data: mileagePreview,
+    isFetching: mileagePreviewLoading,
+    isError: mileagePreviewErrored,
+  } = useQuery({
+    queryKey: ['mileagePolicyPreview', programTypeCodeId],
+    queryFn: () => fetchMileagePolicyPreview(Number(programTypeCodeId)),
+    enabled: !isEdit && !!programTypeCodeId,
+  });
 
   const {
     data: departmentCodes = [],
@@ -371,7 +560,11 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     isError: departmentErrored,
     refetch: refetchDepartments,
   } = useCommonCode('DEPARTMENT');
-  const departmentOptions = departmentCodes.map((c) => ({ id: c.codeId, label: c.codeName }));
+  const departmentOptions = mergeCurrentOption(
+    departmentCodes.map((c) => ({ id: c.codeId, label: c.codeName })),
+    detailData?.operatingUnitCodeId,
+    detailData?.operatingUnitCodeName,
+  );
 
   // 수정 모드 프리필에 필요한 옵션 조회가 실패했거나(에러) 로딩이 끝났는데도 비어 있으면,
   // prefilled가 영원히 false로 남아 로딩 화면에 갇히므로 별도 상태로 구분해 재시도 UI를 보여준다.
@@ -386,8 +579,8 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
         programTypeOptions.length === 0 ||
         departmentOptions.length === 0));
 
-  // 수정 모드 프리필: 상세조회 + 역량/분류/부서 옵션 목록이 모두 준비되면 한 번만 채운다
-  // (역량·분류·부서는 상세 응답이 라벨만 주므로 옵션 목록에서 이름이 일치하는 id로 역매핑한다).
+  // 수정 모드 프리필: 상세조회 + 역량/분류/부서 옵션 목록이 모두 준비되면 한 번만 채운다.
+  // 역량·분류·부서는 상세 응답의 원본 id를 그대로 쓴다(옵션 목록은 셀렉트 표시용).
   useEffect(() => {
     if (!isEdit || prefilled || !detailData) return;
     if (
@@ -405,58 +598,46 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     setOpE(formatDate(detailData.operationEndsAt));
     setCapacity(detailData.capacity ?? '');
     setCompletionRate(detailData.completionRate != null ? Number(detailData.completionRate) : 80);
-    setMileagePolicyId(
-      detailData.mileagePolicyId != null ? String(detailData.mileagePolicyId) : '',
-    );
     setExistingFileName(detailData.fileName ?? null);
 
-    const competencyMatch = competencyOptions.find((o) => o.label === detailData.competencyName);
-    if (competencyMatch) {
-      setCompetencyId(String(competencyMatch.id));
-    } else if (detailData.competencyName) {
-      toast(
-        `기존 핵심역량('${detailData.competencyName}')을 목록에서 찾지 못했습니다. 다시 선택해 주세요.`,
-        'error',
-      );
+    if (detailData.competencyId != null) {
+      setCompetencyId(String(detailData.competencyId));
     }
-
-    const programTypeMatch = programTypeOptions.find(
-      (o) => o.label === detailData.programTypeCodeName,
-    );
-    if (programTypeMatch) {
-      setProgramTypeCodeId(String(programTypeMatch.id));
-    } else if (detailData.programTypeCodeName) {
-      toast(
-        `기존 프로그램분류('${detailData.programTypeCodeName}')를 목록에서 찾지 못했습니다. 다시 선택해 주세요.`,
-        'error',
-      );
+    if (detailData.programTypeCodeId != null) {
+      setProgramTypeCodeId(String(detailData.programTypeCodeId));
     }
-
-    const departmentMatch = departmentOptions.find(
-      (o) => o.label === detailData.operatingUnitCodeName,
-    );
-    if (departmentMatch) {
-      setOperatingUnitCodeId(String(departmentMatch.id));
-    } else if (detailData.operatingUnitCodeName) {
-      toast(
-        `기존 운영부서('${detailData.operatingUnitCodeName}')를 목록에서 찾지 못했습니다. 다시 선택해 주세요.`,
-        'error',
-      );
+    if (detailData.operatingUnitCodeId != null) {
+      setOperatingUnitCodeId(String(detailData.operatingUnitCodeId));
     }
 
     // 기존 회차가 없는 프로그램(과거 이력)도 화면은 항상 최소 1장으로 시작한다.
     const existingSessions = Array.isArray(detailData.sessions) ? detailData.sessions : [];
-    setSessions(
+    const nextSessions =
       existingSessions.length > 0
-        ? existingSessions.map((s, i) => ({
-            localId: s.programSessionId ?? `existing-${i}`,
-            sessionName: s.sessionName ?? '',
-            startsAt: formatDate(s.startsAt),
-            endsAt: formatDate(s.endsAt),
-            location: s.location ?? '',
-          }))
-        : [emptySession('new-1')],
-    );
+        ? existingSessions.map((s, i) => {
+            const startDate = formatDate(s.startsAt);
+            const endDate = formatDate(s.endsAt);
+            // 시각이 정확히 00:00이면 과거 데이터가 시간 미입력(자정 디폴트)이었을 가능성이 높아
+            // 빈 값으로 프리필해 불필요한 "00:00" 노출을 피한다. 단, 한쪽만 자정이고
+            // 다른 쪽은 실제 시각이 있다면 자정 쪽도 사용자가 명시적으로 입력한 값일 수 있으므로
+            // 두 값이 모두 자정일 때만 지운다.
+            const startTime = s.startsAt ? s.startsAt.slice(11, 16) : '';
+            const endTime = s.endsAt ? s.endsAt.slice(11, 16) : '';
+            const bothMidnight = startTime === '00:00' && endTime === '00:00';
+            return {
+              localId: s.programSessionId ?? `existing-${i}`,
+              sessionName: s.sessionName ?? '',
+              dateMode: startDate === endDate ? 'SINGLE' : 'RANGE',
+              startsAt: startDate,
+              startsAtTime: bothMidnight ? '' : startTime,
+              endsAt: endDate,
+              endsAtTime: bothMidnight ? '' : endTime,
+              locationType: s.locationType ?? 'DIRECT_INPUT',
+              location: s.location ?? '',
+            };
+          })
+        : [emptySession('new-1')];
+    setSessions(normalizeFirstSession(nextSessions));
 
     setPrefilled(true);
   }, [isEdit, prefilled, detailData, competencyOptions, programTypeOptions, departmentOptions]);
@@ -485,6 +666,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     onSuccess: () => {
       toast('수정 내용이 저장되었습니다.', 'success');
       queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
+      queryClient.invalidateQueries({ queryKey: ['adminProgramDetail', programId] });
       onSubmit();
     },
     onError: handleSubmitError,
@@ -546,16 +728,43 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       toast('최소 1회차는 입력해야합니다.', 'error');
       return false;
     }
-    const invalidSessions = sessions.filter(
-      (s) => !s.startsAt || !s.endsAt || (s.startsAt && s.endsAt && s.startsAt > s.endsAt),
-    );
-    if (invalidSessions.length > 0) {
-      setSessionFieldErrors(new Set(invalidSessions.map((s) => s.localId)));
+    const dateErrorSessions = [];
+    const timeErrorSessions = [];
+    sessions.forEach((s) => {
+      const endDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
+      if (!s.startsAt || !endDate || s.startsAt > endDate) {
+        dateErrorSessions.push(s);
+        return;
+      }
+      if (s.startsAt === endDate) {
+        if (Boolean(s.startsAtTime) !== Boolean(s.endsAtTime)) {
+          timeErrorSessions.push(s);
+        } else if (s.startsAtTime && s.endsAtTime && s.startsAtTime >= s.endsAtTime) {
+          timeErrorSessions.push(s);
+        }
+      }
+    });
+    if (dateErrorSessions.length > 0 || timeErrorSessions.length > 0) {
+      setSessionFieldErrors(new Set(dateErrorSessions.map((s) => s.localId)));
+      setSessionTimeErrors(new Set(timeErrorSessions.map((s) => s.localId)));
       setActiveTab('sessions');
-      toast('모든 회차의 시작일과 종료일을 확인해 주세요.', 'error');
+      toast('모든 회차의 날짜(및 시각)를 확인해 주세요.', 'error');
       return false;
     }
     setSessionFieldErrors(new Set());
+    setSessionTimeErrors(new Set());
+
+    const missingLocationSessions = sessions.filter(
+      (s) => s.locationType === 'DIRECT_INPUT' && !s.location.trim(),
+    );
+    if (missingLocationSessions.length > 0) {
+      setSessionLocationErrors(new Set(missingLocationSessions.map((s) => s.localId)));
+      setActiveTab('sessions');
+      toast('모든 회차의 장소를 입력하거나 "전회차와 동일"을 선택해 주세요.', 'error');
+      return false;
+    }
+    setSessionLocationErrors(new Set());
+
     if (newErrors.competencyId) {
       setActiveTab('policy');
       toast('연계 핵심역량을 선택해 주세요.', 'error');
@@ -588,7 +797,6 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     operatingUnitCodeId: Number(operatingUnitCodeId),
     programTypeCodeId: Number(programTypeCodeId),
     competencyId: Number(competencyId),
-    mileagePolicyId: mileagePolicyId ? Number(mileagePolicyId) : null,
     programName: name.trim(),
     description: description.trim() || null,
     recruitmentStartsAt: toInstant(recruitStart),
@@ -597,13 +805,17 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     operationEndsAt: toInstant(operEnd),
     capacity: Number(capacity),
     completionRate,
-    sessions: sessions.map((s, i) => ({
-      sessionNo: i + 1,
-      sessionName: s.sessionName.trim() || null,
-      startsAt: toInstant(s.startsAt),
-      endsAt: toInstant(s.endsAt),
-      location: s.location.trim() || null,
-    })),
+    sessions: sessions.map((s, i) => {
+      const endsAtDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
+      return {
+        sessionNo: i + 1,
+        sessionName: s.sessionName.trim() || null,
+        startsAt: toInstant(s.startsAt, s.startsAtTime),
+        endsAt: toInstant(endsAtDate, s.endsAtTime),
+        locationType: s.locationType,
+        location: s.locationType === 'DIRECT_INPUT' ? s.location.trim() || null : null,
+      };
+    }),
   });
 
   const handleRegister = () => {
@@ -625,7 +837,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
   };
 
   const removeSession = (localId) => {
-    setSessions((prev) => (prev.length <= 1 ? prev : prev.filter((s) => s.localId !== localId)));
+    setSessions((prev) =>
+      prev.length <= 1 ? prev : normalizeFirstSession(prev.filter((s) => s.localId !== localId)),
+    );
   };
 
   // 수정 모드: 상세조회가 끝나고 옵션 목록까지 프리필됐을 때만 폼을 보여준다.
@@ -883,6 +1097,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                 removable={sessions.length > 1}
                 startsAtError={sessionFieldErrors.has(s.localId)}
                 endsAtError={sessionFieldErrors.has(s.localId)}
+                startsAtTimeError={sessionTimeErrors.has(s.localId)}
+                endsAtTimeError={sessionTimeErrors.has(s.localId)}
+                locationError={sessionLocationErrors.has(s.localId)}
               />
             ))}
             <button
@@ -922,14 +1139,39 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               />
             </Field>
 
-            <Field label="마일리지 정책" htmlFor="mileagePolicyId">
-              <IdSelect
-                id="mileagePolicyId"
-                value={mileagePolicyId}
-                onChange={setMileagePolicyId}
-                options={MILEAGE_POLICY_OPTIONS}
-                placeholder="선택 안함"
-              />
+            <Field label="마일리지 정책" htmlFor="mileagePolicyPreview">
+              {isEdit ? (
+                <>
+                  <div
+                    id="mileagePolicyPreview"
+                    className="h-9 flex items-center text-[13px] text-[#1F2328]"
+                  >
+                    {detailData?.mileageActivityName
+                      ? `${detailData.mileageActivityName} · ${detailData.mileagePoints}점 적립`
+                      : '매핑된 마일리지 정책이 없습니다'}
+                  </div>
+                  <p className="mt-1 text-[11px] text-[#9AA0A6]">
+                    프로그램 유형을 변경하면 저장 시 정책이 자동으로 바뀌어 적용됩니다.
+                  </p>
+                </>
+              ) : (
+                <div
+                  id="mileagePolicyPreview"
+                  role="status"
+                  aria-live="polite"
+                  className="h-9 flex items-center text-[13px] text-[#1F2328]"
+                >
+                  {!programTypeCodeId
+                    ? '프로그램 유형을 먼저 선택하세요'
+                    : mileagePreviewLoading
+                      ? '불러오는 중…'
+                      : mileagePreviewErrored
+                        ? '정책 정보를 불러오지 못했습니다'
+                        : mileagePreview?.mileageActivityName
+                          ? `${mileagePreview.mileageActivityName} · ${mileagePreview.mileagePoints}점 적립`
+                          : '매핑된 마일리지 정책이 없습니다'}
+                </div>
+              )}
             </Field>
 
             <div className="col-span-2">
@@ -968,19 +1210,34 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           hidden={activeTab !== 'attachment'}
         >
           <Field label="운영계획서 첨부 (선택)">
-            {isEdit && existingFileName && !existingFileRemoved && fileGroupId == null && (
-              <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#F9FAFB] rounded-[6px] border border-[#E5E7EB]">
-                <span className="text-[12px] text-[#1F2328] flex-1 truncate">
-                  {existingFileName}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setExistingFileRemoved(true)}
-                  className="text-[11px] font-semibold text-[#CF222E] hover:underline"
-                >
-                  삭제
-                </button>
-              </div>
+            {isEdit && existingFileName && fileGroupId == null && (
+              existingFileRemoved ? (
+                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#FFF8F8] rounded-[6px] border border-[#F3D6D8]">
+                  <span className="text-[12px] text-[#CF222E] flex-1 truncate line-through">
+                    {existingFileName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExistingFileRemoved(false)}
+                    className="text-[11px] font-semibold text-[#2563EB] hover:underline"
+                  >
+                    되돌리기
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#F9FAFB] rounded-[6px] border border-[#E5E7EB]">
+                  <span className="text-[12px] text-[#1F2328] flex-1 truncate">
+                    {existingFileName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExistingFileRemoved(true)}
+                    className="text-[11px] font-semibold text-[#CF222E] hover:underline"
+                  >
+                    삭제
+                  </button>
+                </div>
+              )
             )}
             <FileUpload
               accept=".pdf"
@@ -1006,7 +1263,7 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
               }}
             />
             {uploadMutation.isPending ? (
-              <p className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
+              <p role="status" className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
             ) : (
               isEdit &&
               !existingFileRemoved && (

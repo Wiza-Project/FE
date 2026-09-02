@@ -29,7 +29,7 @@ function getErrorMessage(error, fallback) {
 
 /**
  * 교직원 FAQ 등록/수정 폼.
- * POST /api/admin/boards/FAQ/posts, PATCH /api/admin/boards/FAQ/posts/{postId}
+ * POST /api/staff/boards/FAQ/posts, PATCH /api/staff/boards/FAQ/posts/{postId}
  *
  * @param {Object} props
  * @param {number} [props.postId] 편집 대상. 있으면 수정 모드.

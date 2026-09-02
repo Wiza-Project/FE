@@ -41,7 +41,11 @@ function addKstDays(date, days) {
 }
 
 function getKstWeekStart(date = getKstCalendarDate()) {
-  return addKstDays(date, -((date.getUTCDay() + 6) % 7));
+  // 월요일=0 ... 토요일=5, 일요일=6. 그리드는 평일(월~금)만 보여주므로
+  // 주말에 진입하면 이번 주 평일은 모두 지난 날짜다. 이때는 차주 월요일을 시작으로 잡는다.
+  const weekday = (date.getUTCDay() + 6) % 7;
+  const mondayOffset = weekday >= 5 ? 7 - weekday : -weekday;
+  return addKstDays(date, mondayOffset);
 }
 
 function dateLabel(date) {

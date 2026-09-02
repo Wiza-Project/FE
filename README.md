@@ -159,7 +159,7 @@ try {
 ```js
 import { downloadFile } from '@/api/client';
 
-await downloadFile('/admin/career/statistics/excel', '취업통계.xlsx');
+await downloadFile('/staff/career/statistics/excel', '취업통계.xlsx');
 ```
 
 ### 4. 백엔드 스펙은 Swagger에서 확인

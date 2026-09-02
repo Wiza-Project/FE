@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
-import { USER_TYPE } from '@/constants/domain';
-import { UNIVERSITY_NAME, SEMESTERS } from '@/data/dummy';
+import { USER_TYPE, USER_ROLE, DEPARTMENT } from '@/constants/domain';
+import { UNIVERSITY_NAME } from '@/data/dummy';
 import { toast } from '@/components/common';
+import { fetchMyAcademicRecord } from '@/api/students';
+import { useCommonCode } from '@/hooks/useCommonCode';
 import {
   useHasUnreadNotifications,
   useMarkAllNotificationsRead,
@@ -215,10 +218,21 @@ export default function PortalShell() {
   const navigate = useNavigate();
 
   const portal = user?.userType === USER_TYPE.STAFF ? 'staff' : 'student';
-  const nav = PORTAL_NAVS[portal];
+  const isCounselor = (user?.roleCodes ?? []).includes(USER_ROLE.COUNSELOR);
+  const isProgramStaff = user?.department === DEPARTMENT.NON_SUBJECT_OPERATION;
+  // 교직원이지만 상담사(ST200)가 아니면 '상담 운영'을, 비교과운영부서(D200)가 아니면
+  // '비교과 운영'을 숨긴다. 이는 UX용 1차 숨김이고 실제 진입 차단은 라우트의
+  // CounselOperationRoute, 최종 권한은 BE가 판단한다.
+  const nav =
+    portal === 'staff'
+      ? NAV_STAFF.filter(
+          (item) =>
+            (item.key !== 'counseling' || isCounselor) &&
+            (item.key !== 'extracurr' || isProgramStaff),
+        )
+      : PORTAL_NAVS[portal];
   const portalColor = PORTAL_COLORS[portal];
 
-  const [semester, setSemester] = useState(SEMESTERS[1] ?? SEMESTERS[0]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const notifRef = useRef(null);
@@ -240,6 +254,41 @@ export default function PortalShell() {
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [notifOpen, profileOpen]);
+
+  // 학생 소속 학과(전공)는 로그인 응답(user)에 없고 학적 조회 API에만 있다 — MyPage.jsx와
+  // 동일한 쿼리 키를 써서 캐시를 공유한다(같은 화면 안에서는 중복 요청되지 않는다).
+  const { data: studentProfile } = useQuery({
+    queryKey: ['dashboardProfile'],
+    queryFn: fetchMyAcademicRecord,
+    enabled: portal === 'student',
+  });
+
+  // 상단바 학년도·학기 선택 — 어떤 화면도 이 값을 읽어 데이터를 필터링하지 않는 장식용
+  const { data: academicYears = [] } = useCommonCode('ACADEMIC_YEAR');
+  const { data: semesterCodesRaw = [] } = useCommonCode('SEMESTER');
+  const minAcademicYear = portal === 'student' ? studentProfile?.curriculumYear : null;
+  const visibleAcademicYears = [...academicYears]
+    .filter((y) => minAcademicYear == null || Number(y.code) >= minAcademicYear)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const visibleSemesterCodes = semesterCodesRaw
+    .filter((s) => s.code === 'SPRING' || s.code === 'FALL')
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const [semesterYear, setSemesterYear] = useState('');
+  const [semesterCode, setSemesterCode] = useState('');
+  useEffect(() => {
+    if (visibleAcademicYears.length === 0) return;
+    // studentProfile(입학연도)이 academicYears보다 늦게 도착하면 이미 골라둔
+    // semesterYear가 필터링 후 목록에서 빠질 수 있다 — 그 경우엔 다시 골라야 한다.
+    if (semesterYear && visibleAcademicYears.some((y) => y.code === semesterYear)) return;
+    const fallback = visibleAcademicYears.find((y) => y.code === '2026') ?? visibleAcademicYears[0];
+    setSemesterYear(fallback.code);
+  }, [semesterYear, visibleAcademicYears]);
+  useEffect(() => {
+    if (semesterCode || visibleSemesterCodes.length === 0) return;
+    const fallback = visibleSemesterCodes.find((s) => s.code === 'SPRING') ?? visibleSemesterCodes[0];
+    setSemesterCode(fallback.code);
+  }, [semesterCode, visibleSemesterCodes]);
 
   // 뱃지(안읽음 존재 여부)는 상시 폴링, 목록은 드롭다운이 열렸을 때만 요청합니다.
   const { data: hasUnread = false } = useHasUnreadNotifications();
@@ -281,6 +330,14 @@ export default function PortalShell() {
 
   const userInitial = user?.name?.[0] ?? '?';
 
+  // 학생: 학번 · 전공(학적 조회 API). 교직원: 소속 부서명(로그인 응답).
+  const identityLine =
+    portal === 'student'
+      ? [studentProfile?.studentId ?? user?.loginId, studentProfile?.majorName]
+          .filter(Boolean)
+          .join(' · ')
+      : (user?.departmentName ?? user?.department ?? '');
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#F6F8FA]">
       {/* Sidebar */}
@@ -318,11 +375,11 @@ export default function PortalShell() {
                 {isActive && (
                   <span
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
-                    style={{ background: item.accent ?? portalColor }}
+                    style={{ background: item.accent ?? '#9CA3AF' }}
                   />
                 )}
                 <span
-                  style={{ color: isActive ? (item.accent ?? portalColor) : undefined }}
+                  style={{ color: isActive ? (item.accent ?? '#9CA3AF') : undefined }}
                   className="transition-colors"
                 >
                   <item.icon />
@@ -348,11 +405,7 @@ export default function PortalShell() {
               <div className="text-[13px] font-semibold text-white truncate">
                 {user?.name ?? '알 수 없음'}
               </div>
-              <div className="text-[11px] text-[#6B7280] truncate">
-                {portal === 'student'
-                  ? `${user?.studentNo ?? ''} · ${user?.department ?? ''}`
-                  : (user?.department ?? '')}
-              </div>
+              <div className="text-[11px] text-[#6B7280] truncate">{identityLine}</div>
             </div>
             <button
               onClick={handleLogout}
@@ -373,18 +426,41 @@ export default function PortalShell() {
             {UNIVERSITY_NAME} &rsaquo; {PORTAL_LABELS[portal]}
           </div>
 
-          {/* Semester selector */}
-          <select
-            value={semester}
-            onChange={(e) => setSemester(e.target.value)}
-            className="h-8 px-3 pr-7 text-[12px] font-semibold text-[#1F2328] bg-[#F6F8FA] border border-[#E5E7EB] rounded-[6px] appearance-none cursor-pointer focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"
-          >
-            {SEMESTERS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+          {/* Semester selector: 학년도 · 학기 별도 드롭다운 */}
+          <div className="flex items-center gap-1.5">
+            <select
+              aria-label="학년도 선택"
+              value={semesterYear}
+              onChange={(e) => setSemesterYear(e.target.value)}
+              className="h-8 px-3 pr-7 text-[12px] font-semibold text-[#1F2328] bg-[#F6F8FA] border border-[#E5E7EB] rounded-[6px] appearance-none cursor-pointer focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"
+            >
+              {visibleAcademicYears.length === 0 ? (
+                <option value="">학년도</option>
+              ) : (
+                visibleAcademicYears.map((y) => (
+                  <option key={y.code} value={y.code}>
+                    {y.codeName}
+                  </option>
+                ))
+              )}
+            </select>
+            <select
+              aria-label="학기 선택"
+              value={semesterCode}
+              onChange={(e) => setSemesterCode(e.target.value)}
+              className="h-8 px-3 pr-7 text-[12px] font-semibold text-[#1F2328] bg-[#F6F8FA] border border-[#E5E7EB] rounded-[6px] appearance-none cursor-pointer focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"
+            >
+              {visibleSemesterCodes.length === 0 ? (
+                <option value="">학기</option>
+              ) : (
+                visibleSemesterCodes.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.codeName}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
 
           {/* Notification bell */}
           <div className="relative" ref={notifRef}>
@@ -475,9 +551,7 @@ export default function PortalShell() {
                   <div className="text-[13px] font-bold text-[#1F2328]">
                     {user?.name ?? '알 수 없음'}
                   </div>
-                  <div className="text-[12px] text-[#656D76]">
-                    {user?.studentNo ?? user?.loginId} · {user?.department ?? ''}
-                  </div>
+                  <div className="text-[12px] text-[#656D76]">{identityLine}</div>
                 </div>
                 {PROFILE_MENU.map((item, i) => (
                   <button

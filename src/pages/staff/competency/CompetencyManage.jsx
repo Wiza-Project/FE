@@ -1,20 +1,25 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { Button, ConfirmDialog, Drawer, EmptyState, toast } from '@/components/common';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, ConfirmDialog, Drawer, EmptyState, SkeletonLoader, toast } from '@/components/common';
 import {
   changeCompetencyActiveStatus,
   changeCompetencyDisplayOrder,
+  fetchAdminCompetencies,
   registerCompetency,
 } from '@/api/competency';
 import { ApiError } from '@/api/client';
+
+const COMPETENCIES_QUERY_KEY = ['adminCompetencies'];
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // BE CompetencyService.MAX_TOP_LEVEL_COMPETENCY 와 동일 (핵심역량은 최대 6개, 서버에서도 검증함)
 const MAX_CORE_COMPETENCY = 6;
 
-// 축순서 후보 (BE CompetencyDisplayOrderRequest @Min(1) @Max(6))
-const AXIS_ORDERS = Array.from({ length: MAX_CORE_COMPETENCY }, (_, i) => i + 1);
+// 축순서 후보. DB·BE(CompetencyDisplayOrderRequest @Min(100) @Max(600))의 실제 값은
+// 100·200·…·600이고 역량 코드 C100~C600과 1:1로 대응한다. 화면에는 1~6으로 축약해 보여준다.
+const AXIS_ORDERS = Array.from({ length: MAX_CORE_COMPETENCY }, (_, i) => (i + 1) * 100);
+const axisLabel = (displayOrder) => displayOrder / 100;
 
 // ─── Toggle ──────────────────────────────────────────────────────────────────
 
@@ -36,9 +41,33 @@ function Toggle({ checked, onChange, disabled }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function CompetencyManage() {
-  // TODO: GET /api/admin/competencies 목록 조회 API 나오면 useQuery로 교체 (담당: 어드민 파트).
-  // 그 전까지는 등록한 것만 세션 내에서 보이고 새로고침하면 사라짐.
-  const [cores, setCores] = useState([]);
+  const queryClient = useQueryClient();
+
+  const {
+    data: competencyList,
+    isLoading: coresLoading,
+    isError: coresErrored,
+  } = useQuery({
+    queryKey: COMPETENCIES_QUERY_KEY,
+    queryFn: fetchAdminCompetencies,
+  });
+
+  // BE CompetencyResponse → 화면 표시용 형태. 하위역량 수는 미개발이라 0, 문항 수는 이 API가
+  // 주지 않아 미확인(null)으로 두고 표에서 '—'로 표시한다(0으로 표시하면 문항이 있는 역량도 0건처럼 보임).
+  const cores = (competencyList ?? []).map((c) => ({
+    id: c.competencyId,
+    code: c.competencyCode,
+    name: c.competencyName,
+    nameEn: c.englishName ?? '',
+    subCount: 0,
+    qCount: null,
+    axisOrder: c.displayOrder,
+    active: c.active,
+  }));
+
+  const invalidateCompetencies = () =>
+    queryClient.invalidateQueries({ queryKey: COMPETENCIES_QUERY_KEY });
+
   const [selected, setSelected] = useState(null);
   const [deactTarget, setDeactTarget] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -60,21 +89,19 @@ export default function CompetencyManage() {
   const orderMutation = useMutation({
     mutationFn: changeCompetencyDisplayOrder,
     onSuccess: (updatedList) => {
-      setCores((prev) =>
-        prev.map((c) => {
-          const updated = updatedList.find((u) => u.competencyId === c.id);
-          return updated ? { ...c, axisOrder: updated.displayOrder } : c;
-        }),
-      );
+      invalidateCompetencies();
       // 서버가 스왑 시 [이동한 역량, 자리를 내준 역량] 2개를, 빈 슬롯 이동 시 1개만 반환한다.
       const [mover, swapped] = updatedList;
       if (swapped) {
         toast(
-          `'${mover.competencyName}' ↔ '${swapped.competencyName}' 축순서가 서로 맞바뀌었습니다 (${mover.displayOrder}번 ↔ ${swapped.displayOrder}번).`,
+          `'${mover.competencyName}' ↔ '${swapped.competencyName}' 축순서가 서로 맞바뀌었습니다 (${axisLabel(mover.displayOrder)}번 ↔ ${axisLabel(swapped.displayOrder)}번).`,
           'success',
         );
       } else {
-        toast(`'${mover.competencyName}' 축순서가 ${mover.displayOrder}번으로 변경되었습니다.`, 'success');
+        toast(
+          `'${mover.competencyName}' 축순서가 ${axisLabel(mover.displayOrder)}번으로 변경되었습니다.`,
+          'success',
+        );
       }
     },
     onError: (e) => {
@@ -90,9 +117,7 @@ export default function CompetencyManage() {
   const activeMutation = useMutation({
     mutationFn: changeCompetencyActiveStatus,
     onSuccess: (updated) => {
-      setCores((prev) =>
-        prev.map((c) => (c.id === updated.competencyId ? { ...c, active: updated.active } : c)),
-      );
+      invalidateCompetencies();
       if (!updated.active) {
         toast(`'${updated.competencyName}' 역량이 비활성 처리되었습니다.`, 'info');
       }
@@ -129,19 +154,7 @@ export default function CompetencyManage() {
   const registerMutation = useMutation({
     mutationFn: registerCompetency,
     onSuccess: (created) => {
-      setCores((prev) => [
-        ...prev,
-        {
-          id: created.competencyId,
-          code: created.competencyCode,
-          name: created.competencyName,
-          nameEn: created.englishName ?? '',
-          subCount: 0,
-          qCount: 0,
-          axisOrder: created.displayOrder,
-          active: created.active,
-        },
-      ]);
+      invalidateCompetencies();
       setDrawerOpen(false);
       toast(`'${created.competencyName}' 역량이 ${created.competencyCode}(으)로 등록되었습니다.`, 'success');
     },
@@ -216,7 +229,26 @@ export default function CompetencyManage() {
                 </tr>
               </thead>
               <tbody>
-                {orderedCores.map((c) => (
+                {coresLoading ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-6">
+                      <SkeletonLoader rows={4} cols={8} />
+                    </td>
+                  </tr>
+                ) : coresErrored ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-10 text-center text-[12px] text-[#CF222E]">
+                      핵심역량 목록을 불러오지 못했습니다.
+                    </td>
+                  </tr>
+                ) : orderedCores.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-10 text-center text-[12px] text-[#9AA0A6]">
+                      등록된 핵심역량이 없습니다. 위 버튼으로 등록해 주세요.
+                    </td>
+                  </tr>
+                ) : (
+                  orderedCores.map((c) => (
                   <tr
                     key={c.code}
                     onClick={() => setSelected(c.code)}
@@ -231,7 +263,7 @@ export default function CompetencyManage() {
                     <td className="px-3 py-3 font-bold text-[#1F2328]">{c.name}</td>
                     <td className="px-3 py-3 text-[#9AA0A6] text-[11px]">{c.nameEn}</td>
                     <td className="px-3 py-3 text-center text-[#656D76]">{c.subCount}</td>
-                    <td className="px-3 py-3 text-center text-[#656D76]">{c.qCount}</td>
+                    <td className="px-3 py-3 text-center text-[#656D76]">{c.qCount ?? '—'}</td>
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <select
                         value={c.axisOrder}
@@ -244,7 +276,7 @@ export default function CompetencyManage() {
                           const takenBy = cores.find((x) => x.id !== c.id && x.axisOrder === o);
                           return (
                             <option key={o} value={o}>
-                              {takenBy ? `${o} (${takenBy.code} 교체)` : o}
+                              {takenBy ? `${axisLabel(o)} (${takenBy.code} 교체)` : axisLabel(o)}
                             </option>
                           );
                         })}
@@ -267,7 +299,8 @@ export default function CompetencyManage() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -387,7 +420,7 @@ export default function CompetencyManage() {
       >
         <div className="flex flex-col gap-5">
           <p className="text-[11px] text-[#9AA0A6] bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
-            역량 코드는 등록 순서에 따라 자동 채번(C1~C6)되고, 축순서도 등록 순서로 자동
+            역량 코드는 등록 순서에 따라 자동 채번(C100~C600)되고, 축순서도 등록 순서로 자동
             지정됩니다. 등록 후 이 화면에 표시됩니다.
           </p>
           {[

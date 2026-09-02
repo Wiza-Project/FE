@@ -1,7 +1,29 @@
 import { apiClient } from '@/api/client';
 
 /**
- * 핵심역량 등록 (SCR-A01). 역량코드(C1~C6)와 축순서는 서버가 자동 결정한다.
+ * 핵심역량 선택 목록 (드롭다운용). GET /api/competencies
+ * 활성 최상위 역량만 축순서대로 내려온다 — 교직원 문항 관리의 역량 선택 등에서 사용.
+ *
+ * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, displayOrder: number}[]>}
+ */
+export const fetchCompetencyList = async () => {
+  const { data } = await apiClient.get('/competencies');
+  return data;
+};
+
+/**
+ * 핵심역량 관리 목록 (SCR-A01). GET /api/staff/competencies
+ * 드롭다운 목록과 달리 비활성 역량까지 축순서대로 모두 내려오며, 영문명·설명·사용여부를 포함한다.
+ *
+ * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, englishName: string|null, description: string|null, displayOrder: number, active: boolean}[]>}
+ */
+export const fetchAdminCompetencies = async () => {
+  const { data } = await apiClient.get('/staff/competencies');
+  return data;
+};
+
+/**
+ * 핵심역량 등록 (SCR-A01). 역량코드(C100~C600)와 축순서는 서버가 자동 결정한다.
  *
  * @param {Object} params
  * @param {string} params.competencyName
@@ -10,7 +32,7 @@ import { apiClient } from '@/api/client';
  * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, englishName: string|null, description: string|null, displayOrder: number, active: boolean}>}
  */
 export const registerCompetency = async ({ competencyName, englishName, description }) => {
-  const { data } = await apiClient.post('/admin/competencies', {
+  const { data } = await apiClient.post('/staff/competencies', {
     competencyName,
     englishName,
     description,
@@ -19,19 +41,19 @@ export const registerCompetency = async ({ competencyName, englishName, descript
 };
 
 /**
- * 축순서 지정 (SCR-A01). 결과 화면 방사형 차트에 표시될 위치를 1~6 중에서 지정한다.
- * 지정하려는 번호가 비어 있으면 해당 역량만 변경된다. 다른 역량이 이미 그 번호를
- * 쓰고 있으면 서버가 두 역량의 축순서를 서로 맞바꾼다(스왑) — 이 경우 응답 배열에
- * 두 역량이 모두 담겨 온다.
+ * 축순서 지정 (SCR-A01). 결과 화면 방사형 차트에 표시될 위치를 지정한다. 값은 100·200·…·600
+ * (역량 코드 C100~C600과 1:1 대응, 교직원 화면에는 1~6으로 축약 표시). 지정하려는 번호가
+ * 비어 있으면 해당 역량만 변경된다. 다른 역량이 이미 그 번호를 쓰고 있으면 서버가 두 역량의
+ * 축순서를 서로 맞바꾼다(스왑) — 이 경우 응답 배열에 두 역량이 모두 담겨 온다.
  *
  * @param {Object} params
  * @param {number} params.competencyId
- * @param {number} params.displayOrder 1~6
+ * @param {number} params.displayOrder 100·200·…·600 (BE CompetencyDisplayOrderRequest @Min(100) @Max(600))
  * @returns {Promise<Array<{competencyId: number, competencyCode: string, competencyName: string, englishName: string|null, description: string|null, displayOrder: number, active: boolean}>>}
  *   빈 슬롯으로 이동한 경우 1개, 스왑이 일어난 경우 2개([이동한 역량, 자리를 내준 역량] 순서)
  */
 export const changeCompetencyDisplayOrder = async ({ competencyId, displayOrder }) => {
-  const { data } = await apiClient.patch(`/admin/competencies/${competencyId}/display-order`, {
+  const { data } = await apiClient.patch(`/staff/competencies/${competencyId}/display-order`, {
     displayOrder,
   });
   return data;
@@ -46,7 +68,7 @@ export const changeCompetencyDisplayOrder = async ({ competencyId, displayOrder 
  * @returns {Promise<{competencyId: number, competencyCode: string, competencyName: string, englishName: string|null, description: string|null, displayOrder: number, active: boolean}>}
  */
 export const changeCompetencyActiveStatus = async ({ competencyId, active }) => {
-  const { data } = await apiClient.patch(`/admin/competencies/${competencyId}/active-status`, {
+  const { data } = await apiClient.patch(`/staff/competencies/${competencyId}/active-status`, {
     active,
   });
   return data;
@@ -71,7 +93,7 @@ export const uploadAssessmentQuestions = async (file) => {
   formData.append('file', file);
   // apiClient 기본 Content-Type(application/json)을 지워야 axios가 FormData를 JSON으로
   // 직렬화하지 않고, 브라우저가 boundary를 붙인 multipart/form-data로 보낸다.
-  const { data } = await apiClient.post('/admin/assessment-questions/upload', formData, {
+  const { data } = await apiClient.post('/staff/assessment-questions/upload', formData, {
     headers: { 'Content-Type': undefined },
   });
   return data;
@@ -98,7 +120,7 @@ export const uploadAssessmentQuestions = async (file) => {
  * @returns {Promise<AssessmentQuestion[]>}
  */
 export const fetchAssessmentQuestions = async (competencyId) => {
-  const { data } = await apiClient.get('/admin/assessment-questions', {
+  const { data } = await apiClient.get('/staff/assessment-questions', {
     params: { competencyId },
   });
   return data;
@@ -111,7 +133,7 @@ export const fetchAssessmentQuestions = async (competencyId) => {
  * @returns {Promise<AssessmentQuestion>}
  */
 export const fetchAssessmentQuestion = async (questionId) => {
-  const { data } = await apiClient.get(`/admin/assessment-questions/${questionId}`);
+  const { data } = await apiClient.get(`/staff/assessment-questions/${questionId}`);
   return data;
 };
 
@@ -152,7 +174,7 @@ export const editAssessmentQuestion = async ({
   reverse,
   responseOptions,
 }) => {
-  const { data } = await apiClient.patch(`/admin/assessment-questions/${questionId}`, {
+  const { data } = await apiClient.patch(`/staff/assessment-questions/${questionId}`, {
     questionText,
     reverse,
     responseOptions,
@@ -172,6 +194,17 @@ export const editAssessmentQuestion = async ({
  * @property {Object|null} targetCondition null이면 전체 학생 대상
  * @property {string} roundStatus
  */
+
+/**
+ * 진단 회차 목록 (SCR-A04). GET /api/staff/assessment-rounds
+ * 개설된 회차를 최근순으로 모두 내려준다 — 회차/응시/결과 통계 탭이 공유한다.
+ *
+ * @returns {Promise<AssessmentRound[]>}
+ */
+export const fetchAssessmentRounds = async () => {
+  const { data } = await apiClient.get('/staff/assessment-rounds');
+  return data;
+};
 
 /**
  * 진단 회차 등록 (SCR-A04). 학년도·학기·진단구분(사전/사후)+응시기간+응시대상을 한 번에
@@ -197,7 +230,7 @@ export const registerAssessmentRound = async ({
   endsAt,
   targetCondition,
 }) => {
-  const { data } = await apiClient.post('/admin/assessment-rounds', {
+  const { data } = await apiClient.post('/staff/assessment-rounds', {
     assessmentName,
     academicYear,
     semesterCode,
@@ -234,7 +267,7 @@ export const updateAssessmentRound = async ({
   endsAt,
   targetCondition,
 }) => {
-  const { data } = await apiClient.patch(`/admin/assessment-rounds/${roundId}`, {
+  const { data } = await apiClient.patch(`/staff/assessment-rounds/${roundId}`, {
     assessmentName,
     academicYear,
     semesterCode,
@@ -259,7 +292,7 @@ export const updateAssessmentRound = async ({
  * }>}
  */
 export const fetchAssessmentAttendance = async (roundId) => {
-  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/attendance`);
+  const { data } = await apiClient.get(`/staff/assessment-rounds/${roundId}/attendance`);
   return data;
 };
 
@@ -288,7 +321,7 @@ export const fetchAssessmentAttendance = async (roundId) => {
  *   totalElements: number, totalPages: number, first: boolean, last: boolean}>}
  */
 export const fetchAssessmentNonParticipants = async (roundId, params) => {
-  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/non-participants`, {
+  const { data } = await apiClient.get(`/staff/assessment-rounds/${roundId}/non-participants`, {
     params,
   });
   return data;
@@ -303,7 +336,7 @@ export const fetchAssessmentNonParticipants = async (roundId, params) => {
  * @returns {Promise<{sentUserIds: number[], failedCount: number}>}
  */
 export const notifyAssessmentNonParticipants = async (roundId, userIds) => {
-  const { data } = await apiClient.post(`/admin/assessment-rounds/${roundId}/non-participants/notify`, {
+  const { data } = await apiClient.post(`/staff/assessment-rounds/${roundId}/non-participants/notify`, {
     userIds,
   });
   return data;
@@ -340,7 +373,7 @@ export const notifyAssessmentNonParticipants = async (roundId, userIds) => {
  * }>}
  */
 export const fetchAssessmentDistribution = async (roundId, groupBy) => {
-  const { data } = await apiClient.get(`/admin/assessment-rounds/${roundId}/stats/distribution`, {
+  const { data } = await apiClient.get(`/staff/assessment-rounds/${roundId}/stats/distribution`, {
     params: { groupBy },
   });
   return data;
@@ -578,6 +611,27 @@ export const fetchRecommendedPrograms = async (attemptId) => {
   const { data } = await apiClient.get(
     `/students/assessment-attempts/${attemptId}/recommended-programs`,
   );
+  return data;
+};
+
+/**
+ * 응시 가능한 진단 회차 목록. GET /api/students/assessment-rounds
+ * 지금이 응시기간 안이면서 로그인 학생이 대상 조건에 해당하는 회차만 최근 개설순으로 내려온다.
+ * 이미 응시를 시작한 회차는 attemptId/attemptStatus가 채워진다(없으면 둘 다 null).
+ *
+ * @returns {Promise<{
+ *   assessmentRoundId: number,
+ *   assessmentName: string,
+ *   assessmentType: 'PRE'|'POST',
+ *   startsAt: string,
+ *   endsAt: string,
+ *   questionCount: number,
+ *   attemptId: number|null,
+ *   attemptStatus: string|null,
+ * }[]>}
+ */
+export const fetchStudentAssessmentRounds = async () => {
+  const { data } = await apiClient.get('/students/assessment-rounds');
   return data;
 };
 
