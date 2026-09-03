@@ -371,6 +371,10 @@ export default function CounselingApply({ onComplete, onBack }) {
 
   const createReservationMutation = useMutation({
     mutationFn: createCounselingReservation,
+    // requestContent(상담 희망 내용)는 학생의 민감한 원문이라 완료 후 mutation cache에
+    // 남겨두지 않는다. gcTime: 0으로 즉시 회수 대상이 되게 하고, 아래 onSettled에서
+    // reset()으로 관찰자·variables를 확실히 분리한다.
+    gcTime: 0,
     onSuccess: (reservation) => {
       setCreatedReservation(reservation);
       queryClient.invalidateQueries({ queryKey: ['counselingReservations'] });
@@ -397,6 +401,12 @@ export default function CounselingApply({ onComplete, onBack }) {
         setSelectedSlot(null);
         queryClient.invalidateQueries({ queryKey: ['availableSchedules'] });
       }
+    },
+    // onError는 여러 지점에서 return하는 async 콜백이라, 정리 시점을 한 곳(onSettled)으로
+    // 모은다. onSettled는 onSuccess/onError가 완료(await 포함)된 뒤에 실행되므로, 화면 처리가
+    // 다 끝난 뒤에만 mutation cache에서 신청 내용을 제거한다.
+    onSettled: () => {
+      createReservationMutation.reset();
     },
   });
 
