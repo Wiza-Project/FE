@@ -82,6 +82,20 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
   const pendingRef = useRef(new Set());
   const [pendingIds, setPendingIds] = useState(() => new Set());
 
+  // Q013(재학생 아님): 응시 시작 후 학적이 바뀐 경우. 저장·제출 어느 쪽에서 처음 걸리든 한 번만
+  // 안내하고 진단 안내 화면으로 벗어난다. 여러 문항 저장이 동시에 실패해도(버스트) 토스트·이탈이
+  // 중복되지 않도록 플래그로 가드하고, 저장·제출 onError가 같은 코드를 쓰도록 헬퍼로 묶는다.
+  const enrollmentLostRef = useRef(false);
+  const bounceIfEnrollmentLost = (e) => {
+    if (!(e instanceof ApiError) || e.code !== 'Q013') return false;
+    if (!enrollmentLostRef.current) {
+      enrollmentLostRef.current = true;
+      toast(e.message, 'error');
+      onBack();
+    }
+    return true;
+  };
+
   const saveMutation = useMutation({
     mutationFn: saveAssessmentResponse,
     // 낙관적 갱신 직전 값을 answersRef에서 동기적으로 캡처해 실패 시 정확히 그 값으로 되돌릴 수 있게 한다.
@@ -102,6 +116,7 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
         }
         return next;
       });
+      if (bounceIfEnrollmentLost(e)) return;
       toast(e instanceof ApiError ? e.message : '응답 저장에 실패했습니다.', 'error');
     },
     onSettled: (data, error, variables) => {
@@ -165,6 +180,7 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
       onComplete();
     },
     onError: (e) => {
+      if (bounceIfEnrollmentLost(e)) return;
       // Q005(미응답 문항 있음): 서버 기준 미응답 문항을 로컬 answers에서도 제거해 화면이
       // "이미 응답됨"으로 잘못 표시되지 않게 한 뒤, 그 문항으로 자동 이동한다.
       if (e instanceof ApiError && e.code === 'Q005' && Array.isArray(e.data)) {
