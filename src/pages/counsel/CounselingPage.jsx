@@ -40,7 +40,7 @@ function CounselingHome({ onApply, onMy, onStress }) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-[960px]">
         <button
           onClick={onApply}
-          className="bg-white rounded-[10px] border-2 border-[#E5E7EB] p-6 text-left hover:border-[#0891B2] hover:shadow-[0_4px_16px_rgba(8,145,178,0.1)] transition-all group"
+          className="flex flex-col items-start bg-white rounded-[10px] border-2 border-[#E5E7EB] p-6 text-left hover:border-[#0891B2] hover:shadow-[0_4px_16px_rgba(8,145,178,0.1)] transition-all group"
         >
           <div
             className="w-10 h-10 rounded-[8px] flex items-center justify-center mb-4"
@@ -66,7 +66,7 @@ function CounselingHome({ onApply, onMy, onStress }) {
 
         <button
           onClick={onMy}
-          className="bg-white rounded-[10px] border-2 border-[#E5E7EB] p-6 text-left hover:border-[#0891B2] hover:shadow-[0_4px_16px_rgba(8,145,178,0.1)] transition-all group"
+          className="flex flex-col items-start bg-white rounded-[10px] border-2 border-[#E5E7EB] p-6 text-left hover:border-[#0891B2] hover:shadow-[0_4px_16px_rgba(8,145,178,0.1)] transition-all group"
         >
           <div
             className="w-10 h-10 rounded-[8px] flex items-center justify-center mb-4"
@@ -92,7 +92,7 @@ function CounselingHome({ onApply, onMy, onStress }) {
 
         <button
           onClick={onStress}
-          className="bg-white rounded-[10px] border-2 border-[#E5E7EB] p-6 text-left hover:border-[#0891B2] hover:shadow-[0_4px_16px_rgba(8,145,178,0.1)] transition-all group"
+          className="flex flex-col items-start bg-white rounded-[10px] border-2 border-[#E5E7EB] p-6 text-left hover:border-[#0891B2] hover:shadow-[0_4px_16px_rgba(8,145,178,0.1)] transition-all group"
         >
           <div
             className="w-10 h-10 rounded-[8px] flex items-center justify-center mb-4"
