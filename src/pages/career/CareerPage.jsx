@@ -43,6 +43,7 @@ export default function CareerPage() {
           <JobList
             onDetail={handleSelectJob}
             onBookmarks={() => setJobView('bookmarks')}
+            onGoPreference={() => setSection('prep')}
           />
         );
       case 'bookmarks':
@@ -57,6 +58,7 @@ export default function CareerPage() {
           <JobList
             onDetail={handleSelectJob}
             onBookmarks={() => setJobView('bookmarks')}
+            onGoPreference={() => setSection('prep')}
           />
         );
     }

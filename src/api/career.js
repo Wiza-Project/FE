@@ -179,7 +179,16 @@ export const getMyJobApplications = (params) =>
  * @returns {Promise<JobPreference>}
  */
 export const getJobPreference = () =>
-  apiClient.get('/students/career/preference').then((res) => res.data);
+  apiClient
+    .get('/students/career/preference')
+    .then((res) => res.data?.data || res.data)
+    .catch((err) => {
+      // 등록된 희망조건이 없는 경우(404 C002) 정상적인 빈 상태(null)로 반환 처리
+      if (err?.response?.status === 404) {
+        return null;
+      }
+      throw err;
+    });
 
 /**
  * [학생] 취업 희망조건 등록 및 수정
