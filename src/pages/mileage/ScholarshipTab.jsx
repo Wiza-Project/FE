@@ -9,6 +9,7 @@ import {
   StatTile,
   toast,
 } from '@/components/common';
+import { useAuthStore } from '@/stores/authStore';
 import { SEMESTER_LABELS } from '@/utils/academicPeriod';
 
 const ACCENT = '#D97706';
@@ -77,6 +78,19 @@ const formatPeriod = (academicYear, semesterCode) => (
   `${academicYear ?? '-'}학년도 ${formatSemester(semesterCode)}`
 );
 
+const isSemesterBenefit = (item) => item.semesterCode != null && item.semesterCode !== 'ALL';
+const isCumulativeBenefit = (item) => /4년|누적/.test(item.benefitName ?? '');
+
+const getDisabledReason = (item, { period, isFourthYear }) => {
+  if (isCumulativeBenefit(item)) {
+    return isFourthYear ? null : '4학년(입학 4년차)만 신청할 수 있는 장학금입니다.';
+  }
+  if (!isSemesterBenefit(item)) {
+    return period?.semesterCode === 'FALL' ? null : '2학기에만 신청할 수 있는 장학금입니다.';
+  }
+  return null;
+};
+
 const getStatusLabel = (item) => {
   const status = item.applicationStatus ?? item.eligibilityStatus;
   return APPLICATION_STATUS_LABELS[status]
@@ -137,16 +151,20 @@ function CriteriaList({ criteriaData }) {
   );
 }
 
-function ScholarshipCard({ item, onSelect }) {
+function ScholarshipCard({ item, onSelect, disabledReason }) {
   const minimumPoints = Number(item.minimumPoints ?? 0);
   const currentPoints = Number(item.currentPoints ?? 0);
   const progress = minimumPoints > 0
     ? Math.min(100, Math.max(0, (currentPoints / minimumPoints) * 100))
     : 100;
   const shortagePoints = Number(item.shortagePoints ?? Math.max(0, minimumPoints - currentPoints));
+  const isDisabled = Boolean(disabledReason);
 
   return (
-    <article className="flex min-w-0 flex-col gap-4 rounded-[8px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+    <article
+      className={`flex min-w-0 flex-col gap-4 rounded-[8px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.04)] ${isDisabled ? 'opacity-60 grayscale' : ''}`}
+      title={disabledReason ?? undefined}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="mb-1 text-[10px] font-semibold text-[#9AA0A6]">
@@ -185,19 +203,15 @@ function ScholarshipCard({ item, onSelect }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-[#F3F4F6] pt-3 text-[11px] text-[#9AA0A6]">
-        <span>
-          신청기간 {item.applicationStartsAt ? formatDateTime(item.applicationStartsAt) : '상시'}
-          {' ~ '}
-          {item.applicationEndsAt ? formatDateTime(item.applicationEndsAt) : '마감 없음'}
-        </span>
+      <div className="flex items-center justify-end gap-3 border-t border-[#F3F4F6] pt-3">
         <Button
           size="sm"
-          variant={item.canApply ? 'primary' : 'outline'}
-          style={item.canApply ? { background: ACCENT } : undefined}
+          variant={item.canApply && !isDisabled ? 'primary' : 'outline'}
+          style={item.canApply && !isDisabled ? { background: ACCENT } : undefined}
           onClick={() => onSelect(item)}
+          disabled={isDisabled}
         >
-          {item.canApply ? '신청하기' : '상세 보기'}
+          {item.canApply && !isDisabled ? '신청하기' : '상세 보기'}
         </Button>
       </div>
     </article>
@@ -216,6 +230,7 @@ function ScholarshipCard({ item, onSelect }) {
  * @param {number|null} [props.currentPoints] 마일리지 대시보드에서 이미 조회한 현재 점수
  */
 export default function ScholarshipTab({ currentPoints = null }) {
+  const user = useAuthStore((state) => state.user);
   const [scholarships, setScholarships] = useState([]);
   const [scholarshipsLoading, setScholarshipsLoading] = useState(true);
   const [scholarshipsError, setScholarshipsError] = useState('');
@@ -319,6 +334,13 @@ export default function ScholarshipTab({ currentPoints = null }) {
   const historyRows = historyData?.content ?? [];
   const historyTotalPages = Math.max(1, historyData?.totalPages ?? 1);
 
+  const isFourthYear = useMemo(() => {
+    const loginId = user?.loginId ?? '';
+    const admissionYear = /^\d{4}/.test(loginId) ? Number(loginId.slice(0, 4)) : null;
+    return admissionYear != null && period?.academicYear != null
+      && (period.academicYear - admissionYear + 1) === 4;
+  }, [user, period]);
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -374,6 +396,9 @@ export default function ScholarshipTab({ currentPoints = null }) {
           <div className="flex items-center gap-2">
             <div className="h-4 w-1 rounded-full" style={{ background: ACCENT }} />
             <h3 className="text-[14px] font-bold text-[#1F2328]">장학금 기준</h3>
+            <span className="text-[11px] font-normal text-[#9AA0A6]">
+              학기, 연간, 4년 누적 장학금은 각각 2개의 선택지 중 하나만 신청 가능
+            </span>
           </div>
           <span className="text-[11px] text-[#9AA0A6]">총 {scholarships.length}건</span>
         </div>
@@ -394,6 +419,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
                   key={item.benefitPolicyId}
                   item={item}
                   onSelect={setSelectedScholarship}
+                  disabledReason={getDisabledReason(item, { period, isFourthYear })}
                 />
               ))}
             </div>
@@ -542,26 +568,13 @@ export default function ScholarshipTab({ currentPoints = null }) {
             </div>
 
             <section>
-              <h4 className="mb-2 text-[12px] font-bold text-[#1F2328]">신청 기간</h4>
-              <p className="rounded-[8px] border border-[#E5E7EB] px-3 py-2.5 text-[12px] text-[#656D76]">
-                {selectedScholarship.applicationStartsAt ? formatDateTime(selectedScholarship.applicationStartsAt) : '상시'}
-                {' ~ '}
-                {selectedScholarship.applicationEndsAt ? formatDateTime(selectedScholarship.applicationEndsAt) : '마감 없음'}
-              </p>
-            </section>
-
-            <section>
               <h4 className="mb-2 text-[12px] font-bold text-[#1F2328]">세부 지급 기준</h4>
               <CriteriaList criteriaData={selectedScholarship.criteriaData} />
             </section>
 
-            {selectedScholarship.canApply ? (
+            {selectedScholarship.canApply && (
               <p className="rounded-[8px] border border-[#BBF7D0] bg-[#F0FDF4] px-3 py-2.5 text-[11px] leading-relaxed text-[#166534]">
                 현재 기준을 충족했습니다. 신청 버튼을 누르면 현재 점수가 신청 이력에 저장됩니다.
-              </p>
-            ) : (
-              <p className="rounded-[8px] border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 text-[11px] leading-relaxed text-[#656D76]">
-                현재 상태에서는 신청할 수 없습니다. 신청 가능 여부는 장학금 정책과 현재 점수를 기준으로 백엔드가 판정합니다.
               </p>
             )}
           </div>
