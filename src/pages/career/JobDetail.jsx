@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader, Button, ConfirmDialog, toast } from '@/components/common';
+import { apiClient } from '@/api/client';
 import { 
   getJobPostingDetail, 
   applyJobPosting, 
@@ -44,6 +45,7 @@ export default function JobDetail({ jobId, onBack }) {
   const [portfolioUrl, setPortfolioUrl] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
+  const [posterUrl, setPosterUrl] = useState(null);
 
   // 공고 상세 조회 (TanStack Query)
   const { data: job, isLoading, isError } = useQuery({
@@ -51,6 +53,39 @@ export default function JobDetail({ jobId, onBack }) {
     queryFn: () => getJobPostingDetail(jobId),
     enabled: !!jobId,
   });
+
+  // img 태그는 메모리에만 보관하는 Bearer 토큰을 자동으로 보낼 수 없다.
+  // 인증 헤더가 붙는 apiClient로 이미지를 받아 Object URL로 렌더링한다.
+  useEffect(() => {
+    if (!job?.fileGroupId || !jobId) {
+      setPosterUrl(null);
+      return undefined;
+    }
+
+    let objectUrl = null;
+    let cancelled = false;
+
+    apiClient
+      .get(`/students/career/job-postings/${jobId}/poster`, { responseType: 'blob' })
+      .then(({ data }) => {
+        objectUrl = URL.createObjectURL(data);
+        if (!cancelled) {
+          setPosterUrl(objectUrl);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPosterUrl(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [job?.fileGroupId, jobId]);
 
   // 온라인 입사지원 Mutation
   const applyMutation = useMutation({
@@ -194,11 +229,15 @@ export default function JobDetail({ jobId, onBack }) {
               <div className="mt-4 pt-4 border-t border-[#F3F4F6]">
                 <p className="text-[12px] font-bold text-[#656D76] mb-2">📋 상세 채용 포스터</p>
                 <div className="border border-[#E5E7EB] rounded-[8px] p-2 bg-[#FAFAFA] flex justify-center">
-                  <img
-                    src={`/api/career/job-postings/posters/${job.fileGroupId}`}
-                    alt="채용공고 포스터"
-                    className="max-w-full h-auto rounded"
-                  />
+                  {posterUrl ? (
+                    <img
+                      src={posterUrl}
+                      alt="채용공고 포스터"
+                      className="max-w-full h-auto rounded"
+                    />
+                  ) : (
+                    <p className="py-4 text-[12px] text-[#656D76]">포스터를 불러오는 중이거나 표시할 수 없습니다.</p>
+                  )}
                 </div>
               </div>
             )}
