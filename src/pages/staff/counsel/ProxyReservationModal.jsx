@@ -93,8 +93,38 @@ export default function ProxyReservationModal({ open, onClose }) {
       });
   }, [proxySchedules]);
 
-  const lookupMutation = useMutation({ mutationFn: fetchCounselorStudentByUniversityNo });
-  const createProxyMutation = useMutation({ mutationFn: createCounselorProxyReservation });
+  // 학번(학생 식별정보)이 variables로 들어가므로, 조회가 끝나면 mutation cache에 남기지 않는다.
+  // 이 mutation은 per-call(mutate 두 번째 인자) 콜백만 쓰고 hook-level 콜백이 없어서, 여기서
+  // onSettled로 reset()을 걸면 실제 실행 순서상(hook-level 콜백 → dispatch → per-call 콜백)
+  // per-call 콜백보다 먼저 옵저버가 떨어져 나가 per-call 콜백 자체가 실행되지 않는다.
+  // 그래서 reset()은 handleLookupSubmit의 per-call onSuccess/onError 안, 화면 처리가 끝난
+  // 지점에서 직접 호출한다.
+  const lookupMutation = useMutation({ mutationFn: fetchCounselorStudentByUniversityNo, gcTime: 0 });
+  // [C-05] 캐시 무효화는 mutation-level 콜백에 둔다. 호출별(mutate 두 번째 인자) 콜백은 모달이
+  // 언마운트된 뒤 도착한 응답에서 실행되지 않으므로, 예약이 실제로 생성됐는데도 일정·회기
+  // 목록 캐시가 낡은 채 남을 수 있다. 모달 닫기·토스트 같은 화면 조작만 호출별 콜백에 남긴다.
+  // studentId·requestContent(학생 식별정보·신청 내용 원문)가 variables로 들어가므로, 완료 후
+  // mutation cache에 남기지 않는다. 이 hook-level onSuccess/onError는 캐시 무효화만 담당하고
+  // 화면 처리는 아래 per-call 콜백이 맡으므로, reset()도 lookupMutation과 같은 이유로 여기(hook
+  // -level onSettled)가 아니라 handleProxyCreateSubmit의 per-call onSuccess/onError 끝에서 부른다.
+  const createProxyMutation = useMutation({
+    mutationFn: createCounselorProxyReservation,
+    gcTime: 0,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SCHEDULE_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
+    },
+    onError: (mutationError) => {
+      if (!(mutationError instanceof ApiError)) return;
+      const { code } = mutationError;
+      if (code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
+        queryClient.invalidateQueries({ queryKey: SCHEDULE_QUERY_KEY });
+      } else if (code === COUNSELING_RESERVATION_ERROR_CODE.RESOURCE_NOT_FOUND) {
+        queryClient.invalidateQueries({ queryKey: TYPE_QUERY_KEY });
+        queryClient.invalidateQueries({ queryKey: SCHEDULE_QUERY_KEY });
+      }
+    },
+  });
 
   const closeProxyModal = () => {
     // 예약 생성 중에는 닫기를 막는다. 승인·배정·1회기가 만들어지는 도중에 모달을 닫으면
@@ -109,7 +139,11 @@ export default function ProxyReservationModal({ open, onClose }) {
     setRequestContent('');
     setContentError('');
     setSubmitError('');
+    // 두 mutation 모두 이미 자체 per-call 콜백의 finally에서 reset()하지만, 요청을 아예
+    // 보내지 않고 닫는 경로(예: 조회 전 취소)까지 방어적으로 한 번 더 정리한다. 이미 idle인
+    // mutation에 reset()을 불러도 아무 부작용이 없다.
     lookupMutation.reset();
+    createProxyMutation.reset();
     // 공용 Button은 forwardRef가 아니라 ref로 DOM에 닿지 않는다. id로 찾아 포커스를 돌리고,
     // 버튼이 화면에서 사라졌으면(라우트 이동 등) 아무 것도 하지 않는다.
     document.getElementById('proxyOpenButton')?.focus();
@@ -140,30 +174,40 @@ export default function ProxyReservationModal({ open, onClose }) {
     setUniversityNoError('');
     const session = proxySessionRef.current;
     lookupMutation.mutate(trimmed, {
+      // 화면 처리가 끝난 뒤에만 reset() 하도록 try/finally로 모든 return 분기를 감싼다.
+      // (finally는 각 return 직전에 실행되므로 분기마다 reset()을 따로 적을 필요가 없다)
       onSuccess: (student) => {
-        if (proxySessionRef.current !== session) return; // 이미 닫혔거나 학번이 바뀐 뒤 온 응답
-        setSelectedStudent(student);
+        try {
+          if (proxySessionRef.current !== session) return; // 이미 닫혔거나 학번이 바뀐 뒤 온 응답
+          setSelectedStudent(student);
+        } finally {
+          lookupMutation.reset();
+        }
       },
       onError: (mutationError) => {
-        if (proxySessionRef.current !== session) return;
-        if (!(mutationError instanceof ApiError)) {
-          setUniversityNoError('네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');
-          return;
+        try {
+          if (proxySessionRef.current !== session) return;
+          if (!(mutationError instanceof ApiError)) {
+            setUniversityNoError('네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');
+            return;
+          }
+          if (mutationError.code === COUNSELING_RESERVATION_ERROR_CODE.USER_NOT_FOUND) {
+            setUniversityNoError('학생을 찾을 수 없습니다.');
+            return;
+          }
+          if (mutationError.code === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
+            setUniversityNoError('학번 형식을 다시 확인해 주세요.');
+            return;
+          }
+          if (mutationError.code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
+            closeProxyModal();
+            toast('권한이 변경되어 대행 예약을 진행할 수 없습니다.', 'error');
+            return;
+          }
+          setUniversityNoError('조회 중 오류가 발생했습니다. 다시 시도해 주세요.');
+        } finally {
+          lookupMutation.reset();
         }
-        if (mutationError.code === COUNSELING_RESERVATION_ERROR_CODE.USER_NOT_FOUND) {
-          setUniversityNoError('학생을 찾을 수 없습니다.');
-          return;
-        }
-        if (mutationError.code === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
-          setUniversityNoError('학번 형식을 다시 확인해 주세요.');
-          return;
-        }
-        if (mutationError.code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
-          closeProxyModal();
-          toast('권한이 변경되어 대행 예약을 진행할 수 없습니다.', 'error');
-          return;
-        }
-        setUniversityNoError('조회 중 오류가 발생했습니다. 다시 시도해 주세요.');
       },
     });
   };
@@ -196,6 +240,9 @@ export default function ProxyReservationModal({ open, onClose }) {
       return;
     }
     setContentError('');
+    // 이 요청을 보낸 시점의 세션 번호를 기억한다 — 응답이 도착했을 때 모달이 이미 닫혔거나
+    // 학번이 바뀌었으면(proxySessionRef가 증가) 늦은 응답이 화면을 건드리지 않게 막는다.
+    const session = proxySessionRef.current;
     createProxyMutation.mutate(
       {
         studentId: selectedStudent.studentId,
@@ -204,50 +251,59 @@ export default function ProxyReservationModal({ open, onClose }) {
         requestContent: trimmedContent,
       },
       {
+        // 캐시 무효화는 위 mutation-level 콜백이 이미 처리한다. 여기서는 지금 이 모달이 아직
+        // 유효할 때만 필요한 화면 조작(닫기·토스트·입력 오류)만 한다.
+        // studentId·신청 내용은 요청이 끝나면 곧바로 지워야 하므로, 모든 return 분기가
+        // try/finally의 reset()을 거치게 해 화면 처리가 끝난 뒤에만 mutation cache에서 빠진다.
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: SCHEDULE_QUERY_KEY });
-          queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
-          closeProxyModal();
-          toast('예약을 확정하고 담당 상담사로 배정했습니다.', 'success');
+          try {
+            if (proxySessionRef.current !== session) return;
+            closeProxyModal();
+            toast('예약을 확정하고 담당 상담사로 배정했습니다.', 'success');
+          } finally {
+            createProxyMutation.reset();
+          }
         },
         onError: (mutationError) => {
-          if (!(mutationError instanceof ApiError)) {
-            setSubmitError('네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');
-            return;
+          try {
+            if (proxySessionRef.current !== session) return;
+            if (!(mutationError instanceof ApiError)) {
+              setSubmitError('네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');
+              return;
+            }
+            const { code } = mutationError;
+            if (code === COUNSELING_RESERVATION_ERROR_CODE.REQUIRED_CONSENT_NOT_AGREED) {
+              setSubmitError('학생이 현재 상담 개인정보 동의를 완료해야 예약할 수 있습니다.');
+              return;
+            }
+            if (code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
+              setSelectedScheduleId('');
+              setScheduleError('선택한 일정을 더 이상 사용할 수 없습니다. 목록을 새로고침했습니다. 다른 일정을 선택해 주세요.');
+              return;
+            }
+            if (code === COUNSELING_RESERVATION_ERROR_CODE.RESOURCE_NOT_FOUND) {
+              setSelectedScheduleId('');
+              setScheduleError('선택한 상담 유형이 더 이상 제공되지 않습니다. 목록을 새로고침했습니다. 다시 선택해 주세요.');
+              return;
+            }
+            if (code === COUNSELING_RESERVATION_ERROR_CODE.USER_NOT_FOUND) {
+              setSelectedStudent(null);
+              setUniversityNoError('학생을 찾을 수 없습니다. 학번을 다시 조회해 주세요.');
+              return;
+            }
+            if (code === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
+              setContentError('신청 내용은 공백을 제외하고 1~3,000자여야 합니다.');
+              return;
+            }
+            if (code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
+              closeProxyModal();
+              toast('권한이 변경되어 대행 예약을 진행할 수 없습니다.', 'error');
+              return;
+            }
+            setSubmitError('처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+          } finally {
+            createProxyMutation.reset();
           }
-          const { code } = mutationError;
-          if (code === COUNSELING_RESERVATION_ERROR_CODE.REQUIRED_CONSENT_NOT_AGREED) {
-            setSubmitError('학생이 현재 상담 개인정보 동의를 완료해야 예약할 수 있습니다.');
-            return;
-          }
-          if (code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
-            setSelectedScheduleId('');
-            queryClient.invalidateQueries({ queryKey: SCHEDULE_QUERY_KEY });
-            setScheduleError('선택한 일정을 더 이상 사용할 수 없습니다. 목록을 새로고침했습니다. 다른 일정을 선택해 주세요.');
-            return;
-          }
-          if (code === COUNSELING_RESERVATION_ERROR_CODE.RESOURCE_NOT_FOUND) {
-            setSelectedScheduleId('');
-            queryClient.invalidateQueries({ queryKey: TYPE_QUERY_KEY });
-            queryClient.invalidateQueries({ queryKey: SCHEDULE_QUERY_KEY });
-            setScheduleError('선택한 상담 유형이 더 이상 제공되지 않습니다. 목록을 새로고침했습니다. 다시 선택해 주세요.');
-            return;
-          }
-          if (code === COUNSELING_RESERVATION_ERROR_CODE.USER_NOT_FOUND) {
-            setSelectedStudent(null);
-            setUniversityNoError('학생을 찾을 수 없습니다. 학번을 다시 조회해 주세요.');
-            return;
-          }
-          if (code === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
-            setContentError('신청 내용은 공백을 제외하고 1~3,000자여야 합니다.');
-            return;
-          }
-          if (code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
-            closeProxyModal();
-            toast('권한이 변경되어 대행 예약을 진행할 수 없습니다.', 'error');
-            return;
-          }
-          setSubmitError('처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
         },
       },
     );

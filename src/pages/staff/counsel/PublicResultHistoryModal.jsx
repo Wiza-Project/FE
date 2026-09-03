@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/common';
+import { ApiError } from '@/api/client';
 import { counselorPublicResultHistoryQueryKey, getCounselorPublicResultHistory } from '@/api/counsel';
+import { COUNSELING_PUBLIC_RESULT_ERROR_CODE } from '@/constants/domain';
 import { formatKstDateTime } from './staffCounselingDate';
 import { getPublicResultErrorMessage } from './publicResultSupport';
 
@@ -44,7 +46,7 @@ function handleHistoryModalKeyDown(event, modalElement, onClose) {
  * 조회하고, 닫히면 이 컴포넌트가 직접 이력 캐시를 제거한다. 정정 사유·작성자는 담당(또는 과거
  * 담당) 상담사 본인에게만 보이며 비공개 상담 기록 원문은 다루지 않는다.
  */
-export default function PublicResultHistoryModal({ sessionId, open, onClose }) {
+export default function PublicResultHistoryModal({ sessionId, open, onClose, onResultUnavailable }) {
   const queryClient = useQueryClient();
   const historyContentRef = useRef(null);
 
@@ -62,6 +64,20 @@ export default function PublicResultHistoryModal({ sessionId, open, onClose }) {
     gcTime: 0,
     retry: false,
   });
+
+  // [S-05] 이력 조회 자체가 403/404면(정정 mutation과 동일한 접근 불가) 부모 Editor에 알려
+  // 결과 화면 전체를 정리하게 한다. 지금 열려 있는 모달의 오류일 때만 반응하고, 일반 네트워크
+  // 오류에서는 부모를 닫지 않는다(자식 오류 문구만 표시).
+  useEffect(() => {
+    if (!open || sessionId === null || !historyIsError) return;
+    if (
+      historyError instanceof ApiError &&
+      (historyError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.FORBIDDEN ||
+        historyError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.SESSION_NOT_FOUND)
+    ) {
+      onResultUnavailable();
+    }
+  }, [open, sessionId, historyIsError, historyError, onResultUnavailable]);
 
   // 이 컴포넌트가 이력 Query 캐시 제거를 직접 소유한다. 닫기 요청이 들어오면 캐시를 지운
   // 뒤에만 부모의 onClose(open state·트리거 포커스 조정)를 호출한다.

@@ -22,7 +22,16 @@ function getStudentResultErrorMessage(error) {
     return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
   if (error.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.RESULT_NOT_FOUND)
     return '해당 상담 결과를 찾을 수 없습니다. 목록을 다시 불러왔습니다.';
+  // A004(권한없음)는 같은 요청을 반복해도 해결되지 않는다 — S011(소유권·미공개 등)과
+  // 달리 "다시 시도" 버튼을 보여주면 안 되므로 문구도 구분한다.
+  if (error.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.FORBIDDEN)
+    return '이 상담 결과를 조회할 권한이 없습니다.';
   return '상담 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
+// A004는 재시도해도 결과가 바뀌지 않는 오류이므로 "다시 시도" 버튼을 숨긴다.
+function isRetryableStudentResultError(error) {
+  return !(error instanceof ApiError && error.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.FORBIDDEN);
 }
 
 export default function CounselingHistoryPanel() {
@@ -137,9 +146,11 @@ export default function CounselingHistoryPanel() {
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center">
                   <p className="text-[#CF222E]">{getStudentResultErrorMessage(listError)}</p>
-                  <Button size="sm" variant="outline" className="mt-3" onClick={refetch}>
-                    다시 시도
-                  </Button>
+                  {isRetryableStudentResultError(listError) && (
+                    <Button size="sm" variant="outline" className="mt-3" onClick={refetch}>
+                      다시 시도
+                    </Button>
+                  )}
                 </td>
               </tr>
             )}
@@ -231,9 +242,11 @@ export default function CounselingHistoryPanel() {
             <p className="text-[12px] text-[#CF222E]" role="alert">
               {getStudentResultErrorMessage(detailError)}
             </p>
-            <Button size="sm" variant="outline" className="mt-3" onClick={() => refetchDetail()}>
-              다시 시도
-            </Button>
+            {isRetryableStudentResultError(detailError) && (
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => refetchDetail()}>
+                다시 시도
+              </Button>
+            )}
           </div>
         ) : (
           detail && (

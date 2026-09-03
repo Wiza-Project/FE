@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, EmptyState, SkeletonLoader } from '@/components/common';
 import { ApiError } from '@/api/client';
@@ -91,6 +91,10 @@ export default function StressTestPanel() {
   const [isStressTestSubmissionForbidden, setIsStressTestSubmissionForbidden] = useState(false);
   const [latestResult, setLatestResult] = useState(null);
   const [resultPage, setResultPage] = useState(0);
+  // 제출 응답 자체가 유실된 네트워크 오류(NETWORK_ERROR)에서는 서버가 실제로 저장했는지
+  // FE가 알 방법이 없다(멱등성 키 없음). 이 상태는 "확인 없이는 재제출 금지" 게이트다 —
+  // 사용자가 결과 이력을 확인하거나 '다시 제출하기'를 명시적으로 눌러야만 풀린다.
+  const [submitUncertain, setSubmitUncertain] = useState(false);
   // 체크박스는 서버 동의의 근거가 아니라 화면에서만 쓰는 일시 상태다. 정책 ID·버전을
   // 함께 들고 있어야, 정책이 바뀐 뒤 오래된 체크로 최신 정책에 동의해버리는 것을 막을 수 있다.
   const [checkedConsent, setCheckedConsent] = useState({
@@ -101,6 +105,7 @@ export default function StressTestPanel() {
   const lastQuestionVersionRef = useRef(null);
   const fieldsetRefs = useRef({});
   const resultHeadingRef = useRef(null);
+  const resultsHistoryHeadingRef = useRef(null);
   const resultErrorRef = useRef(null);
   const consentCheckboxRef = useRef(null);
   const consentErrorRef = useRef(null);
@@ -346,6 +351,8 @@ export default function StressTestPanel() {
     if (lastQuestionVersionRef.current !== questionsData.testVersion) {
       lastQuestionVersionRef.current = questionsData.testVersion;
       setAnswers({});
+      // 문항 버전이 바뀌면 직전 결과도 지금 문항과 무관해지므로 함께 지운다.
+      setLatestResult(null);
     }
   }, [questionsData]);
 
@@ -363,8 +370,12 @@ export default function StressTestPanel() {
   });
   const resultItems = resultsQuery.data?.content ?? [];
   const resultTotalPages = resultsQuery.data?.totalPages ?? 0;
-  const isResultsLoading =
-    resultsQuery.isLoading || resultsQuery.isFetching || resultsQuery.isPlaceholderData;
+  // keepPreviousData의 효과를 실제로 살리려면 "최초 로딩"과 "페이지 전환 중 백그라운드 조회"를
+  // 구분해야 한다. isFetching·isPlaceholderData까지 여기 섞으면 페이지를 넘길 때마다 목록이
+  // 사라지고 skeleton이 다시 뜬다 — 최초 로딩에는 isLoading만 쓴다.
+  const isResultsInitialLoading = resultsQuery.isLoading;
+  // 페이지 전환 중(백그라운드 조회)에는 페이저 상태 표시·연속 클릭 차단에만 이 값을 쓴다.
+  const isResultsFetching = resultsQuery.isFetching || resultsQuery.isPlaceholderData;
   const isResultsForbidden =
     resultsQuery.isError && resultsQuery.error?.code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN;
 
@@ -389,6 +400,19 @@ export default function StressTestPanel() {
       setResultPage(resultTotalPages - 1);
     }
   }, [resultPage, resultTotalPages, resultsQuery.data, resultsQuery.isError, resultsQuery.isPlaceholderData]);
+
+  // 첫 페이지로 이동 + 결과 이력 재조회 + 이력 heading 포커스를 한 곳에 묶는다. 네트워크 오류
+  // 처리와 "결과 이력 확인" 버튼이 같은 동작을 공유해야, 조회 대상 페이지가 서로 어긋나지 않는다.
+  // 현재 페이지의 refetch()만 부르면 2페이지 이후를 보고 있을 때 새로 생겼을 결과를 놓친다.
+  const refreshLatestResults = useCallback(() => {
+    setResultPage(0);
+    queryClient.invalidateQueries({ queryKey: ['studentStressTestResults'] });
+    window.requestAnimationFrame(() => {
+      if (isMountedRef.current && resultsHistoryHeadingRef.current?.isConnected) {
+        resultsHistoryHeadingRef.current.focus();
+      }
+    });
+  }, [queryClient]);
 
   // ── 제출 ──
   const submitMutation = useMutation({
@@ -466,8 +490,23 @@ export default function StressTestPanel() {
       } else if (error instanceof ApiError && error.code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
         setIsStressTestSubmissionForbidden(true);
         setSubmitError('스트레스 검사를 제출할 권한이 없습니다.');
+      } else if (error instanceof ApiError && error.code === 'NETWORK_ERROR') {
+        // 응답 자체가 유실된 경우다. 서버에 요청이 도달해 이미 저장됐을 수도, 아예 도달하지
+        // 못했을 수도 있어 FE만으로는 구분할 수 없다(멱등성 키가 없는 계약). 그래서 곧바로
+        // 재시도를 허용하지 않고, 결과 이력에서 실제 저장 여부를 사용자가 직접 확인하게 한다.
+        // 완전한 중복 방지는 BE의 멱등성 키 또는 저장 결과 확인 API가 있어야 가능하다.
+        setSubmitUncertain(true);
+        setSubmitError(
+          '제출은 전송했지만 저장 여부를 확인할 수 없습니다. 아래 결과 이력에서 확인해 주세요.',
+        );
+        refreshLatestResults();
+      } else if (error instanceof ApiError) {
+        // 그 밖의 ApiError(C999 등)는 서버가 응답을 확정한 오류다 — 즉 서버가 저장을 이미
+        // 롤백했다고 확신할 수 있으므로, 응답 유실과 달리 답변을 유지한 채 바로 재시도해도 안전하다.
+        setSubmitError('처리에 실패해 저장되지 않았습니다. 다시 시도해 주세요.');
       } else {
-        setSubmitError('제출하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.');
+        // ApiError가 아닌 예상치 못한 오류. 서버 내부 문구를 그대로 노출하지 않는다.
+        setSubmitError('제출 처리 중 오류가 발생했습니다. 다시 시도해 주세요.');
       }
     },
   });
@@ -475,9 +514,20 @@ export default function StressTestPanel() {
   const handleSelect = (questionId, value) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
     setSubmitError('');
+    // 새 답변을 고르기 시작하면 새 검사를 시작한 것이므로, 직전 제출 결과 카드를 지운다.
+    // 지우지 않으면 지금 작성 중인 검사가 아직 미제출인데도 직전 결과가 현재 결과처럼 보인다.
+    if (latestResult !== null) {
+      setLatestResult(null);
+    }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async ({ allowUncertain = false } = {}) => {
+    // 저장 여부가 불확실한 상태에서는 일반 제출 버튼(allowUncertain 없이 호출)을 막는다.
+    // "다시 제출하기"만 allowUncertain: true로 이 잠금을 명시적으로 풀고 기존 흐름을 그대로 탄다 —
+    // 잠금만 해제하는 별도 경로를 만들지 않는다(제출 흐름 중복 방지).
+    if (submitUncertain && !allowUncertain) {
+      return;
+    }
     // reverifyConsent()는 GET 왕복 두 번을 거치므로, mutate() 시작 전까지 submitMutation.isPending은
     // 아직 false다. 이 왕복 구간에서 버튼이 다시 눌리면 재검증~제출이 겹쳐 실행될 수 있어
     // 별도 플래그로 handleSubmit 진입 시점부터 잠근다.
@@ -493,6 +543,9 @@ export default function StressTestPanel() {
       return;
     }
     setIsReverifying(true);
+    if (allowUncertain) {
+      setSubmitUncertain(false);
+    }
 
     try {
       const missingQuestion = questionsData.questions.find(
@@ -792,16 +845,35 @@ export default function StressTestPanel() {
                 </p>
               )}
 
-              <Button
-                size="sm"
-                loading={isSubmitting}
-                disabled={isSubmitting}
-                onClick={handleSubmit}
-                style={{ background: ACCENT }}
-                className="self-start"
-              >
-                제출하기
-              </Button>
+              {submitUncertain ? (
+                // 저장 여부 불확실 — 자동 재시도 없이, 사용자가 이력을 확인하거나 명시적으로
+                // 다시 제출할 때만 다음 요청을 보낸다(중복 저장 완화. 완전 차단은 BE 멱등성 키 필요).
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={refreshLatestResults}>
+                    결과 이력 확인
+                  </Button>
+                  <Button
+                    size="sm"
+                    loading={isSubmitting}
+                    disabled={isSubmitting}
+                    onClick={() => handleSubmit({ allowUncertain: true })}
+                    style={{ background: ACCENT }}
+                  >
+                    다시 제출하기
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  loading={isSubmitting}
+                  disabled={isSubmitting}
+                  onClick={() => handleSubmit()}
+                  style={{ background: ACCENT }}
+                  className="self-start"
+                >
+                  제출하기
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -828,11 +900,17 @@ export default function StressTestPanel() {
 
       {/* 이전 결과 이력 */}
       <div>
-        <p className="mb-2 text-[13px] font-bold text-[#1F2328]">이전 결과</p>
+        <p
+          ref={resultsHistoryHeadingRef}
+          tabIndex={-1}
+          className="mb-2 text-[13px] font-bold text-[#1F2328]"
+        >
+          이전 결과
+        </p>
 
-        {isResultsLoading && <SkeletonLoader rows={3} cols={1} />}
+        {isResultsInitialLoading && <SkeletonLoader rows={3} cols={1} />}
 
-        {!isResultsLoading && isResultsForbidden && (
+        {!isResultsInitialLoading && isResultsForbidden && (
           <div
             ref={resultErrorRef}
             tabIndex={-1}
@@ -843,7 +921,7 @@ export default function StressTestPanel() {
           </div>
         )}
 
-        {!isResultsLoading && !isResultsForbidden && resultsQuery.isError && (
+        {!isResultsInitialLoading && !isResultsForbidden && resultsQuery.isError && (
           <div
             ref={resultErrorRef}
             tabIndex={-1}
@@ -857,11 +935,11 @@ export default function StressTestPanel() {
           </div>
         )}
 
-        {!isResultsLoading && !resultsQuery.isError && resultItems.length === 0 && (
+        {!isResultsInitialLoading && !resultsQuery.isError && resultItems.length === 0 && (
           <EmptyState message="검사 결과 이력이 없습니다." />
         )}
 
-        {!isResultsLoading && !resultsQuery.isError && resultItems.length > 0 && (
+        {!isResultsInitialLoading && !resultsQuery.isError && resultItems.length > 0 && (
           <div className="flex flex-col gap-2">
             {resultItems.map((item) => (
               <div
@@ -885,15 +963,15 @@ export default function StressTestPanel() {
         {!resultsQuery.isError && resultTotalPages > 1 && (
           <div
             className="mt-3 flex items-center justify-center gap-2"
-            aria-busy={isResultsLoading}
+            aria-busy={isResultsFetching}
           >
             <Button
               size="sm"
               variant="outline"
               disabled={resultsQuery.data?.first !== false}
-              aria-disabled={isResultsLoading || resultsQuery.data?.first !== false}
+              aria-disabled={isResultsFetching || resultsQuery.data?.first !== false}
               onClick={() => {
-                if (isResultsLoading || resultsQuery.data?.first !== false) {
+                if (isResultsFetching || resultsQuery.data?.first !== false) {
                   return;
                 }
                 setResultPage((prev) => Math.max(0, prev - 1));
@@ -902,15 +980,15 @@ export default function StressTestPanel() {
               이전
             </Button>
             <span className="text-[12px] text-[#656D76]">
-              {isResultsLoading ? '조회 중...' : `${resultPage + 1} / ${resultTotalPages}`}
+              {isResultsFetching ? '조회 중...' : `${resultPage + 1} / ${resultTotalPages}`}
             </span>
             <Button
               size="sm"
               variant="outline"
               disabled={resultsQuery.data?.last !== false}
-              aria-disabled={isResultsLoading || resultsQuery.data?.last !== false}
+              aria-disabled={isResultsFetching || resultsQuery.data?.last !== false}
               onClick={() => {
-                if (isResultsLoading || resultsQuery.data?.last !== false) {
+                if (isResultsFetching || resultsQuery.data?.last !== false) {
                   return;
                 }
                 setResultPage((prev) => prev + 1);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
@@ -74,6 +74,23 @@ export default function SessionDetailModal({ sessionId, onClose }) {
   const currentSessionIdRef = useRef(sessionId);
   currentSessionIdRef.current = sessionId;
 
+  // [S-03] 이 모달도 부모 목록의 "상세" 버튼 클릭을 직접 받지 않고 sessionId prop만 받는다.
+  // sessionId가 null → 값으로 바뀌는 시점의 document.activeElement가 곧 그 트리거 버튼이므로
+  // 기억해뒀다가 닫을 때 focus를 복원한다(PublicResultEditorModal의 resultTriggerRef와 동일 패턴).
+  const triggerRef = useRef(null);
+  useEffect(() => {
+    if (sessionId !== null) {
+      triggerRef.current = document.activeElement;
+    }
+  }, [sessionId]);
+  const restoreTriggerFocus = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      if (triggerRef.current?.isConnected) {
+        triggerRef.current.focus();
+      }
+    });
+  }, []);
+
   // null | 'followup' | 'complete' | 'cancel' — 상세 모달 안에서 어떤 폼을 보여줄지 결정한다.
   const [formMode, setFormMode] = useState(null);
   const [formError, setFormError] = useState('');
@@ -134,32 +151,42 @@ export default function SessionDetailModal({ sessionId, onClose }) {
       queryClient.removeQueries({ queryKey: counselingPrivateRecordQueryKey(sessionId) });
     }
     resetForms();
+    // 세 mutation 모두 이미 각자의 onSettled에서 reset()하지만, 요청을 보내지 않고 닫는
+    // 경로까지 방어적으로 한 번 더 정리한다(idle 상태에서 reset()은 아무 영향이 없다).
+    followUpMutation.reset();
+    completeMutation.reset();
+    cancelMutation.reset();
     onClose();
+    restoreTriggerFocus();
   };
 
   // variables는 mutate() 호출 시 넘긴 그 객체 그대로다(응답이 아니라 요청 시점 값) — 늦게 도착한
   // 응답이라도 "그 요청이 어떤 회기를 대상으로 했는지"는 변하지 않으므로 대상 판별에 쓸 수 있다.
+  // [C-04] stale 오류도 서버 상태가 실제로 바뀐 것이므로 목록·상세 무효화는 화면 가드보다
+  // 먼저 실행한다. 가드는 그 뒤의 토스트·폼 조작에만 적용한다.
   const onActionError = (mutationError, variables) => {
-    if (!isResponseForCurrentSession(variables?.sessionId)) return;
     if (mutationError instanceof ApiError && STALE_STATE_CODES.has(mutationError.code)) {
       invalidateList();
-      invalidateDetail(variables.sessionId);
+      invalidateDetail(variables?.sessionId);
+      if (!isResponseForCurrentSession(variables?.sessionId)) return;
       toast(getSessionErrorMessage(mutationError), 'error');
       setFormMode(null);
       return;
     }
+    if (!isResponseForCurrentSession(variables?.sessionId)) return;
     setFormError(getSessionErrorMessage(mutationError));
   };
 
   const onFollowUpError = (mutationError, variables) => {
-    if (!isResponseForCurrentSession(variables?.sessionId)) return;
     // 시간 관련 위반(TIME_CONFLICT/INVALID_STATE)은 같은 입력값을 고쳐 바로 재시도할 수 있으므로
-    // 폼을 닫지 않고 인라인 오류로만 보여준다. 나머지 코드는 공통 stale 처리를 그대로 따른다.
+    // 폼을 닫지 않고 인라인 오류로만 보여준다. 서버 상태를 바꾸지 않은 오류라 무효화도 필요 없다.
+    // 나머지 코드는 공통 stale 처리(onActionError)로 보낸다.
     if (
       mutationError instanceof ApiError &&
       (mutationError.code === COUNSELING_SESSION_ERROR_CODE.TIME_CONFLICT ||
         mutationError.code === COUNSELING_SESSION_ERROR_CODE.INVALID_STATE)
     ) {
+      if (!isResponseForCurrentSession(variables?.sessionId)) return;
       setFormError(getSessionErrorMessage(mutationError));
       return;
     }
@@ -170,40 +197,59 @@ export default function SessionDetailModal({ sessionId, onClose }) {
     // sessionId는 대상 판별용 UI 메타데이터일 뿐이다. destructuring으로 assignmentId·request만
     // 뽑아 서버 요청(createFollowUpSession)에는 절대 포함되지 않도록 한다.
     mutationFn: ({ assignmentId, request }) => createFollowUpSession(assignmentId, request),
+    // 후속 회기 시각도 특정 학생의 상담 이력을 구성하는 업무 입력이라 완료 후 남겨두지 않는다.
+    // mutate() 호출부(submitFollowUp 등)가 per-call 콜백을 쓰지 않으므로, hook-level onSettled
+    // 에서 reset()해도 화면 처리(onSuccess/onError)가 먼저 끝난 뒤에 실행된다.
+    gcTime: 0,
+    // [C-04] 무효화(서버 사실 반영)를 화면 가드보다 먼저 실행한다. 가드가 먼저 있으면 다른
+    // 메뉴로 이동한 뒤 성공한 요청의 목록 캐시 갱신이 통째로 건너뛰어진다.
     onSuccess: (data, variables) => {
-      if (!isResponseForCurrentSession(variables.sessionId)) return;
       invalidateList();
       invalidateDetail(variables.sessionId);
+      if (!isResponseForCurrentSession(variables.sessionId)) return;
       toast('후속 회기가 생성되었습니다.', 'success');
       resetForms();
     },
     onError: onFollowUpError,
+    onSettled: () => {
+      followUpMutation.reset();
+    },
   });
 
   const completeMutation = useMutation({
     mutationFn: ({ sessionId: targetSessionId, request }) =>
       completeCounselingSession(targetSessionId, request),
+    // attendanceStatus·nextSessionAt은 학생의 출결·다음 상담 기록이라 동일하게 제한한다.
+    gcTime: 0,
     onSuccess: (data, variables) => {
-      if (!isResponseForCurrentSession(variables.sessionId)) return;
       invalidateList();
       invalidateDetail(variables.sessionId);
+      if (!isResponseForCurrentSession(variables.sessionId)) return;
       toast('회기가 출결 완료 처리되었습니다.', 'success');
       resetForms();
     },
     onError: onActionError,
+    onSettled: () => {
+      completeMutation.reset();
+    },
   });
 
   const cancelMutation = useMutation({
     mutationFn: ({ sessionId: targetSessionId, request }) =>
       cancelCounselingSession(targetSessionId, request),
+    // cancellationReason(취소 사유 원문)이 포함된다.
+    gcTime: 0,
     onSuccess: (data, variables) => {
-      if (!isResponseForCurrentSession(variables.sessionId)) return;
       invalidateList();
       invalidateDetail(variables.sessionId);
+      if (!isResponseForCurrentSession(variables.sessionId)) return;
       toast('회기가 취소되었습니다.', 'info');
       resetForms();
     },
     onError: onActionError,
+    onSettled: () => {
+      cancelMutation.reset();
+    },
   });
 
   // 요청 진행 중에는 모달을 닫지 못하게 해 처리 결과(성공 토스트·오류 메시지)를 놓치지 않게 한다.

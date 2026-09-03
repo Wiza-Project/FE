@@ -87,6 +87,9 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
   // 정정 입력·기준 버전·충돌 비교값은 PublicResultCorrectionModal이 소유한다.
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [isCorrectionPending, setIsCorrectionPending] = useState(false);
+  // [C-07] S010 충돌로 사라진 내 초안을 "이 초안으로 정정 시작"으로 이어갈 때만 채운다.
+  // 일반 '결과 정정' 진입에는 null을 넘겨 정정 모달이 서버 PUBLISHED 값으로 시딩하게 한다.
+  const [correctionInitialDraft, setCorrectionInitialDraft] = useState(null);
 
   // 이력 모달 상태 — 열렸을 때만 조회한다(PublicResultHistoryModal의 useQuery enabled로 제어).
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -191,6 +194,8 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
       // 기준 버전·충돌 비교값은 PublicResultCorrectionModal이 sessionId prop 변화로 직접 지운다.
       setCorrectionOpen(false);
       setHistoryOpen(false);
+      // 다른 회기의 소실 초안이 여기로 섞여 들어가지 않게 한다.
+      setCorrectionInitialDraft(null);
     }
     previousSessionIdRef.current = sessionId;
   }, [sessionId, queryClient]);
@@ -235,6 +240,8 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
     if (sessionId !== null) {
       queryClient.removeQueries({ queryKey: counselorPublicResultQueryKey(sessionId) });
     }
+    // saveMutation의 정리는 아래 useMutation의 onSettled가 전담한다. 이 함수가 saveMutation보다
+    // 먼저 선언되므로 여기서 reset()을 부르고 의존성 배열에 추가하면 TDZ 오류가 난다.
     onClose();
     restoreResultTriggerFocus();
   }, [sessionId, queryClient, onClose, restoreResultTriggerFocus]);
@@ -280,6 +287,9 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
   const saveMutation = useMutation({
     mutationFn: ({ sessionId: targetSessionId, resultSummary, actionPlan }) =>
       saveCounselorPublicResult(targetSessionId, { resultSummary, actionPlan }),
+    // resultSummary·actionPlan(학생에게 공개될 원문)은 완료 후 mutation cache에 남기지 않는다.
+    // publishMutation·completeMutation은 sessionId만 넘기는 상태 전이라 대상이 아니다.
+    gcTime: 0,
     onSuccess: async (data, { sessionId: targetSessionId }) => {
       if (!isResultScreenFor(targetSessionId)) return;
       const queryKey = counselorPublicResultQueryKey(targetSessionId);
@@ -294,6 +304,10 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
     },
     onError: (mutationError, { sessionId: targetSessionId }) =>
       onMutationError(mutationError, targetSessionId, 'save'),
+    // 화면 반영(캐시 갱신 또는 오류 문구 저장)이 모두 끝난 뒤에만 원문을 mutation cache에서 지운다.
+    onSettled: () => {
+      saveMutation.reset();
+    },
   });
 
   // 일반 공개는 예약 상태를 바꾸지 않는다 — 성공해도 목록의 예약·회기 상태를 건드리지 않고
@@ -346,17 +360,22 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
   // 이 함수를 호출한다. 여기서는 open state를 내리고 트리거 포커스만 복원한다.
   const closeCorrectionModal = useCallback(() => {
     setCorrectionOpen(false);
+    setCorrectionInitialDraft(null);
     restoreCorrectionTriggerFocus();
   }, [restoreCorrectionTriggerFocus]);
 
-  // 정정 중 A004·S007(접근 불가)이 발생했을 때 PublicResultCorrectionModal이 호출하는 단일 신호다.
-  // 기존 결과 화면의 처리(목록 무효화·회기 캐시 제거·화면 닫기)를 그대로 재현한다.
+  // [S-05] 정정·이력 모달의 조회 단계에서 A004·S007(접근 불가)이 발생했을 때 두 자식 모두가
+  // 호출하는 단일 신호다. mutation 오류 경로와 같은 처리(목록 무효화·회기 캐시 제거·자식/부모
+  // 닫기)를 그대로 재사용한다 — 자식마다 같은 로직을 복제하면 한쪽만 고치는 회귀가 생기기 쉽다.
   const closeUnavailableResult = () => {
     invalidateList();
     if (sessionId !== null) {
       queryClient.removeQueries({ queryKey: counselorPublicResultQueryKey(sessionId) });
     }
     setCorrectionOpen(false);
+    setCorrectionInitialDraft(null);
+    setHistoryOpen(false);
+    saveMutation.reset();
     onClose();
     restoreResultTriggerFocus();
   };
@@ -371,6 +390,13 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
     isCorrectionPending;
   const isDraftDirty =
     isEditableStatus &&
+    (summaryInput !== (publicResult.resultSummary ?? '') ||
+      planInput !== (publicResult.actionPlan ?? ''));
+  // [C-07] PUBLISHED로 바뀐 뒤에도(다른 상담사가 먼저 공개) summaryInput/planInput이 비어있지
+  // 않고 공개된 내용과 다르면, 내가 쓰던 입력이 아직 지워지지 않은 소실 초안이다.
+  const hasLostPublicDraft =
+    publicResult?.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.PUBLISHED &&
+    (summaryInput.trim() !== '' || planInput.trim() !== '') &&
     (summaryInput !== (publicResult.resultSummary ?? '') ||
       planInput !== (publicResult.actionPlan ?? ''));
 
@@ -493,6 +519,54 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
                   v{publicResult.versionNo} · {publicResult.createdByName} · 공개{' '}
                   {formatKstDateTime(publicResult.publishedAt)}
                 </p>
+                {/* [C-07] S010 충돌로 다른 상담사가 먼저 공개하면 이 PUBLISHED branch가 렌더되며
+                    내가 입력하던 초안이 화면에서 사라진다. 여전히 state에 남아있는 초안(summaryInput/
+                    planInput)을 자동으로 지우지 않고 읽기전용으로 보여준 뒤, canCorrect면 그 내용을
+                    그대로 이어 정정할 수 있게 한다. */}
+                {hasLostPublicDraft && (
+                  <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] flex flex-col gap-2">
+                    <p className="text-[10px] font-semibold text-[#92400E]">
+                      내가 작성 중이던 초안 (미저장)
+                    </p>
+                    <div>
+                      <p className="text-[10px] font-semibold text-[#92400E] mb-1">공개 요약</p>
+                      <p className="text-[12px] text-[#1F2328] whitespace-pre-wrap">{summaryInput}</p>
+                    </div>
+                    {planInput.trim() && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-[#92400E] mb-1">실행계획</p>
+                        <p className="text-[12px] text-[#1F2328] whitespace-pre-wrap">{planInput}</p>
+                      </div>
+                    )}
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSummaryInput('');
+                          setPlanInput('');
+                          setCorrectionInitialDraft(null);
+                        }}
+                      >
+                        초안 폐기
+                      </Button>
+                      {publicResult.canCorrect && (
+                        <Button
+                          size="sm"
+                          disabled={isCorrectionPending}
+                          onClick={(event) => {
+                            if (isCorrectionPending) return;
+                            // 기준 버전은 서버 최신 PUBLISHED 그대로 두고, 입력창만 이 초안으로 채운다.
+                            setCorrectionInitialDraft({ resultSummary: summaryInput, actionPlan: planInput });
+                            openCorrectionModal(event.currentTarget);
+                          }}
+                        >
+                          이 초안으로 정정 시작
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-2 flex-wrap">
                   {/* 서버 canCorrect가 원래 담당 상담사인지, 최신 PUBLISHED인지를 모두 판단한 최종 기준이다.
                       클라이언트에서 배정·역할을 다시 추정해 이 버튼을 대신 노출하지 않는다. */}
@@ -503,6 +577,8 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
                       disabled={isCorrectionPending}
                       onClick={(event) => {
                         if (isCorrectionPending) return;
+                        // 일반 진입은 소실 초안이 아니라 서버 PUBLISHED 값으로 시딩한다.
+                        setCorrectionInitialDraft(null);
                         openCorrectionModal(event.currentTarget);
                       }}
                     >
@@ -693,9 +769,15 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
         onClose={closeCorrectionModal}
         onPendingChange={setIsCorrectionPending}
         onResultUnavailable={closeUnavailableResult}
+        initialDraft={correctionInitialDraft}
       />
 
-      <PublicResultHistoryModal sessionId={sessionId} open={historyOpen} onClose={closeHistory} />
+      <PublicResultHistoryModal
+        sessionId={sessionId}
+        open={historyOpen}
+        onClose={closeHistory}
+        onResultUnavailable={closeUnavailableResult}
+      />
     </>
   );
 }

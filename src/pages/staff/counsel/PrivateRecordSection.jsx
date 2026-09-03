@@ -132,6 +132,9 @@ export default function PrivateRecordSection({ sessionId, onPendingChange }) {
     setPrivateRecordFormError('');
     setConfirmPrivateRecordOpen(false);
     privateContentSeededRef.current = false;
+    // 이미 각 요청의 onSettled에서 reset()되지만, 영역을 닫는 경계에서도 방어적으로 한 번 더
+    // 정리한다(idle mutation에 reset()을 불러도 부작용 없음).
+    savePrivateRecordMutation.reset();
   };
 
   const openPrivateRecord = () => {
@@ -187,6 +190,10 @@ export default function PrivateRecordSection({ sessionId, onPendingChange }) {
   const savePrivateRecordMutation = useMutation({
     mutationFn: ({ sessionId: targetSessionId, privateContent }) =>
       saveCounselingPrivateRecord(targetSessionId, { privateContent }),
+    // privateContent(비공개 기록 원문)는 이 화면에서 가장 민감한 값이다. 완료 후 mutation
+    // cache에 남기지 않는다. mutate() 호출부가 per-call 콜백을 쓰지 않으므로 아래 onSettled의
+    // reset()은 onSuccess/onError가 끝난 뒤 실행된다.
+    gcTime: 0,
     // 캐시는 요청이 대상으로 한 sessionId(variables.sessionId)에 귀속한다. 최신 클로저
     // sessionId를 쓰면 늦은 응답이 지금 열린 다른 회기 캐시를 덮어쓸 수 있다.
     onSuccess: (data, { sessionId: targetSessionId }) => {
@@ -207,6 +214,10 @@ export default function PrivateRecordSection({ sessionId, onPendingChange }) {
     },
     onError: (mutationError, { sessionId: targetSessionId }) =>
       onPrivateRecordMutationError(mutationError, targetSessionId),
+    // 화면 반영(성공 시 textarea 갱신, 오류 시 문구 저장)이 모두 끝난 뒤에만 원문을 지운다.
+    onSettled: () => {
+      savePrivateRecordMutation.reset();
+    },
   });
 
   const confirmPrivateRecordMutation = useMutation({
@@ -287,14 +298,39 @@ export default function PrivateRecordSection({ sessionId, onPendingChange }) {
               </p>
             ) : !privateRecord ? null : privateRecord.recordStatus ===
               COUNSELING_PRIVATE_RECORD_STATUS.CONFIRMED ? (
-              <div className="p-3 rounded-[8px] bg-[#F0FDF4] border border-[#BBF7D0]">
-                <p className="text-[10px] font-semibold text-[#166534] mb-1">
-                  확정됨 · {formatKstDateTime(privateRecord.confirmedAt)}
-                </p>
-                {/* dangerouslySetInnerHTML 금지 — 줄바꿈은 CSS로만 보존한다 */}
-                <p className="text-[12px] text-[#1F2328] whitespace-pre-wrap">
-                  {privateRecord.privateContent}
-                </p>
+              <div className="flex flex-col gap-2">
+                <div className="p-3 rounded-[8px] bg-[#F0FDF4] border border-[#BBF7D0]">
+                  <p className="text-[10px] font-semibold text-[#166534] mb-1">
+                    확정됨 · {formatKstDateTime(privateRecord.confirmedAt)}
+                  </p>
+                  {/* dangerouslySetInnerHTML 금지 — 줄바꿈은 CSS로만 보존한다 */}
+                  <p className="text-[12px] text-[#1F2328] whitespace-pre-wrap">
+                    {privateRecord.privateContent}
+                  </p>
+                </div>
+                {/* [C-06] S009 충돌 후 다른 상담사가 먼저 확정하면 이 branch가 렌더된다. 비공개
+                    기록은 확정 후 정정 API가 없어(terminal) 되살릴 방법이 없으므로, 아직 state에
+                    남아있는 내 미저장 초안을 자동으로 지우지 않고 읽기전용으로 보여준 뒤 사용자가
+                    직접 폐기하게 한다. 재편집·복사 버튼은 두지 않는다(드래그 선택으로 복사 가능). */}
+                {privateContentInput.trim() &&
+                  privateContentInput !== privateRecord.privateContent && (
+                    <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA]">
+                      <p className="text-[10px] font-semibold text-[#92400E] mb-1">
+                        내가 작성 중이던 초안 (미저장)
+                      </p>
+                      <p className="text-[12px] text-[#1F2328] whitespace-pre-wrap">
+                        {privateContentInput}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => setPrivateContentInput('')}
+                      >
+                        초안 폐기
+                      </Button>
+                    </div>
+                  )}
               </div>
             ) : (
               <div className="flex flex-col gap-2">

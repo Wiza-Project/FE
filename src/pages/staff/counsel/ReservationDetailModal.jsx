@@ -14,6 +14,9 @@ export default function ReservationDetailModal({ reservationId, onClose }) {
     queryFn: () => fetchCounselorReservationDetail(reservationId),
     enabled: reservationId !== null,
     retry: false,
+    // 닫기 버튼이 아니라 메뉴 이동 등으로 언마운트되는 경로도 있어, 기본 gcTime(5분)에
+    // 맡기면 신청 원문이 그동안 캐시에 남는다. 즉시 제거되도록 0으로 고정한다.
+    gcTime: 0,
   });
 
   const closeDetail = () => {

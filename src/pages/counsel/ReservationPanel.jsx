@@ -78,8 +78,18 @@ const getAvailableSchedulesErrorMessage = (error) => {
     return '변경 가능한 일정을 조회할 권한이 없습니다.';
   }
 
+  // C002: 이 예약의 상담 유형이 없거나 비활성화됨. 같은 유형으로 다시 물어도 결과가
+  // 똑같으므로 "다시 시도" 버튼을 보여주지 않고 변경 종료를 안내한다.
+  if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.RESOURCE_NOT_FOUND) {
+    return '이 예약의 상담 유형이 더 이상 제공되지 않아 변경 가능한 일정을 조회할 수 없습니다. 변경을 종료하고 필요하면 취소 후 다시 신청해 주세요.';
+  }
+
   return '변경 가능한 일정을 불러오지 못했습니다.';
 };
+
+// C002는 재조회해도 같은 결과가 나오는 오류이므로 재시도 버튼을 숨긴다.
+const isAvailableSchedulesErrorRetryable = (error) =>
+  error?.code !== COUNSELING_RESERVATION_ERROR_CODE.RESOURCE_NOT_FOUND;
 
 const handleModalKeyDown = (event, modalElement, isPending, closeModal) => {
   if (event.key === 'Escape') {
@@ -283,6 +293,9 @@ export default function ReservationPanel() {
     mutationFn: async ({ reservationId, cancellationReason }) => ({
       reservation: await cancelCounselingReservation(reservationId, { cancellationReason }),
     }),
+    // cancellationReason은 학생이 적은 취소 사유(민감 원문)라 완료 뒤 mutation cache에 남기지
+    // 않는다. gcTime: 0 + 아래 onSettled의 reset()으로 요청이 끝나는 즉시 정리한다.
+    gcTime: 0,
     onSuccess: async ({ reservation }) => {
       await refreshReservationData();
 
@@ -317,6 +330,11 @@ export default function ReservationPanel() {
         toast(message, 'error');
       }
     },
+    // onSuccess/onError 모두 화면 처리(캐시 무효화·토스트·모달 정리)를 마친 뒤에만
+    // onSettled가 실행되므로, 여기서 reset()을 호출해도 처리 중인 화면 갱신을 놓치지 않는다.
+    onSettled: () => {
+      cancelMutation.reset();
+    },
   });
   const changeMutation = useMutation({
     mutationFn: async ({ reservationId, expectedScheduleId, scheduleId, reason }) => ({
@@ -327,6 +345,8 @@ export default function ReservationPanel() {
       }),
       scheduleId,
     }),
+    // reason(일정 변경 사유)도 민감 원문이므로 동일하게 로컬 수명주기를 제한한다.
+    gcTime: 0,
     onSuccess: async ({ reservation, scheduleId }) => {
       await refreshReservationData();
 
@@ -378,6 +398,11 @@ export default function ReservationPanel() {
         restoreFocus(changeTriggerRef);
         toast(message, 'error');
       }
+    },
+    // S013 stale 충돌 분기는 reloadLatestReservation까지 기다린 뒤 return하므로, 그 비동기
+    // 작업이 모두 끝난 다음에만 onSettled가 실행되어 reason 입력 보존이 끝난 뒤 정리된다.
+    onSettled: () => {
+      changeMutation.reset();
     },
   });
   const isActionPending = cancelMutation.isPending || changeMutation.isPending;
@@ -862,14 +887,16 @@ export default function ReservationPanel() {
               {!isAvailableSchedulesLoading && availableSchedulesError && (
                 <div className="rounded-[6px] border border-[#FECACA] bg-[#FEF2F2] px-3 py-3 text-[12px] text-[#CF222E]">
                   <p>{getAvailableSchedulesErrorMessage(availableSchedulesError)}</p>
-                  <button
-                    type="button"
-                    disabled={changeMutation.isPending}
-                    onClick={refetchAvailableSchedules}
-                    className="mt-2 font-bold underline disabled:text-[#9AA0A6]"
-                  >
-                    다시 시도
-                  </button>
+                  {isAvailableSchedulesErrorRetryable(availableSchedulesError) && (
+                    <button
+                      type="button"
+                      disabled={changeMutation.isPending}
+                      onClick={refetchAvailableSchedules}
+                      className="mt-2 font-bold underline disabled:text-[#9AA0A6]"
+                    >
+                      다시 시도
+                    </button>
+                  )}
                 </div>
               )}
               {!isAvailableSchedulesLoading && !availableSchedulesError && alternativeSchedules.length === 0 && (

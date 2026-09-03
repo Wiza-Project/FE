@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, Pagination, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
@@ -56,6 +56,16 @@ export default function ReservationManage() {
   // 행별로 정확히 비활성화하려고 진행 중인 예약 ID를 별도 Set으로 관리한다.
   const [approvingIds, setApprovingIds] = useState(() => new Set());
   const [proxyModalOpen, setProxyModalOpen] = useState(false);
+  // 다른 메뉴로 이동한 뒤 늦게 도착한 응답이 이 화면의 토스트·모달 상태를 건드리지 않도록
+  // 언마운트 여부를 기억한다. 캐시 무효화(invalidatePending)는 서버 사실 반영이라 이 가드와
+  // 무관하게 항상 실행한다.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const {
     data: pendingPage,
@@ -76,47 +86,71 @@ export default function ReservationManage() {
   const approveMutation = useMutation({
     mutationFn: approveCounselingReservation,
     onSuccess: () => {
+      // 서버 사실 반영은 화면 생존과 무관하게 항상 수행한다.
       invalidatePending();
-      toast('예약을 승인했습니다. 담당 상담사로 배정되었습니다.', 'success');
+      if (isMountedRef.current) {
+        toast('예약을 승인했습니다. 담당 상담사로 배정되었습니다.', 'success');
+      }
     },
     onError: (mutationError) => {
       if (mutationError instanceof ApiError && STALE_STATE_CODES.has(mutationError.code))
         invalidatePending();
-      toast(getErrorMessage(mutationError), 'error');
+      if (isMountedRef.current) {
+        toast(getErrorMessage(mutationError), 'error');
+      }
+    },
+    // mutation-level onSettled는 호출별 콜백과 달리 TanStack Query v5의 연속 mutation
+    // 상황에서도 요청마다 반드시 실행된다. 세 번째 인자(reservationId)가 곧 이 요청이
+    // 승인하려던 대상이므로, 다른 행의 승인이 먼저·나중에 끝나도 자기 행만 정확히 해제한다.
+    onSettled: (data, error, reservationId) => {
+      if (!isMountedRef.current) return;
+      setApprovingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(reservationId);
+        return next;
+      });
     },
   });
 
   const rejectMutation = useMutation({
     mutationFn: ({ reservationId, request }) => rejectCounselingReservation(reservationId, request),
-    onSuccess: () => {
+    // request.decisionReason은 학생에게 공개되긴 하지만 상담사가 작성 중인 원문이라, 완료된
+    // 요청의 사본을 mutation cache에 남기지 않는다. approveMutation은 ID만 넘겨 대상이 아니다.
+    gcTime: 0,
+    onSuccess: (data, { reservationId }) => {
       invalidatePending();
-      setRejectTarget(null);
-      setDecisionReason('');
-      setRejectError('');
-      toast('반려 처리되었습니다. 학생에게 사유가 공개됩니다.', 'info');
+      // 화면 조작(모달 닫기·입력 초기화·토스트)은 지금 이 예약의 반려 모달이 열려 있을 때만.
+      // 다른 예약으로 넘어갔거나 언마운트된 뒤 늦게 도착한 성공 응답은 건드리지 않는다.
+      if (isMountedRef.current && rejectTarget?.reservationId === reservationId) {
+        setRejectTarget(null);
+        setDecisionReason('');
+        setRejectError('');
+        toast('반려 처리되었습니다. 학생에게 사유가 공개됩니다.', 'info');
+      }
     },
-    onError: (mutationError) => {
+    onError: (mutationError, { reservationId }) => {
       if (mutationError instanceof ApiError && STALE_STATE_CODES.has(mutationError.code)) {
         invalidatePending();
-        setRejectTarget(null);
-        toast(getErrorMessage(mutationError), 'error');
+        if (isMountedRef.current && rejectTarget?.reservationId === reservationId) {
+          setRejectTarget(null);
+          toast(getErrorMessage(mutationError), 'error');
+        }
         return;
       }
-      setRejectError(getErrorMessage(mutationError));
+      if (isMountedRef.current && rejectTarget?.reservationId === reservationId) {
+        setRejectError(getErrorMessage(mutationError));
+      }
+    },
+    // 성공·오류 처리(무효화, 대상 일치 확인 후 토스트·모달 갱신)가 모두 끝난 뒤에만
+    // reset()을 호출해 반려 사유가 완료 상태로 mutation cache에 남지 않게 한다.
+    onSettled: () => {
+      rejectMutation.reset();
     },
   });
 
   const handleApprove = (reservationId) => {
     setApprovingIds((prev) => new Set(prev).add(reservationId));
-    approveMutation.mutate(reservationId, {
-      onSettled: () => {
-        setApprovingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(reservationId);
-          return next;
-        });
-      },
-    });
+    approveMutation.mutate(reservationId);
   };
 
   const openReject = (reservation) => {

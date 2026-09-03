@@ -75,6 +75,10 @@ export default function PublicResultCorrectionModal({
   onClose,
   onPendingChange,
   onResultUnavailable,
+  // [C-07] '이 초안으로 정정 시작' 경로에서만 { resultSummary, actionPlan }가 전달된다. null이면
+  // 일반 진입이라 서버 PUBLISHED 값으로 시딩한다. "무엇을 쓰는가"만 바꾸고 correctionBase(기준
+  // 버전·무변경 비교값)는 항상 서버 최신을 그대로 쓴다.
+  initialDraft = null,
 }) {
   const queryClient = useQueryClient();
 
@@ -120,6 +124,20 @@ export default function PublicResultCorrectionModal({
     gcTime: 0,
     retry: false,
   });
+
+  // [S-05] 정정 mutation 오류(403/404)뿐 아니라 조회 단계에서 같은 오류가 나도 부모에 동일하게
+  // 알린다. 안 그러면 mutation을 아직 보내지 않은 채 조회만 실패한 경우, 부모 Editor는 이미
+  // 접근할 수 없게 된 결과 화면을 계속 띄워둔다. 지금 열려 있는 모달의 오류일 때만 반응한다.
+  useEffect(() => {
+    if (!open || sessionId === null || !isPublicResultError) return;
+    if (
+      publicResultError instanceof ApiError &&
+      (publicResultError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.FORBIDDEN ||
+        publicResultError.code === COUNSELING_PUBLIC_RESULT_ERROR_CODE.SESSION_NOT_FOUND)
+    ) {
+      onResultUnavailable();
+    }
+  }, [open, sessionId, isPublicResultError, publicResultError, onResultUnavailable]);
 
   // "정정 불가" 판정은 파생 상태(correctionBase)가 아니라 서버 조회 결과 자체로 한다.
   // correctionBase === null은 (1) PUBLISHED가 아님 (2) 조회 에러(403/404/네트워크) (3) 아직
@@ -172,18 +190,20 @@ export default function PublicResultCorrectionModal({
     setCorrectionFieldError('');
     setConflictLatest(null);
     if (publicResult.resultStatus === COUNSELING_PUBLIC_RESULT_STATUS.PUBLISHED) {
+      // 기준 버전·무변경 비교값은 항상 서버 최신 PUBLISHED를 쓴다("무엇을 기준으로 정정하는가").
       setCorrectionBase({
         versionNo: publicResult.versionNo,
         resultSummary: publicResult.resultSummary,
         actionPlan: publicResult.actionPlan,
       });
-      setCorrectionSummary(publicResult.resultSummary ?? '');
-      setCorrectionPlan(publicResult.actionPlan ?? '');
+      // 입력창만 소실 초안이 있으면 그 값으로, 없으면 서버 값으로 채운다("무엇을 쓰는가").
+      setCorrectionSummary(initialDraft?.resultSummary ?? publicResult.resultSummary ?? '');
+      setCorrectionPlan(initialDraft?.actionPlan ?? publicResult.actionPlan ?? '');
     } else {
       setCorrectionBase(null);
     }
     seededRef.current = true;
-  }, [open, sessionId, publicResult]);
+  }, [open, sessionId, publicResult, initialDraft]);
 
   // 정정은 낙관적 업데이트를 하지 않는다 — 서버가 만든 새 버전(v+1)을 성공 응답으로 받은
   // 뒤에만 화면에 반영한다. 실패 코드별 처리는 아래 onError에서 분기한다.
@@ -195,6 +215,9 @@ export default function PublicResultCorrectionModal({
     setCorrectionFieldError('');
     setCorrectionBase(null);
     setConflictLatest(null);
+    // correctMutation의 정리는 아래 useMutation의 onSettled가 전담한다(요청 완료 시점마다
+    // 항상 실행됨). 여기서까지 reset()을 부르면 정의 순서상(이 함수가 correctMutation보다
+    // 먼저 선언됨) useCallback 의존성 배열에 correctMutation을 추가할 때 TDZ 오류가 난다.
     onClose();
   }, [onClose]);
 
@@ -206,6 +229,9 @@ export default function PublicResultCorrectionModal({
         actionPlan,
         correctionReason: reason,
       }),
+    // resultSummary·actionPlan·correctionReason 모두 학생에게 공개되거나 감사에 남는 원문이다.
+    // 완료 후 mutation cache에 남기지 않는다.
+    gcTime: 0,
     onSuccess: async (data, { sessionId: targetSessionId }) => {
       // 이력·학생 쪽 캐시도 함께 무효화해 다음 조회에서 정정된 최신 버전을 읽게 한다.
       queryClient.invalidateQueries({ queryKey: counselorPublicResultHistoryQueryKey(targetSessionId) });
@@ -270,6 +296,12 @@ export default function PublicResultCorrectionModal({
         return;
       }
       setCorrectionError(getPublicResultErrorMessage(mutationError));
+    },
+    // S010 충돌 분기는 재조회까지 await한 뒤 return하는 비동기 경로다. onSettled는 onSuccess/
+    // onError(그 안의 await 포함)가 모두 끝난 뒤 실행되므로, 화면 처리가 끝난 다음에만 정정
+    // 사유·요약·실행계획을 mutation cache에서 지운다.
+    onSettled: () => {
+      correctMutation.reset();
     },
   });
 

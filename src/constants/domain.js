@@ -162,7 +162,7 @@ export const COUNSELING_CANCELLATION_REASON_LABEL = {
   [COUNSELING_CANCELLATION_REASON.OTHER]: '기타',
 };
 
-/** 학생 예약 조회·취소·일정 변경과 상담사 대행 예약 API가 반환하는 업무 오류 코드. */
+/** 상담 예약·일정 API가 반환하는 업무 오류 코드. */
 export const COUNSELING_RESERVATION_ERROR_CODE = {
   INVALID_INPUT: 'C001',
   SCHEDULE_NOT_AVAILABLE: 'S002',
@@ -175,8 +175,7 @@ export const COUNSELING_RESERVATION_ERROR_CODE = {
   CONSENT_CONFLICT: 'U012',
   /** (일정 수정 전용) 예약 행 잠금 후 확인한 현재 일정이 요청의 expectedScheduleId와 달라 stale. 자동 재시도 금지, 사용자가 최신 기준으로 다시 선택해야 한다. */
   RESERVATION_SCHEDULE_CONFLICT: 'S013',
-  /** 요청의 counselingTypeId가 없거나 비활성일 때. 상담사 대행 예약 생성 API 전용(학번 조회 API에는 없음).
-   * 일정(scheduleId) 문제는 이 코드가 아니라 S002다. */
+  /** 활성 상담 유형 또는 상담사 일정 관리 API의 대상 일정을 찾을 수 없을 때. */
   RESOURCE_NOT_FOUND: 'C002',
   /** 학번 불일치·비활성 계정·학생이 아닌 계정. 이유를 구분하지 않는다. 상담사 학번 조회·대행 예약 API 전용. */
   USER_NOT_FOUND: 'U001',
