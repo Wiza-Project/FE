@@ -29,11 +29,14 @@ function calculateDDay(endDateStr) {
 function AiRecommendationBanner({ onDetail, onRequireConsent, latestFallbackJobs }) {
   const [activeTab, setActiveTab] = useState('LATEST');
 
+  // 희망조건 조회 (404 발생 시 retry 차단 및 null 수신)
   const { data: preference } = useQuery({
     queryKey: ['careerJobPreference'],
     queryFn: () => getJobPreference(),
+    retry: false,
   });
 
+  // 추천 공고 조회
   const { data: resData, isLoading } = useQuery({
     queryKey: ['careerRecommendedJobs'],
     queryFn: () => getRecommendedPostings(),
@@ -44,7 +47,7 @@ function AiRecommendationBanner({ onDetail, onRequireConsent, latestFallbackJobs
   const recommendedJobs = Array.isArray(rawList) ? rawList : [];
   // 최신 공고 탭용 데이터: 추천 API 응답이 없으면 현재 전체 목록(jobList)을 fallback으로 사용
   const displayLatestJobs = recommendedJobs.length > 0 ? recommendedJobs : (latestFallbackJobs || []);
-
+  // 희망조건 존재 여부 판정
   const hasPreference = !!(preference?.ncsStandardId || preference?.ncsJobName);
 
   return (
@@ -83,8 +86,11 @@ function AiRecommendationBanner({ onDetail, onRequireConsent, latestFallbackJobs
             <p className="text-[13px] font-bold text-[#1F2328]">
               AI 맞춤 공고 추천을 위해 [맞춤 프로파일링(PROFILING)] 동의 및 취업 희망조건 설정이 필요합니다.
             </p>
-            <Button size="sm" style={{ background: ACCENT }} onClick={onRequireConsent}>
-              개인정보 선택동의 하러 가기 →
+            <p className="text-[11px] text-[#656D76]">
+              희망 직무(NCS)를 저장하면 해당 직무 벡터 기반의 코사인 유사도 맞춤 공고가 즉시 제공됩니다.
+            </p>
+            <Button size="sm" style={{ background: ACCENT }} onClick={onGoPreference}>
+              취업 희망조건 설정하러 가기 →
             </Button>
           </div>
         ) : (
@@ -137,7 +143,7 @@ function renderCards(jobs, isLoading, onDetail, defaultBadge) {
   );
 }
 
-export default function JobList({ onDetail, onBookmarks }) {
+export default function JobList({ onDetail, onBookmarks, onGoPreference }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -225,6 +231,7 @@ export default function JobList({ onDetail, onBookmarks }) {
       <AiRecommendationBanner
         onDetail={onDetail}
         onRequireConsent={() => setConsentModalOpen(true)}
+        onGoPreference={onGoPreference}
         latestFallbackJobs={jobList}
       />
 
