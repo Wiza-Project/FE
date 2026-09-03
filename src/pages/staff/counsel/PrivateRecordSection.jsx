@@ -135,6 +135,7 @@ export default function PrivateRecordSection({ sessionId, onPendingChange }) {
     // 이미 각 요청의 onSettled에서 reset()되지만, 영역을 닫는 경계에서도 방어적으로 한 번 더
     // 정리한다(idle mutation에 reset()을 불러도 부작용 없음).
     savePrivateRecordMutation.reset();
+    confirmPrivateRecordMutation.reset();
   };
 
   const openPrivateRecord = () => {
@@ -223,6 +224,9 @@ export default function PrivateRecordSection({ sessionId, onPendingChange }) {
   const confirmPrivateRecordMutation = useMutation({
     // 확정 요청 변수는 sessionId 스칼라 하나다(저장과 시그니처가 다르다).
     mutationFn: (targetSessionId) => confirmCounselingPrivateRecord(targetSessionId),
+    // 확정 응답에도 privateContent(비공개 기록 원문)가 그대로 담겨 온다. savePrivateRecordMutation과
+    // 같은 이유로 완료 후 mutation cache에 남기지 않는다.
+    gcTime: 0,
     onSuccess: (data, targetSessionId) => {
       // 언마운트 후에는 쓰지 않는다 — savePrivateRecordMutation.onSuccess와 같은 이유.
       if (!isPrivateRecordScreenFor(targetSessionId)) return;
@@ -242,6 +246,9 @@ export default function PrivateRecordSection({ sessionId, onPendingChange }) {
         setConfirmPrivateRecordOpen(false);
       }
       onPrivateRecordMutationError(mutationError, targetSessionId);
+    },
+    onSettled: () => {
+      confirmPrivateRecordMutation.reset();
     },
   });
 

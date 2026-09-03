@@ -467,7 +467,7 @@ export default function StressTestPanel() {
           return;
         }
         setIsQuestionRefreshBlocked(false);
-        setSubmitError('');
+        setSubmitError('문항을 다시 불러왔습니다. 처음부터 다시 응답해 주세요.');
         window.requestAnimationFrame(() => {
           if (isMountedRef.current) {
             fieldsetRefs.current[refreshedQuestions.questions[0]?.questionId]?.focus();
@@ -480,7 +480,7 @@ export default function StressTestPanel() {
         const refreshedQuestions = await refreshStressTestQuestions();
         if (isMountedRef.current && refreshedQuestions) {
           setIsStressTestUnavailable(false);
-          setSubmitError('');
+          setSubmitError('문항을 다시 불러왔습니다. 처음부터 다시 응답해 주세요.');
           window.requestAnimationFrame(() => {
             if (isMountedRef.current) {
               fieldsetRefs.current[refreshedQuestions.questions[0]?.questionId]?.focus();

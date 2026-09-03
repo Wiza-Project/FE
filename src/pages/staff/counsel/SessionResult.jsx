@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pagination, StatusBadge } from '@/components/common';
 import { ApiError } from '@/api/client';
@@ -58,6 +58,7 @@ export default function SessionResult() {
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedSessionId, setSelectedSessionId] = useState(null);
+  const closeResultEditor = useCallback(() => setSelectedSessionId(null), []);
 
   const {
     data: sessionPage,
@@ -229,7 +230,7 @@ export default function SessionResult() {
 
       <PublicResultEditorModal
         sessionId={selectedSessionId}
-        onClose={() => setSelectedSessionId(null)}
+        onClose={closeResultEditor}
       />
     </div>
   );

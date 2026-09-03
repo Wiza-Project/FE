@@ -73,6 +73,8 @@ export default function ReservationManage() {
     isError,
     error,
     isPlaceholderData,
+    isFetching,
+    refetch: refetchPendingReservations,
   } = useQuery({
     queryKey: pendingReservationsQueryKey(page),
     queryFn: () => fetchPendingCounselorReservations({ page, size: PAGE_SIZE }),
@@ -227,9 +229,18 @@ export default function ReservationManage() {
         {isLoading ? (
           <p className="p-6 text-center text-[12px] text-[#656D76]">목록을 불러오는 중입니다.</p>
         ) : isError ? (
-          <p className="p-4 text-[12px] text-[#CF222E]" role="alert">
-            {getErrorMessage(error)}
-          </p>
+          <div className="p-4 text-[12px] text-[#CF222E]" role="alert">
+            <p>{getErrorMessage(error)}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-3"
+              loading={isFetching}
+              onClick={() => refetchPendingReservations()}
+            >
+              다시 시도
+            </Button>
+          </div>
         ) : content.length === 0 ? (
           <p className="p-6 text-center text-[12px] text-[#656D76]">대기 중인 예약이 없습니다.</p>
         ) : (

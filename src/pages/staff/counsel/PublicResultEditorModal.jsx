@@ -234,7 +234,10 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
     seededRef.current = true;
   }, [sessionId, publicResult]);
 
-  const invalidateList = () => queryClient.invalidateQueries({ queryKey: ['counselingSessions'] });
+  const invalidateList = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ['counselingSessions'] }),
+    [queryClient],
+  );
 
   const closeModal = useCallback(() => {
     if (sessionId !== null) {
@@ -367,7 +370,9 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
   // [S-05] 정정·이력 모달의 조회 단계에서 A004·S007(접근 불가)이 발생했을 때 두 자식 모두가
   // 호출하는 단일 신호다. mutation 오류 경로와 같은 처리(목록 무효화·회기 캐시 제거·자식/부모
   // 닫기)를 그대로 재사용한다 — 자식마다 같은 로직을 복제하면 한쪽만 고치는 회귀가 생기기 쉽다.
-  const closeUnavailableResult = () => {
+  const saveMutationReset = saveMutation.reset;
+
+  const closeUnavailableResult = useCallback(() => {
     invalidateList();
     if (sessionId !== null) {
       queryClient.removeQueries({ queryKey: counselorPublicResultQueryKey(sessionId) });
@@ -375,10 +380,10 @@ export default function PublicResultEditorModal({ sessionId, onClose }) {
     setCorrectionOpen(false);
     setCorrectionInitialDraft(null);
     setHistoryOpen(false);
-    saveMutation.reset();
+    saveMutationReset();
     onClose();
     restoreResultTriggerFocus();
-  };
+  }, [invalidateList, sessionId, queryClient, saveMutationReset, onClose, restoreResultTriggerFocus]);
 
   // 정정 요청이 진행 중일 때도 바깥 '공개 결과' 모달을 닫지 못하게 한다 — 닫으면 sessionId가
   // null이 되어 이 회기의 캐시가 제거되는데, 그 사이 응답이 도착하면 이미 사라진 화면을 잘못

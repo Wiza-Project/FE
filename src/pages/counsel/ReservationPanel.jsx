@@ -912,7 +912,7 @@ export default function ReservationPanel() {
                     return (
                       <label
                         key={schedule.scheduleId}
-                        className={`block cursor-pointer rounded-[6px] border p-3 transition-colors ${isSelected ? 'border-[#0891B2] bg-[#F0FDFE]' : 'border-[#E5E7EB] hover:border-[#67E8F9]'} ${changeMutation.isPending || isScheduleConflict ? 'cursor-not-allowed opacity-60' : ''}`}
+                        className={`block cursor-pointer rounded-[6px] border p-3 transition-colors [&:has(:focus-visible)]:outline-2 [&:has(:focus-visible)]:outline-offset-2 [&:has(:focus-visible)]:outline-[#0891B2] ${isSelected ? 'border-[#0891B2] bg-[#F0FDFE]' : 'border-[#E5E7EB] hover:border-[#67E8F9]'} ${changeMutation.isPending || isScheduleConflict ? 'cursor-not-allowed opacity-60' : ''}`}
                       >
                         <input
                           type="radio"
