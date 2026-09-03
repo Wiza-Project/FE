@@ -257,11 +257,11 @@ const validatePolicyForm = (form, activityType, { requireActivityType = false } 
   return '';
 };
 const COMP_MAP = [
-  { act: '해외 어학연수', comp: '글로벌역량', sub: '언어소통', weight: 50 },
-  { act: '국가공인자격증', comp: '전문역량', sub: '전공지식', weight: 70 },
-  { act: '자원봉사', comp: '공동체역량', sub: '사회참여', weight: 30 },
-  { act: '비교과 프로그램 이수', comp: '자기개발', sub: '진로설계', weight: 40 },
-  { act: '학생회·동아리 임원', comp: '리더십역량', sub: '조직관리', weight: 45 },
+  { act: '해외 어학연수', comp: '글로벌역량', weight: 50 },
+  { act: '국가공인자격증', comp: '전문역량', weight: 70 },
+  { act: '자원봉사', comp: '공동체역량', weight: 30 },
+  { act: '비교과 프로그램 이수', comp: '자기개발', weight: 40 },
+  { act: '학생회·동아리 임원', comp: '리더십역량', weight: 45 },
 ];
 const CERT_CRITERIA = [
   { cat: '취업지원장학', range: '300~499점', amount: '30만원', tie: '동등지급' },
@@ -309,7 +309,7 @@ function TabPolicySettings() {
         ...(currentFilter.semesterCode ? { semesterCode: currentFilter.semesterCode } : {}),
         ...(currentFilter.policyStatus ? { policyStatus: currentFilter.policyStatus } : {}),
       };
-      const { data } = await apiClient.get('/admin/mileage/policies', { params });
+      const { data } = await apiClient.get('/staff/mileage/policies', { params });
       setPolicies((data?.content ?? []).map(normalizePolicy));
     } catch (error) {
       setPolicyError(error.message);
@@ -322,7 +322,7 @@ function TabPolicySettings() {
     setActivityTypesLoading(true);
     setActivityTypesError('');
     try {
-      const { data } = await apiClient.get('/admin/mileage/activity-types');
+      const { data } = await apiClient.get('/staff/mileage/activity-types');
       const content = Array.isArray(data) ? data : data?.content ?? [];
       setActivityTypes(content);
     } catch (error) {
@@ -351,7 +351,7 @@ function TabPolicySettings() {
 
     setSaving(true);
     try {
-      await apiClient.post('/admin/mileage/policies', buildPolicyRegisterPayload(pForm));
+      await apiClient.post('/staff/mileage/policies', buildPolicyRegisterPayload(pForm));
       toast('정책이 등록되었습니다.', 'success');
       resetCreateForm();
       await loadPolicies(policyFilter);
@@ -373,7 +373,7 @@ function TabPolicySettings() {
     setEditForm(null);
     setDetailLoading(true);
     try {
-      const { data } = await apiClient.get(`/admin/mileage/policies/${policyId}`);
+      const { data } = await apiClient.get(`/staff/mileage/policies/${policyId}`);
       setEditForm(toPolicyForm(data));
     } catch (error) {
       toast(error.message, 'error');
@@ -404,7 +404,7 @@ function TabPolicySettings() {
 
     setEditSaving(true);
     try {
-      await apiClient.patch(`/admin/mileage/policies/${editId}`, buildPolicyUpdatePayload(editForm));
+      await apiClient.patch(`/staff/mileage/policies/${editId}`, buildPolicyUpdatePayload(editForm));
       toast('정책이 수정되었습니다.', 'success');
       setEditId(null);
       setEditForm(null);
@@ -421,7 +421,7 @@ function TabPolicySettings() {
 
     setActionId(policy.mileagePolicyId);
     try {
-      await apiClient.patch(`/admin/mileage/policies/${policy.mileagePolicyId}`, {
+      await apiClient.patch(`/staff/mileage/policies/${policy.mileagePolicyId}`, {
         policyStatus: 'INACTIVE',
       });
       toast('정책이 비활성화되었습니다.', 'success');
@@ -764,11 +764,11 @@ function TabPolicySettings() {
         <SCard title="활동유형–핵심역량 매핑">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
-              <thead><tr className="border-b border-[#E5E7EB]"><TH>활동유형</TH><TH>핵심역량</TH><TH>하위역량</TH><TH center>가중치</TH></tr></thead>
+              <thead><tr className="border-b border-[#E5E7EB]"><TH>활동유형</TH><TH>핵심역량</TH><TH center>가중치</TH></tr></thead>
               <tbody>
                 {COMP_MAP.map((r) => (
                   <tr key={r.act} className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA]">
-                    <TD cls="text-[#444D56]">{r.act}</TD><TD cls="font-semibold text-[#1F2328]">{r.comp}</TD><TD cls="text-[#656D76]">{r.sub}</TD>
+                    <TD cls="text-[#444D56]">{r.act}</TD><TD cls="font-semibold text-[#1F2328]">{r.comp}</TD>
                     <TD center><div className="flex items-center gap-2 justify-center"><div className="w-16 h-1.5 rounded-full bg-[#E5E7EB] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${r.weight}%`, background: A }} /></div><span className="text-[10px] font-bold" style={{ color: A }}>{r.weight}%</span></div></TD>
                   </tr>
                 ))}
@@ -824,7 +824,7 @@ function TabReviewInbox() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await apiClient.get('/admin/mileage/claims', {
+      const { data } = await apiClient.get('/staff/mileage/claims', {
         params: {
           status: currentFilters.status,
           keyword: currentFilters.keyword || undefined,
@@ -882,7 +882,7 @@ function TabReviewInbox() {
     setDetailLoading(true);
 
     try {
-      const { data } = await apiClient.get(`/admin/mileage/claims/${item.id}`);
+      const { data } = await apiClient.get(`/staff/mileage/claims/${item.id}`);
       setDrawerDetail(data);
       setDrawerItem((current) => (
         current?.id === item.id
@@ -926,10 +926,10 @@ function TabReviewInbox() {
     setReviewSubmitting(true);
     try {
       if (decision === 'APPROVE') {
-        await apiClient.post(`/admin/mileage/claims/${drawerItem.id}/approve`);
+        await apiClient.post(`/staff/mileage/claims/${drawerItem.id}/approve`);
         toast('승인 완료. 마일리지 EARN 거래가 생성되었습니다.', 'success');
       } else {
-        await apiClient.post(`/admin/mileage/claims/${drawerItem.id}/reject`, { reason });
+        await apiClient.post(`/staff/mileage/claims/${drawerItem.id}/reject`, { reason });
         toast('반려 처리되었습니다.', 'info');
       }
 
@@ -954,7 +954,7 @@ function TabReviewInbox() {
 
     setCancelSubmitting(true);
     try {
-      await apiClient.post(`/admin/mileage/claims/${cancelOpen.id}/cancel`, { reason });
+      await apiClient.post(`/staff/mileage/claims/${cancelOpen.id}/cancel`, { reason });
       toast('승인 취소 완료. 마일리지 역분개 거래가 생성되었습니다.', 'info');
       setCancelOpen(null);
       setCancelReason('');
