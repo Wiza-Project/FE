@@ -169,7 +169,6 @@ const DUPLICATE_RULE_LABELS = {
 const SEMESTER_OPTIONS = ['ALL', 'SPRING', 'SUMMER', 'FALL', 'WINTER'];
 const DEFAULT_POLICY_FORM = {
   activityTypeId: '',
-  academicYear: '2026',
   semesterCode: 'ALL',
   points: '',
   maximumPoints: '',
@@ -186,7 +185,6 @@ const buildDuplicateRulePayload = (duplicateRuleType) => (
 
 const toPolicyForm = (policy) => ({
   activityTypeId: policy?.activityTypeId != null ? String(policy.activityTypeId) : '',
-  academicYear: policy?.academicYear != null ? String(policy.academicYear) : '2026',
   semesterCode: policy?.semesterCode ?? 'ALL',
   points: policy?.points != null ? String(policy.points) : '',
   maximumPoints: policy?.maximumPoints != null ? String(policy.maximumPoints) : '',
@@ -208,7 +206,6 @@ const normalizePolicy = (policy) => ({
 
 const buildPolicyRegisterPayload = (form) => ({
   activityTypeId: Number(form.activityTypeId),
-  academicYear: Number(form.academicYear),
   semesterCode: form.semesterCode || 'ALL',
   points: Number(form.points),
   maximumPoints: form.maximumPoints === '' ? null : Number(form.maximumPoints),
@@ -231,13 +228,9 @@ const validatePolicyForm = (form, activityType, { requireActivityType = false } 
     return '활동유형을 선택해 주세요.';
   }
 
-  const academicYear = Number(form.academicYear);
   const points = Number(form.points);
   const maximumPoints = form.maximumPoints === '' ? null : Number(form.maximumPoints);
 
-  if (!Number.isInteger(academicYear) || academicYear <= 0) {
-    return '학년도를 올바르게 입력해 주세요.';
-  }
   if (!Number.isFinite(points) || points < 0) {
     return '점수를 0 이상으로 입력해 주세요.';
   }
@@ -263,7 +256,7 @@ const REJECT_CODES = ['선택하세요', '허위 증빙', '유효기간 초과',
 
 // ─── Tab ① 기준 설정 ─────────────────────────────────────────────────────────────
 
-const DEFAULT_POLICY_QUERY = { academicYear: '2026', semesterCode: '', policyStatus: '' };
+const DEFAULT_POLICY_QUERY = { semesterCode: '', policyStatus: '' };
 
 function TabPolicySettings() {
   const [policies, setPolicies] = useState([]);
@@ -300,7 +293,6 @@ function TabPolicySettings() {
         page: 0,
         size: POLICY_PAGE_SIZE,
         sort: 'createdAt,desc',
-        academicYear: Number(currentFilter.academicYear),
         ...(currentFilter.semesterCode ? { semesterCode: currentFilter.semesterCode } : {}),
         ...(currentFilter.policyStatus ? { policyStatus: currentFilter.policyStatus } : {}),
       };
@@ -456,16 +448,6 @@ function TabPolicySettings() {
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="block text-[10px] font-semibold text-[#9AA0A6] mb-1">학년도</label>
-            <input
-              type="number"
-              value={pForm.academicYear}
-              onChange={(e) => updateCreateField('academicYear', e.target.value)}
-              disabled={saving}
-              className="h-8 w-24 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none"
-            />
           </div>
           <div>
             <label className="block text-[10px] font-semibold text-[#9AA0A6] mb-1">학기</label>
@@ -631,7 +613,6 @@ function TabPolicySettings() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 rounded-[8px] bg-[#F9FAFB] p-4 text-[12px]">
                 <div><p className="text-[10px] text-[#9AA0A6]">정책 ID</p><p className="font-bold text-[#1F2328]">#{editId}</p></div>
                 <div><p className="text-[10px] text-[#9AA0A6]">활동유형</p><p className="font-bold text-[#1F2328]">{policies.find((item) => item.mileagePolicyId === editId)?.activityName ?? '-'}</p></div>
-                <div><p className="text-[10px] text-[#9AA0A6]">학년도</p><p className="font-bold text-[#1F2328]">{editForm.academicYear}</p></div>
                 <div><p className="text-[10px] text-[#9AA0A6]">학기</p><p className="font-bold text-[#1F2328]">{editForm.semesterCode}</p></div>
               </div>
               <div className="flex gap-3 items-end flex-wrap">
@@ -1275,8 +1256,7 @@ function TabReviewInbox() {
                     {
                       l: '적용 정책',
                       v: detailPolicy
-                        ? String(detailPolicy.academicYear ?? '-') + ' ' +
-                          String(detailPolicy.semesterCode ?? '-') + ' / v' +
+                        ? String(detailPolicy.semesterCode ?? '-') + ' / v' +
                           String(detailPolicy.versionNo ?? '-')
                         : '-',
                     },

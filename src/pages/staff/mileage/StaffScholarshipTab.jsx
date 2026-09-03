@@ -26,13 +26,11 @@ const EMPTY_POLICY_PAGE = {
 };
 
 const INITIAL_FILTERS = {
-  academicYear: '2026',
   semesterCode: '',
   active: 'true',
 };
 
 const EMPTY_FORM = {
-  academicYear: '2026',
   semesterCode: 'ALL',
   benefitName: '',
   minimumPoints: '',
@@ -84,9 +82,7 @@ const formatSemester = (semesterCode) => {
   return SEMESTER_LABELS[semesterCode] ?? semesterCode;
 };
 
-const formatPeriod = (academicYear, semesterCode) => (
-  `${academicYear ?? '-'}학년도 ${formatSemester(semesterCode)}`
-);
+const formatPeriod = (semesterCode) => formatSemester(semesterCode);
 
 const formatApplicationPeriod = (policy) => (
   `${policy.applicationStartsAt ? formatDateTime(policy.applicationStartsAt) : '상시'} ~ ${policy.applicationEndsAt ? formatDateTime(policy.applicationEndsAt) : '마감 없음'}`
@@ -121,7 +117,6 @@ const criteriaPreview = (criteriaData) => {
 };
 
 const toPolicyForm = (policy = {}) => ({
-  academicYear: String(policy.academicYear ?? '2026'),
   semesterCode: policy.semesterCode ?? 'ALL',
   benefitName: policy.benefitName ?? '',
   minimumPoints: policy.minimumPoints == null ? '' : String(policy.minimumPoints),
@@ -136,11 +131,6 @@ const parseCriteria = (value) => (value.trim() ? JSON.parse(value) : null);
 
 const validateForm = (form) => {
   if (!form.benefitName.trim()) return '장학금명을 입력해 주세요.';
-
-  const academicYear = Number(form.academicYear);
-  if (!Number.isInteger(academicYear) || academicYear < 2000 || academicYear > 9999) {
-    return '학년도를 올바르게 입력해 주세요.';
-  }
 
   const minimumPoints = Number(form.minimumPoints);
   if (!Number.isFinite(minimumPoints) || minimumPoints < 0) {
@@ -172,7 +162,6 @@ const validateForm = (form) => {
 
 const buildRegisterPayload = (form) => ({
   benefitType: BENEFIT_TYPE,
-  academicYear: Number(form.academicYear),
   semesterCode: form.semesterCode || 'ALL',
   benefitName: form.benefitName.trim(),
   minimumPoints: Number(form.minimumPoints),
@@ -213,26 +202,12 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
           <Field label="혜택 유형">
             <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>{BENEFIT_TYPE}</div>
           </Field>
-          <Field label="학년도">
-            <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>{form.academicYear}</div>
-          </Field>
           <Field label="적용 학기">
             <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>{formatSemester(form.semesterCode)}</div>
           </Field>
         </>
       ) : (
         <>
-          <Field label="학년도">
-            <input
-              type="number"
-              min="2000"
-              max="9999"
-              value={form.academicYear}
-              onChange={update('academicYear')}
-              disabled={disabled}
-              className={FIELD_CLASS}
-            />
-          </Field>
           <Field label="적용 학기">
             <select value={form.semesterCode} onChange={update('semesterCode')} disabled={disabled} className={FIELD_CLASS}>
               {semesterFormOptions.map((opt) => (
@@ -248,7 +223,7 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
           value={form.benefitName}
           onChange={update('benefitName')}
           disabled={disabled}
-          placeholder="예) 2026 취업지원장학"
+          placeholder="예) 취업지원장학"
           className={FIELD_CLASS}
         />
       </Field>
@@ -341,7 +316,6 @@ export default function StaffScholarshipTab() {
     try {
       const params = {
         benefitType: BENEFIT_TYPE,
-        academicYear: Number(currentFilters.academicYear),
         page: currentPage - 1,
         size: POLICY_PAGE_SIZE,
         sort: 'createdAt,desc',
@@ -528,7 +502,7 @@ export default function StaffScholarshipTab() {
           <table className="w-full min-w-[980px] border-collapse text-[12px]">
             <thead>
               <tr className="border-b border-[#E5E7EB] bg-[#F6F8FA]">
-                {['정책 ID', '장학금명', '적용기간', '최소 기준', '지급액', '신청기간', '세부 기준', '상태', '관리'].map((heading) => (
+                {['정책 ID', '장학금명', '적용 학기', '최소 기준', '지급액', '신청기간', '세부 기준', '상태', '관리'].map((heading) => (
                   <th key={heading} className="whitespace-nowrap px-3 py-3 text-center text-[10px] font-semibold text-[#656D76]">
                     {heading}
                   </th>
@@ -549,7 +523,7 @@ export default function StaffScholarshipTab() {
                   <tr key={policy.benefitPolicyId} className={`border-b border-[#F3F4F6] last:border-0 ${index % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}>
                     <td className="whitespace-nowrap px-3 py-3 text-center font-mono text-[10px] text-[#656D76]">#{policy.benefitPolicyId}</td>
                     <td className="px-3 py-3 text-left font-semibold text-[#1F2328]">{policy.benefitName ?? '-'}</td>
-                    <td className="whitespace-nowrap px-3 py-3 text-center text-[#656D76]">{formatPeriod(policy.academicYear, policy.semesterCode)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-center text-[#656D76]">{formatPeriod(policy.semesterCode)}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-center font-black text-[#1F2328]">{formatPoints(policy.minimumPoints)}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-center font-semibold text-[#D97706]">{formatAmount(policy.benefitAmount)}</td>
                     <td className="max-w-[260px] px-3 py-3 text-center text-[11px] text-[#656D76]">{formatApplicationPeriod(policy)}</td>

@@ -27,8 +27,6 @@ const TRANSACTION_STATUS_LABELS = {
 
 const formatPoints = (value) => Number(value ?? 0).toLocaleString('ko-KR');
 const formatSemester = (semesterCode) => SEMESTER_LABELS[semesterCode] ?? semesterCode ?? '-';
-const formatAcademicPeriod = (academicYear, semesterCode) =>
-  `${academicYear ?? '-'}-${formatSemester(semesterCode)}`;
 const parseDate = (value) => {
   if (!value) return null;
   const date = new Date(value);
@@ -199,7 +197,9 @@ export default function MileageDashboard() {
     let mounted = true;
 
     apiClient
-      .get('/students/mileage/dashboard', { params: period })
+      .get('/students/mileage/dashboard', {
+        params: { semesterCode: period.semesterCode },
+      })
       .then(({ data }) => {
         if (mounted) {
           setDashboardData(data);
@@ -223,7 +223,9 @@ export default function MileageDashboard() {
     let mounted = true;
 
     apiClient
-      .get('/students/mileage/grade', { params: period })
+      .get('/students/mileage/grade', {
+        params: { semesterCode: period.semesterCode },
+      })
       .then(({ data }) => {
         if (mounted) {
           setGradeData(data);
@@ -302,16 +304,14 @@ export default function MileageDashboard() {
     ? Number(dashboardData.summary?.currentSemesterPoints ?? 0)
     : 0;
   const currentPeriod = dashboardData?.period ?? period;
-  const semesterLabel = currentPeriod
-    ? formatAcademicPeriod(currentPeriod.academicYear, currentPeriod.semesterCode)
-    : '-';
+  const semesterLabel = currentPeriod ? formatSemester(currentPeriod.semesterCode) : '-';
   const shortenCompetencyLabel = (name) => (name ?? '').replace(/역량$/, '').trim() || name || '';
   const competencyData = (dashboardData?.competencyBreakdown ?? []).map((item) => ({
     label: shortenCompetencyLabel(item.competencyName),
     value: Number(item.points ?? 0),
   }));
   const trendData = (dashboardData?.semesterTrend ?? []).map((item) => ({
-    label: `${item.academicYear}년 ${formatSemester(item.semesterCode)}`,
+    label: formatSemester(item.semesterCode),
     value: Number(item.points ?? 0),
   }));
   const currentGradeName = gradeData?.currentGrade?.gradeName;
@@ -673,10 +673,7 @@ export default function MileageDashboard() {
                   <div className="flex justify-between gap-3">
                     <span className="text-[#9AA0A6]">적용 학기</span>
                     <span className="text-[#1F2328]">
-                      {formatAcademicPeriod(
-                        transactionDetail.policy.academicYear,
-                        transactionDetail.policy.semesterCode,
-                      )}
+                      {formatSemester(transactionDetail.policy.semesterCode)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-3">

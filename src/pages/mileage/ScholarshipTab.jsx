@@ -9,7 +9,6 @@ import {
   StatTile,
   toast,
 } from '@/components/common';
-import { useAuthStore } from '@/stores/authStore';
 import { SEMESTER_LABELS } from '@/utils/academicPeriod';
 
 const ACCENT = '#D97706';
@@ -74,16 +73,14 @@ const formatSemester = (semesterCode) => {
   return SEMESTER_LABELS[semesterCode] ?? semesterCode;
 };
 
-const formatPeriod = (academicYear, semesterCode) => (
-  `${academicYear ?? '-'}학년도 ${formatSemester(semesterCode)}`
-);
+const formatPeriod = (semesterCode) => formatSemester(semesterCode);
 
 const isSemesterBenefit = (item) => item.semesterCode != null && item.semesterCode !== 'ALL';
 const isCumulativeBenefit = (item) => /4년|누적/.test(item.benefitName ?? '');
 
-const getDisabledReason = (item, { period, isFourthYear }) => {
+const getDisabledReason = (item, { period }) => {
   if (isCumulativeBenefit(item)) {
-    return isFourthYear ? null : '4학년(입학 4년차)만 신청할 수 있는 장학금입니다.';
+    return null;
   }
   if (!isSemesterBenefit(item)) {
     return period?.semesterCode === 'FALL' ? null : '2학기에만 신청할 수 있는 장학금입니다.';
@@ -168,7 +165,7 @@ function ScholarshipCard({ item, onSelect, disabledReason }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="mb-1 text-[10px] font-semibold text-[#9AA0A6]">
-            {formatPeriod(item.academicYear, item.semesterCode)}
+            {formatPeriod(item.semesterCode)}
           </p>
           <h3 className="truncate text-[15px] font-black text-[#1F2328]" title={item.benefitName}>
             {item.benefitName ?? '장학금 기준'}
@@ -222,7 +219,7 @@ function ScholarshipCard({ item, onSelect, disabledReason }) {
  * 학생 장학금 탭.
  *
  * 백엔드 계약:
- * - GET /students/mileage/scholarships?academicYear=&semesterCode=
+ * - GET /students/mileage/scholarships?semesterCode=
  * - GET /students/mileage/scholarships/applications
  * - POST /students/mileage/scholarships/{benefitPolicyId}/applications
  *
@@ -230,7 +227,6 @@ function ScholarshipCard({ item, onSelect, disabledReason }) {
  * @param {number|null} [props.currentPoints] 마일리지 대시보드에서 이미 조회한 현재 점수
  */
 export default function ScholarshipTab({ currentPoints = null }) {
-  const user = useAuthStore((state) => state.user);
   const [scholarships, setScholarships] = useState([]);
   const [scholarshipsLoading, setScholarshipsLoading] = useState(true);
   const [scholarshipsError, setScholarshipsError] = useState('');
@@ -264,7 +260,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
     setScholarshipsError('');
     try {
       const { data } = await apiClient.get('/students/mileage/scholarships', {
-        params: period,
+        params: { semesterCode: period.semesterCode },
       });
       setScholarships(Array.isArray(data) ? data : data?.content ?? []);
     } catch (error) {
@@ -334,20 +330,13 @@ export default function ScholarshipTab({ currentPoints = null }) {
   const historyRows = historyData?.content ?? [];
   const historyTotalPages = Math.max(1, historyData?.totalPages ?? 1);
 
-  const isFourthYear = useMemo(() => {
-    const loginId = user?.loginId ?? '';
-    const admissionYear = /^\d{4}/.test(loginId) ? Number(loginId.slice(0, 4)) : null;
-    return admissionYear != null && period?.academicYear != null
-      && (period.academicYear - admissionYear + 1) === 4;
-  }, [user, period]);
-
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-[16px] font-black text-[#1F2328]">장학금 신청</h2>
           <p className="mt-1 text-[12px] text-[#9AA0A6]">
-            {period ? `${formatPeriod(period.academicYear, period.semesterCode)} ` : ''}
+            {period ? `${formatPeriod(period.semesterCode)} ` : ''}
             장학금 기준과 신청 현황을 확인하세요.
           </p>
         </div>
@@ -415,11 +404,11 @@ export default function ScholarshipTab({ currentPoints = null }) {
           ) : (
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {scholarships.map((item) => (
-                <ScholarshipCard
-                  key={item.benefitPolicyId}
-                  item={item}
-                  onSelect={setSelectedScholarship}
-                  disabledReason={getDisabledReason(item, { period, isFourthYear })}
+                  <ScholarshipCard
+                    key={item.benefitPolicyId}
+                    item={item}
+                    onSelect={setSelectedScholarship}
+                    disabledReason={getDisabledReason(item, { period })}
                 />
               ))}
             </div>
@@ -441,7 +430,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
           <table className="w-full min-w-[820px] border-collapse text-[12px]">
             <thead>
               <tr className="border-b border-[#E5E7EB] bg-[#F6F8FA]">
-                {['신청일', '장학금명', '적용기간', '신청 당시 점수', '지급액', '상태', '처리일', '처리 사유'].map((heading) => (
+                {['신청일', '장학금명', '적용 학기', '신청 당시 점수', '지급액', '상태', '처리일', '처리 사유'].map((heading) => (
                   <th key={heading} className="whitespace-nowrap px-3 py-3 text-center text-[10px] font-semibold text-[#656D76]">
                     {heading}
                   </th>
@@ -472,7 +461,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
                   <tr key={row.benefitApplicationId} className={`border-b border-[#F3F4F6] last:border-0 ${index % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}>
                     <td className="whitespace-nowrap px-3 py-3 text-center text-[#656D76]">{formatDateTime(row.appliedAt)}</td>
                     <td className="px-3 py-3 text-left font-semibold text-[#1F2328]">{row.benefitName ?? '-'}</td>
-                    <td className="whitespace-nowrap px-3 py-3 text-center text-[#656D76]">{formatPeriod(row.academicYear, row.semesterCode)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-center text-[#656D76]">{formatPeriod(row.semesterCode)}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-center font-bold text-[#D97706]">{formatPoints(row.pointsSnapshot)}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-center font-semibold text-[#1F2328]">{formatAmount(row.benefitAmount)}</td>
                     <td className="px-3 py-3 text-center">
@@ -539,7 +528,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
             <div className="flex items-start justify-between gap-3 rounded-[8px] bg-[#FFFBEB] p-4">
               <div>
                 <p className="text-[11px] text-[#92400E]">
-                  {formatPeriod(selectedScholarship.academicYear, selectedScholarship.semesterCode)}
+                  {formatPeriod(selectedScholarship.semesterCode)}
                 </p>
                 <p className="mt-1 text-[20px] font-black text-[#B45309]">
                   {formatAmount(selectedScholarship.benefitAmount)}
