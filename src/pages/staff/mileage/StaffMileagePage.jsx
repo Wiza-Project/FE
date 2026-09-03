@@ -421,11 +421,6 @@ function TabPolicySettings() {
     }
   };
 
-  const pathChip = (route) =>
-    route === 'PROGRAM_COMPLETION'
-      ? { bg: '#D1FAE5', text: '#059669' }
-      : { bg: '#F3F4F6', text: '#374151' };
-
   return (
     <div className="flex flex-col gap-5">
       {/* Backend-supported policy filters */}
@@ -624,8 +619,6 @@ function TabPolicySettings() {
               <tr className="border-b border-[#E5E7EB]">
                 <TH>정책 ID</TH>
                 <TH>활동유형</TH>
-                <TH>분류</TH>
-                <TH center>적립경로</TH>
                 <TH center>점수</TH>
                 <TH center>상한</TH>
                 <TH center>중복규칙</TH>
@@ -636,19 +629,13 @@ function TabPolicySettings() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={10} className="px-4 py-10 text-center text-[12px] text-[#656D76]">정책을 불러오는 중입니다.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-[12px] text-[#656D76]">정책을 불러오는 중입니다.</td></tr>
               ) : policyError ? (
-                <tr><td colSpan={10} className="px-4 py-10 text-center text-[12px] text-[#CF222E]">정책을 불러오지 못했습니다: {policyError}</td></tr>
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-[12px] text-[#CF222E]">정책을 불러오지 못했습니다: {policyError}</td></tr>
               ) : policies.length === 0 ? (
-                <tr><td colSpan={10} className="px-4 py-10 text-center text-[12px] text-[#9AA0A6]">조회된 정책이 없습니다.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-[12px] text-[#9AA0A6]">조회된 정책이 없습니다.</td></tr>
               ) : (
                 policies.map((policy) => {
-                  const activityType = activityTypes.find(
-                    (activity) => String(activity.activityTypeId) === String(policy.activityTypeId),
-                  );
-                  const categoryCode = policy.categoryCode ?? activityType?.categoryCode ?? '-';
-                  const earningRoute = policy.earningRoute ?? activityType?.earningRoute ?? '-';
-                  const path = pathChip(earningRoute);
                   const status = POLICY_STATUS_LABELS[policy.policyStatus] ?? policy.policyStatus ?? '-';
                   return (
                     <tr
@@ -657,8 +644,6 @@ function TabPolicySettings() {
                     >
                       <TD cls="font-mono text-[10px]"><span style={{ color: A }}>#{policy.mileagePolicyId}</span></TD>
                       <TD cls="font-semibold text-[#1F2328]">{policy.activityName}</TD>
-                      <TD cls="text-[#656D76]">{categoryCode}</TD>
-                      <TD center><Chip label={earningRoute} bg={path.bg} text={path.text} /></TD>
                       <TD center cls="font-black"><span style={{ color: A }}>{policy.points}점</span></TD>
                       <TD center cls="text-[#444D56]">{policy.maximumPoints ?? '—'}점</TD>
                       <TD center><span className="text-[10px] font-semibold text-[#656D76]">{DUPLICATE_RULE_LABELS[policy.duplicateRuleType] ?? policy.duplicateRuleType}</span></TD>
@@ -1473,7 +1458,7 @@ export default function StaffMileagePage() {
         <div>
           <h1 className="text-[20px] font-black text-[#1F2328]">마일리지 관리</h1>
           <p className="text-[12px] text-[#9AA0A6] mt-0.5">
-            기준 설정 · 증빙 심사 · 장학금 기준 · 적립 취소(역분개)
+            기준 설정 · 증빙 심사 · 장학금 기준 · 적립 취소
           </p>
         </div>
         <Chip label="2026-v1 적용중" bg="#FEF3C7" text={A} />
