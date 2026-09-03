@@ -36,3 +36,12 @@ export const fetchMileageGrade = async (params) => {
   return data;
 };
 
+/**
+ * 현재 학기(연도·학기코드)를 서버 기준으로 조회
+ * @returns {Promise<{academicYear: number, semesterCode: string}>}
+ */
+export const fetchCurrentMileagePeriod = async () => {
+  const { data } = await apiClient.get('/students/mileage/current-period');
+  return data;
+};
+

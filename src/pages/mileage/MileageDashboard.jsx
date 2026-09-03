@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/api/client';
-import { resolveCurrentAcademicPeriod, SEMESTER_LABELS } from '@/utils/academicPeriod';
+import { fetchCurrentMileagePeriod } from '@/api/mileage';
+import { SEMESTER_LABELS } from '@/utils/academicPeriod';
 import ScholarshipTab from './ScholarshipTab';
 import ExternalActivity from './ExternalActivity';
 import { PageHeader, StatTile, Button, BarChart, Pagination, Drawer } from '@/components/common';
 
 const ACCENT = '#D97706';
-const DASHBOARD_PERIOD = resolveCurrentAcademicPeriod();
 
 const PAGE_SIZE = 10;
 const SOURCE_LABELS = {
@@ -171,11 +171,35 @@ export default function MileageDashboard() {
   const [transactionDetailLoading, setTransactionDetailLoading] = useState(false);
   const [transactionDetailError, setTransactionDetailError] = useState('');
 
+  const [period, setPeriod] = useState(null);
+
   useEffect(() => {
     let mounted = true;
 
+    fetchCurrentMileagePeriod()
+      .then((data) => {
+        if (mounted) setPeriod(data);
+      })
+      .catch((error) => {
+        if (mounted) {
+          setDashboardError(error.message);
+          setDashboardLoading(false);
+          setGradeError(error.message);
+          setGradeLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!period) return undefined;
+    let mounted = true;
+
     apiClient
-      .get('/students/mileage/dashboard', { params: DASHBOARD_PERIOD })
+      .get('/students/mileage/dashboard', { params: period })
       .then(({ data }) => {
         if (mounted) {
           setDashboardData(data);
@@ -192,13 +216,14 @@ export default function MileageDashboard() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [period]);
 
   useEffect(() => {
+    if (!period) return undefined;
     let mounted = true;
 
     apiClient
-      .get('/students/mileage/grade', { params: DASHBOARD_PERIOD })
+      .get('/students/mileage/grade', { params: period })
       .then(({ data }) => {
         if (mounted) {
           setGradeData(data);
@@ -215,7 +240,7 @@ export default function MileageDashboard() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [period]);
 
   useEffect(() => {
     if (tab !== 'ledger') return undefined;
@@ -276,7 +301,7 @@ export default function MileageDashboard() {
   const currentSemesterScore = hasDashboardData
     ? Number(dashboardData.summary?.currentSemesterPoints ?? 0)
     : 0;
-  const currentPeriod = dashboardData?.period ?? DASHBOARD_PERIOD;
+  const currentPeriod = dashboardData?.period ?? period;
   const semesterLabel = currentPeriod
     ? formatAcademicPeriod(currentPeriod.academicYear, currentPeriod.semesterCode)
     : '-';

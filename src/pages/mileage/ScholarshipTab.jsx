@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/api/client';
+import { fetchCurrentMileagePeriod } from '@/api/mileage';
 import {
   Button,
   EmptyState,
@@ -8,11 +9,10 @@ import {
   StatTile,
   toast,
 } from '@/components/common';
-import { resolveCurrentAcademicPeriod, SEMESTER_LABELS } from '@/utils/academicPeriod';
+import { SEMESTER_LABELS } from '@/utils/academicPeriod';
 
 const ACCENT = '#D97706';
 const HISTORY_PAGE_SIZE = 10;
-const CURRENT_PERIOD = resolveCurrentAcademicPeriod();
 
 const APPLICATION_STATUS_LABELS = {
   APPLIED: '신청 접수',
@@ -225,13 +225,31 @@ export default function ScholarshipTab({ currentPoints = null }) {
   const [historyError, setHistoryError] = useState('');
   const [selectedScholarship, setSelectedScholarship] = useState(null);
   const [applyingId, setApplyingId] = useState(null);
+  const [period, setPeriod] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    fetchCurrentMileagePeriod()
+      .then((data) => {
+        if (mounted) setPeriod(data);
+      })
+      .catch((error) => {
+        if (mounted) setScholarshipsError(error.message ?? '학기 정보를 불러오지 못했습니다.');
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const loadScholarships = useCallback(async () => {
+    if (!period) return;
     setScholarshipsLoading(true);
     setScholarshipsError('');
     try {
       const { data } = await apiClient.get('/students/mileage/scholarships', {
-        params: CURRENT_PERIOD,
+        params: period,
       });
       setScholarships(Array.isArray(data) ? data : data?.content ?? []);
     } catch (error) {
@@ -240,7 +258,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
     } finally {
       setScholarshipsLoading(false);
     }
-  }, []);
+  }, [period]);
 
   const loadHistory = useCallback(async (page) => {
     setHistoryLoading(true);
@@ -307,7 +325,8 @@ export default function ScholarshipTab({ currentPoints = null }) {
         <div>
           <h2 className="text-[16px] font-black text-[#1F2328]">장학금 신청</h2>
           <p className="mt-1 text-[12px] text-[#9AA0A6]">
-            {formatPeriod(CURRENT_PERIOD.academicYear, CURRENT_PERIOD.semesterCode)} 장학금 기준과 신청 현황을 확인하세요.
+            {period ? `${formatPeriod(period.academicYear, period.semesterCode)} ` : ''}
+            장학금 기준과 신청 현황을 확인하세요.
           </p>
         </div>
         <Button
