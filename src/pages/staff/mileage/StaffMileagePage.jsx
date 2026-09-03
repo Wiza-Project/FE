@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { Button, Modal, Drawer, Pagination, StatTile, toast } from '@/components/common';
+import { useCommonCode } from '@/hooks/useCommonCode';
+import { SEMESTER_LABELS } from '@/utils/academicPeriod';
 import StaffScholarshipTab from './StaffScholarshipTab';
 
 const A = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
@@ -261,15 +263,20 @@ const REJECT_CODES = ['선택하세요', '허위 증빙', '유효기간 초과',
 
 // ─── Tab ① 기준 설정 ─────────────────────────────────────────────────────────────
 
+const DEFAULT_POLICY_QUERY = { academicYear: '2026', semesterCode: '', policyStatus: '' };
+
 function TabPolicySettings() {
   const [policies, setPolicies] = useState([]);
   const [activityTypes, setActivityTypes] = useState([]);
-  const [policyFilter, setPolicyFilter] = useState({
-    academicYear: '2026',
-    semesterCode: '',
-    policyStatus: '',
-  });
   const [pForm, setPForm] = useState(DEFAULT_POLICY_FORM);
+  const { data: semesterCodesRaw = [] } = useCommonCode('SEMESTER');
+  const registrationSemesterOptions = [
+    { code: 'ALL', codeName: '연간' },
+    ...semesterCodesRaw
+      .filter((s) => s.code === 'SPRING' || s.code === 'FALL')
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((s) => ({ ...s, codeName: SEMESTER_LABELS[s.code] ?? s.codeName })),
+  ];
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -321,7 +328,7 @@ function TabPolicySettings() {
   }, []);
 
   useEffect(() => {
-    loadPolicies({ academicYear: '2026', semesterCode: '', policyStatus: '' });
+    loadPolicies(DEFAULT_POLICY_QUERY);
     loadActivityTypes();
   }, [loadActivityTypes, loadPolicies]);
 
@@ -342,7 +349,7 @@ function TabPolicySettings() {
       await apiClient.post('/staff/mileage/policies', buildPolicyRegisterPayload(pForm));
       toast('정책이 등록되었습니다.', 'success');
       resetCreateForm();
-      await loadPolicies(policyFilter);
+      await loadPolicies(DEFAULT_POLICY_QUERY);
     } catch (error) {
       toast(error.message, 'error');
     } finally {
@@ -396,7 +403,7 @@ function TabPolicySettings() {
       toast('정책이 수정되었습니다.', 'success');
       setEditId(null);
       setEditForm(null);
-      await loadPolicies(policyFilter);
+      await loadPolicies(DEFAULT_POLICY_QUERY);
     } catch (error) {
       toast(error.message, 'error');
     } finally {
@@ -413,7 +420,7 @@ function TabPolicySettings() {
         policyStatus: 'INACTIVE',
       });
       toast('정책이 비활성화되었습니다.', 'success');
-      await loadPolicies(policyFilter);
+      await loadPolicies(DEFAULT_POLICY_QUERY);
     } catch (error) {
       toast(error.message, 'error');
     } finally {
@@ -423,72 +430,6 @@ function TabPolicySettings() {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Backend-supported policy filters */}
-      <div className="flex items-end gap-3 flex-wrap">
-        <div>
-          <label className="block text-[10px] font-semibold text-[#9AA0A6] mb-1">학년도</label>
-          <input
-            type="number"
-            value={policyFilter.academicYear}
-            onChange={(e) => setPolicyFilter((current) => ({ ...current, academicYear: e.target.value }))}
-            className="h-8 w-24 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="block text-[10px] font-semibold text-[#9AA0A6] mb-1">학기</label>
-          <select
-            value={policyFilter.semesterCode}
-            onChange={(e) => setPolicyFilter((current) => ({ ...current, semesterCode: e.target.value }))}
-            className="h-8 w-28 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none"
-          >
-            <option value="">전체</option>
-            {SEMESTER_OPTIONS.map((semester) => (
-              <option key={semester}>{semester}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-[10px] font-semibold text-[#9AA0A6] mb-1">상태</label>
-          <select
-            value={policyFilter.policyStatus}
-            onChange={(e) => setPolicyFilter((current) => ({ ...current, policyStatus: e.target.value }))}
-            className="h-8 w-28 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none"
-          >
-            <option value="">전체</option>
-            {Object.entries(POLICY_STATUS_LABELS).map(([status, label]) => (
-              <option key={status} value={status}>{label}</option>
-            ))}
-          </select>
-        </div>
-        <button
-          onClick={() => loadPolicies(policyFilter)}
-          className="h-8 px-4 text-[12px] font-bold text-white rounded-[6px]"
-          style={{ background: A }}
-          disabled={loading}
-        >
-          조회
-        </button>
-        <button
-          type="button"
-          disabled
-          title="백엔드에 정책 복사·전용 버전 적용 API가 없어 연결하지 않았습니다."
-          className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#9AA0A6] bg-[#F9FAFB] cursor-not-allowed"
-        >
-          새 버전 복사(준비 중)
-        </button>
-        <span className="text-[11px] text-[#9AA0A6]">
-          정책 버전은 등록 시 백엔드가 자동으로 versionNo를 부여합니다.
-        </span>
-      </div>
-
-      <div className="px-5 py-3 rounded-[8px] bg-[#FFFBEB] border border-[#FDE68A] flex gap-3">
-        <span className="text-[14px] shrink-0">ℹ️</span>
-        <p className="text-[12px] text-[#92400E] leading-relaxed">
-          현재 적용 버전 전용 조회·정책 복사·전용 버전 적용 API는 아직 없습니다. 사용된 정책은 삭제하지 않고
-          비활성화하며, 정책을 수정해도 원장에 저장된 적립 점수는 보존됩니다.
-        </p>
-      </div>
-
       {/* Register a policy for an existing activity type */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
         <div className="flex items-center gap-2 mb-3">
@@ -534,8 +475,8 @@ function TabPolicySettings() {
               disabled={saving}
               className="h-8 w-28 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none"
             >
-              {SEMESTER_OPTIONS.map((semester) => (
-                <option key={semester}>{semester}</option>
+              {registrationSemesterOptions.map((opt) => (
+                <option key={opt.code} value={opt.code}>{opt.codeName}</option>
               ))}
             </select>
           </div>
@@ -622,7 +563,7 @@ function TabPolicySettings() {
                 <TH center>점수</TH>
                 <TH center>상한</TH>
                 <TH center>중복규칙</TH>
-                <TH>버전·기간</TH>
+                <TH>기간</TH>
                 <TH center>상태</TH>
                 <TH center>관리</TH>
               </tr>
@@ -648,7 +589,7 @@ function TabPolicySettings() {
                       <TD center cls="text-[#444D56]">{policy.maximumPoints ?? '—'}점</TD>
                       <TD center><span className="text-[10px] font-semibold text-[#656D76]">{DUPLICATE_RULE_LABELS[policy.duplicateRuleType] ?? policy.duplicateRuleType}</span></TD>
                       <TD cls="font-mono text-[10px] text-[#9AA0A6]">
-                        v{policy.versionNo ?? '-'} · {policy.validFrom ?? '-'} ~ {policy.validTo ?? '무기한'}
+                        {policy.validFrom ?? '-'} ~ {policy.validTo ?? '무기한'}
                       </TD>
                       <TD center><Chip label={status} bg={policy.policyStatus === 'ACTIVE' ? '#D1FAE5' : '#F3F4F6'} text={policy.policyStatus === 'ACTIVE' ? '#059669' : '#656D76'} /></TD>
                       <TD center>

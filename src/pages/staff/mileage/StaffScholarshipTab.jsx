@@ -8,12 +8,12 @@ import {
   StatTile,
   toast,
 } from '@/components/common';
+import { useCommonCode } from '@/hooks/useCommonCode';
 import { SEMESTER_LABELS } from '@/utils/academicPeriod';
 
 const ACCENT = '#1F2937';
 const BENEFIT_TYPE = 'SCHOLARSHIP';
 const POLICY_PAGE_SIZE = 20;
-const SEMESTER_OPTIONS = ['ALL', 'SPRING', 'SUMMER', 'FALL', 'WINTER'];
 
 const EMPTY_POLICY_PAGE = {
   content: [],
@@ -202,6 +202,8 @@ function Field({ label, children, className = '' }) {
 }
 
 function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }) {
+  const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
+  const semesterFormOptions = [{ code: 'ALL', codeName: '연간' }, ...semesterCodes];
   const update = (field) => (event) => onChange(field, event.target.value);
 
   return (
@@ -233,8 +235,8 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
           </Field>
           <Field label="적용 학기">
             <select value={form.semesterCode} onChange={update('semesterCode')} disabled={disabled} className={FIELD_CLASS}>
-              {SEMESTER_OPTIONS.map((semester) => (
-                <option key={semester} value={semester}>{formatSemester(semester)}</option>
+              {semesterFormOptions.map((opt) => (
+                <option key={opt.code} value={opt.code}>{opt.codeName}</option>
               ))}
             </select>
           </Field>
@@ -292,17 +294,17 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
           className={FIELD_CLASS}
         />
       </Field>
-      <Field label="세부 기준(JSON)" className="md:col-span-2 xl:col-span-4">
+      <Field label="세부 기준" className="md:col-span-2 xl:col-span-4">
         <textarea
           value={form.criteriaData}
           onChange={update('criteriaData')}
           disabled={disabled}
           rows={4}
           spellCheck="false"
-          placeholder={'예) {"gpa": 3.5, "requiredDocuments": ["성적증명서"]}'}
+          placeholder={'예) 평점 3.5 이상, 제출서류: 성적증명서'}
           className="w-full resize-y rounded-[6px] border border-[#E5E7EB] bg-white px-3 py-2.5 font-mono text-[11px] text-[#1F2328] focus:border-[#9CA3AF] focus:outline-none disabled:bg-[#F9FAFB]"
         />
-        <span className="text-[10px] text-[#9AA0A6]">선택 입력 · 백엔드는 JSON 구조를 그대로 저장합니다.</span>
+        <span className="text-[10px] text-[#9AA0A6]">선택 입력 항목입니다.</span>
       </Field>
     </div>
   );
@@ -318,8 +320,6 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
  * - PATCH /staff/mileage/benefit-policies/{benefitPolicyId}
  */
 export default function StaffScholarshipTab() {
-  const [draftFilters, setDraftFilters] = useState(INITIAL_FILTERS);
-  const [appliedFilters, setAppliedFilters] = useState(INITIAL_FILTERS);
   const [page, setPage] = useState(1);
   const [policyPage, setPolicyPage] = useState(EMPTY_POLICY_PAGE);
   const [loading, setLoading] = useState(true);
@@ -367,17 +367,11 @@ export default function StaffScholarshipTab() {
   }, []);
 
   useEffect(() => {
-    loadPolicies(appliedFilters, page);
-  }, [appliedFilters, loadPolicies, page]);
+    loadPolicies(INITIAL_FILTERS, page);
+  }, [loadPolicies, page]);
 
   const updateCreateField = (field, value) => {
     setCreateForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const handleSearch = (event) => {
-    event.preventDefault();
-    setPage(1);
-    setAppliedFilters({ ...draftFilters });
   };
 
   const handleCreate = async (event) => {
@@ -394,7 +388,7 @@ export default function StaffScholarshipTab() {
       toast('장학금 정책이 등록되었습니다.', 'success');
       setCreateForm(EMPTY_FORM);
       setPage(1);
-      await loadPolicies(appliedFilters, 1);
+      await loadPolicies(INITIAL_FILTERS, 1);
     } catch (requestError) {
       toast(requestError.message ?? '장학금 정책 등록에 실패했습니다.', 'error');
     } finally {
@@ -445,7 +439,7 @@ export default function StaffScholarshipTab() {
       setEditOpen(false);
       setEditPolicyId(null);
       setEditForm(null);
-      await loadPolicies(appliedFilters, page);
+      await loadPolicies(INITIAL_FILTERS, page);
     } catch (requestError) {
       toast(requestError.message ?? '장학금 정책 수정에 실패했습니다.', 'error');
     } finally {
@@ -464,7 +458,7 @@ export default function StaffScholarshipTab() {
         active: nextActive,
       });
       toast(`장학금 정책이 ${actionLabel}되었습니다.`, 'success');
-      await loadPolicies(appliedFilters, page);
+      await loadPolicies(INITIAL_FILTERS, page);
     } catch (requestError) {
       toast(requestError.message ?? `장학금 정책 ${actionLabel}에 실패했습니다.`, 'error');
     } finally {
@@ -497,48 +491,6 @@ export default function StaffScholarshipTab() {
           accentColor="#2563EB"
         />
       </div>
-
-      <form
-        onSubmit={handleSearch}
-        className="flex flex-wrap items-end gap-3 rounded-[8px] border border-[#E5E7EB] bg-white px-4 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.04)]"
-      >
-        <Field label="학년도">
-          <input
-            type="number"
-            min="2000"
-            max="9999"
-            value={draftFilters.academicYear}
-            onChange={(event) => setDraftFilters((current) => ({ ...current, academicYear: event.target.value }))}
-            className="h-8 w-24 rounded-[6px] border border-[#E5E7EB] px-2 text-[12px] focus:outline-none"
-          />
-        </Field>
-        <Field label="학기">
-          <select
-            value={draftFilters.semesterCode}
-            onChange={(event) => setDraftFilters((current) => ({ ...current, semesterCode: event.target.value }))}
-            className="h-8 w-28 rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] focus:outline-none"
-          >
-            <option value="">전체</option>
-            {SEMESTER_OPTIONS.map((semester) => (
-              <option key={semester} value={semester}>{formatSemester(semester)}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="상태">
-          <select
-            value={draftFilters.active}
-            onChange={(event) => setDraftFilters((current) => ({ ...current, active: event.target.value }))}
-            className="h-8 w-28 rounded-[6px] border border-[#E5E7EB] bg-white px-2 text-[12px] focus:outline-none"
-          >
-            <option value="">전체</option>
-            <option value="true">활성</option>
-            <option value="false">비활성</option>
-          </select>
-        </Field>
-        <Button type="submit" size="sm" loading={loading} style={{ background: ACCENT }}>
-          조회
-        </Button>
-      </form>
 
       <form
         onSubmit={handleCreate}
