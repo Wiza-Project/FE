@@ -24,6 +24,7 @@ import {
 } from '@/api/careerDocuments';
 import { ApiError } from '@/api/client';
 import { formatDateTime } from '@/utils/date';
+import ResumeCompetencyCard from './ResumeCompetencyCard';
 
 const ACCENT = '#059669';
 
@@ -46,8 +47,9 @@ function getApiErrorMessage(error, fallback) {
 
 // ─── Resume Tab ───────────────────────────────────────────────────────────────
 // 이력서 contentData는 서버가 검증하는 고정 템플릿이다. 성명·학력·경력·자격·
-// 어학 모두 학사행정 자동 연동 없이 학생이 직접 입력한다 — 비교과·핵심역량 자동 채움은
-// 원천 도메인 준비 후 별도 API로 추가될 예정이라 아직 없다.
+// 어학 모두 학사행정 자동 연동 없이 학생이 직접 입력한다. 핵심역량 진단 결과는
+// ResumeCompetencyCard가 별도 API(BE WP-295)로 자동 조회해 보여준다 — 비교과 활동
+// 이력은 원천 도메인 준비 후 별도 API로 추가될 예정이라 아직 "연동 준비 중"이다.
 
 const emptyContact = () => ({ name: '', phoneNumber: '', email: '', address: '' });
 const emptyEducation = () => ({
@@ -610,8 +612,8 @@ function ResumeTab() {
             onChange={(idx, field, value) => updateItem(setLanguageTests, idx, field, value)}
           />
 
-          {/* 비교과·핵심역량 — 아직 자동 연동 API가 없어 준비 중 표시 */}
-          <div className="grid gap-4 grid-cols-2">
+          {/* 비교과(아직 자동 연동 API 없음 — 준비 중 표시) · 핵심역량(BE WP-295로 자동 연동) */}
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
             <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
               <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
                 <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
@@ -626,19 +628,7 @@ function ResumeTab() {
               />
             </div>
 
-            <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-              <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
-                <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-                <h2 className="text-[14px] font-bold text-[#1F2328]">핵심역량 진단 결과</h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#656D76] ml-1">
-                  연동 준비 중
-                </span>
-              </div>
-              <EmptyState
-                message="핵심역량 진단 결과 자동 연동을 준비 중입니다."
-                sub="연동이 완료되면 최근 진단 결과가 자동으로 표시됩니다."
-              />
-            </div>
+            <ResumeCompetencyCard />
           </div>
 
           {/* 추가 정보(선택) — 템플릿에 없는 값은 extra에만 담는다 */}
@@ -1094,7 +1084,8 @@ function CoverLetterTab() {
 /**
  * 이력서·자기소개서 화면. 두 탭 모두 취창업 API(이력서/자기소개서 버전 CRUD)로 동작한다.
  * 이력서의 연락처·학력·경력·자격·어학은 학사행정 자동 연동 없이 학생이 직접 입력하는
- * 고정 템플릿이며(BE WP-215), 비교과 활동·핵심역량 진단 결과는 자동 연동 API가 아직 없어
+ * 고정 템플릿이다(BE WP-215). 핵심역량 진단 결과는 ResumeCompetencyCard가 별도 API로
+ * 자동 조회해 보여주며(BE WP-295), 비교과 활동 이력은 자동 연동 API가 아직 없어
  * "연동 준비 중" 상태로 표시한다.
  */
 export default function ResumeEditor() {
