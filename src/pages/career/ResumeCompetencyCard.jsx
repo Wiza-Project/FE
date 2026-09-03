@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, EmptyState, SkeletonLoader, RadarChart, toast } from '@/components/common';
 import { fetchResumeCompetency, resyncResumeCompetency } from '@/api/careerDocuments';
@@ -51,18 +52,22 @@ function ReadyView({ data }) {
         </div>
       </div>
 
-      <div className="flex justify-center my-2">
+      <div className="flex justify-center my-2" aria-hidden="true">
         <RadarChart labels={labels} values={values} color={COMP_COLOR} size={200} />
       </div>
 
-      {/* 차트의 텍스트 대체 — 스크린리더와 정확한 수치 확인용 (표시 순서는 displayOrder 그대로) */}
-      <div className="flex flex-col gap-1.5 mt-2">
+      {/* 점수 목록 — 스크린리더와 정확한 수치 확인용 (표시 순서는 displayOrder 그대로).
+          진행 막대는 장식용(aria-hidden)이며, 색상이 아니라 옆의 점수 텍스트로 값을 전달한다. */}
+      <ul className="flex flex-col gap-1.5 mt-2" role="list" aria-label="역량별 점수">
         {scores.map((s) => (
-          <div key={s.competencyId} className="flex items-center gap-2">
+          <li key={s.competencyId} className="flex items-center gap-2">
             <span className="text-[11px] text-[#656D76] w-20 truncate flex-shrink-0" title={s.competencyName}>
               {s.competencyName}
             </span>
-            <div className="flex-1 h-1.5 bg-[#F3F4F6] rounded-full overflow-hidden">
+            <div
+              className="flex-1 h-1.5 bg-[#F3F4F6] rounded-full overflow-hidden"
+              aria-hidden="true"
+            >
               <div
                 className="h-full rounded-full"
                 style={{ width: `${s.convertedScore}%`, background: COMP_COLOR }}
@@ -70,10 +75,11 @@ function ReadyView({ data }) {
             </div>
             <span className="text-[11px] font-bold text-[#1F2328] w-8 text-right flex-shrink-0">
               {s.convertedScore}
+              <span className="sr-only">점</span>
             </span>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
 
       {data.syncedAt && (
         <div className="text-[10px] text-[#9AA0A6] mt-3 text-right">
@@ -96,8 +102,8 @@ function ReadyView({ data }) {
  * - 최초 로딩: query.isLoading (스켈레톤)
  * - 데이터 없음: status NOT_SYNCED(연동 이력 없음) / UNAVAILABLE(완료 진단 없음)
  * - 재연동 진행 중: resyncMutation.isPending (진행 표시줄)
- * - 재연동 실패: resyncMutation.isError (오류 표시줄 + 다시 시도)
- */
+ * - 재연동 통신 실패: resyncMutation.isError (오류 표시줄 + 다시 시도)
+*/
 export default function ResumeCompetencyCard() {
   const queryClient = useQueryClient();
 
@@ -106,12 +112,22 @@ export default function ResumeCompetencyCard() {
     queryFn: fetchResumeCompetency,
   });
 
-  // 재연동 버튼 — POST로 재연동을 요청한 뒤, 응답을 그대로 쓰지 않고 GET을 다시 조회해
-  // 화면에 반영한다(재연동 호출과 조회 경로를 분리해 둔다).
+  // POST 응답이 이미 최신 상태이므로 그대로 캐시에 반영한다 — 뒤이은 GET 재조회는 불필요하다.
+  const [resyncUnresolved, setResyncUnresolved] = useState(false);
+
   const resyncMutation = useMutation({
     mutationFn: resyncResumeCompetency,
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.setQueryData(QUERY_KEY, data);
+
+      if (data.status === 'NOT_SYNCED') {
+        // POST는 성공했지만(2xx) 완료 진단을 여전히 찾지 못한 경우 — 사용자에게는 실패다.
+        // 성공 토스트를 띄우지 않고, 통신 오류와 같은 자리에 오류 UI로 알린다.
+        setResyncUnresolved(true);
+        return;
+      }
+
+      setResyncUnresolved(false);
       if (data.status === 'READY') {
         toast('핵심역량 진단 결과를 다시 불러왔습니다.', 'success');
       } else {
@@ -121,8 +137,14 @@ export default function ResumeCompetencyCard() {
     onError: (err) => toast(errorMessage(err, '재연동에 실패했습니다.'), 'error'),
   });
 
+  const handleResync = () => {
+    setResyncUnresolved(false);
+    resyncMutation.mutate();
+  };
+
   const data = query.data;
   const badge = data ? STATUS_BADGE[data.status] : null;
+  const showResyncProblem = !resyncMutation.isPending && (resyncMutation.isError || resyncUnresolved);
 
   return (
     <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
@@ -139,7 +161,7 @@ export default function ResumeCompetencyCard() {
           variant="outline"
           className="ml-auto"
           loading={resyncMutation.isPending}
-          onClick={() => resyncMutation.mutate()}
+          onClick={handleResync}
         >
           재연동
         </Button>
@@ -156,17 +178,17 @@ export default function ResumeCompetencyCard() {
           </div>
         )}
 
-        {!resyncMutation.isPending && resyncMutation.isError && (
+        {showResyncProblem && (
           <div
             role="alert"
             className="px-5 py-2 text-[11px] font-semibold text-[#CF222E] bg-[#FEE2E2] flex items-center justify-between gap-2"
           >
-            <span>{errorMessage(resyncMutation.error, '재연동에 실패했습니다.')}</span>
-            <button
-              type="button"
-              onClick={() => resyncMutation.mutate()}
-              className="underline flex-shrink-0"
-            >
+            <span>
+              {resyncMutation.isError
+                ? errorMessage(resyncMutation.error, '재연동에 실패했습니다.')
+                : '연동 결과를 가져오지 못했습니다. 다시 시도해 주세요.'}
+            </span>
+            <button type="button" onClick={handleResync} className="underline flex-shrink-0">
               다시 시도
             </button>
           </div>
