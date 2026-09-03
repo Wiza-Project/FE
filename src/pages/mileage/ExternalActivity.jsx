@@ -129,7 +129,6 @@ function VolunteerFields() {
         <Input label="활동기간 시작일" type="date" />
         <Input label="활동기간 종료일" type="date" />
       </div>
-      <Input label="확인서 번호" placeholder="봉사활동 확인서의 고유 번호" />
     </>
   );
 }
