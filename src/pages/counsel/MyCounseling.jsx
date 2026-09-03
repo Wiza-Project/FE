@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Button, PageHeader, Tabs } from '@/components/common';
 import ReservationPanel from './ReservationPanel';
 import CounselingHistoryPanel from './CounselingHistoryPanel';
-import StressTestPanel from './StressTestPanel';
 
 const ACCENT = '#0891B2';
 
@@ -18,7 +17,7 @@ export default function MyCounseling({ onApply }) {
       <PageHeader
         breadcrumbs={[{ label: '학생 포털' }, { label: '학생상담' }, { label: '내 상담' }]}
         title="내 상담"
-        subtitle="예약 현황, 상담 이력, 심리검사 결과를 확인하세요."
+        subtitle="예약 현황과 상담 이력을 확인하세요."
         accentColor={ACCENT}
         actions={
           <Button size="sm" style={{ background: ACCENT }} onClick={onApply}>
@@ -32,7 +31,6 @@ export default function MyCounseling({ onApply }) {
           tabs={[
             { key: 'reservation', label: '예약 현황' },
             { key: 'history', label: '상담 이력' },
-            { key: 'psych', label: '심리검사' },
           ]}
           active={tab}
           onChange={setTab}
@@ -42,7 +40,6 @@ export default function MyCounseling({ onApply }) {
 
       {tab === 'reservation' && <ReservationPanel />}
       {tab === 'history' && <CounselingHistoryPanel />}
-      {tab === 'psych' && <StressTestPanel />}
     </div>
   );
 }
