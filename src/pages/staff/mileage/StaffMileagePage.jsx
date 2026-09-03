@@ -1461,7 +1461,6 @@ export default function StaffMileagePage() {
             기준 설정 · 증빙 심사 · 장학금 기준 · 적립 취소
           </p>
         </div>
-        <Chip label="2026-v1 적용중" bg="#FEF3C7" text={A} />
       </div>
 
       {/* Tabs */}
