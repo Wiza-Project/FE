@@ -416,3 +416,51 @@ export const downloadPortfolioAttachment = (documentId, storedFileId, fallbackNa
     `/students/me/portfolios/${documentId}/attachments/${storedFileId}`,
     fallbackName,
   );
+
+// ─── 핵심역량 진단 결과 연동 (Resume Competency Sync) ────────────────────────
+// 이력서 화면 전용 읽기 모델이다 — CareerDocument(이력서 본문·버전)와는 별개 테이블이라
+// 여기서 받은 값은 이력서 contentData나 버전 생성 흐름에 포함하지 않는다.
+
+/**
+ * @typedef {Object} ResumeCompetencyScore
+ * @property {number} competencyId
+ * @property {string} competencyName
+ * @property {number} displayOrder 역량 표시 순서 — 응답 배열 순서에 기대지 말고 이 값으로 정렬한다.
+ * @property {number} convertedScore 0~100 환산 점수
+ *
+ * @typedef {Object} ResumeCompetency
+ * @property {'READY'|'UNAVAILABLE'|'NOT_SYNCED'} status
+ *   READY: 연동된 최신 완료 진단 결과 있음 / UNAVAILABLE: 연동은 했으나 완료 진단이 없음 /
+ *   NOT_SYNCED: 아직 한 번도 연동되지 않음(재연동 이전의 최초 상태)
+ * @property {number} [attemptId] status가 READY일 때만
+ * @property {string} [assessmentName] status가 READY일 때만
+ * @property {number} [academicYear] status가 READY일 때만
+ * @property {string} [semesterLabel] status가 READY일 때만
+ * @property {string} [assessmentPhase] status가 READY일 때만
+ * @property {string} [submittedAt] ISO 8601. 진단 제출일시 — status가 READY일 때만
+ * @property {number} [overallAverageScore] status가 READY일 때만
+ * @property {ResumeCompetencyScore[]} [scores] status가 READY일 때만
+ * @property {string} [reason] status가 UNAVAILABLE일 때만. 현재 유일값 "NO_COMPLETED_ASSESSMENT"
+ * @property {string} [syncedAt] ISO 8601. 이 결과가 마지막으로 갱신된 시각(NOT_SYNCED면 없음)
+ */
+
+/**
+ * 저장된 최신 핵심역량 연동 결과를 그대로 조회한다 — 호출로 인한 재연동은 일어나지 않는다.
+ * GET /api/students/me/resume/competency
+ * @returns {Promise<ResumeCompetency>}
+ */
+export const fetchResumeCompetency = async () => {
+  const { data } = await apiClient.get('/students/me/resume/competency');
+  return data;
+};
+
+/**
+ * 핵심역량 도메인에 최신 완료 진단을 다시 요청한다("재연동" 버튼).
+ * 이벤트 처리가 동기로 이뤄져 응답에 반영된 최신 결과가 바로 담겨 온다.
+ * POST /api/students/me/resume/competency
+ * @returns {Promise<ResumeCompetency>}
+ */
+export const resyncResumeCompetency = async () => {
+  const { data } = await apiClient.post('/students/me/resume/competency');
+  return data;
+};
