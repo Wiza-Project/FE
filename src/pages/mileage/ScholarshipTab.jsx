@@ -323,6 +323,9 @@ export default function ScholarshipTab({ currentPoints = null }) {
 
   const historyRows = historyData?.content ?? [];
   const historyTotalPages = Math.max(1, historyData?.totalPages ?? 1);
+  const selectedDisabledReason = selectedScholarship
+    ? getDisabledReason(selectedScholarship, { period })
+    : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -508,7 +511,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
             >
               닫기
             </Button>
-            {selectedScholarship?.canApply && (
+            {selectedScholarship?.canApply && !selectedDisabledReason && (
               <Button
                 style={{ background: ACCENT }}
                 onClick={handleApply}
@@ -558,9 +561,14 @@ export default function ScholarshipTab({ currentPoints = null }) {
               <CriteriaList criteriaData={selectedScholarship.criteriaData} />
             </section>
 
-            {selectedScholarship.canApply && (
+            {selectedScholarship.canApply && !selectedDisabledReason && (
               <p className="rounded-[8px] border border-[#BBF7D0] bg-[#F0FDF4] px-3 py-2.5 text-[11px] leading-relaxed text-[#166534]">
                 현재 기준을 충족했습니다. 신청 버튼을 누르면 현재 점수가 신청 이력에 저장됩니다.
+              </p>
+            )}
+            {selectedDisabledReason && (
+              <p className="rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2.5 text-[11px] leading-relaxed text-[#92400E]">
+                {selectedDisabledReason}
               </p>
             )}
           </div>

@@ -228,6 +228,9 @@ const validatePolicyForm = (form, activityType, { requireActivityType = false } 
     return '활동유형을 선택해 주세요.';
   }
 
+  if (form.points === '') {
+    return '점수를 입력해 주세요.';
+  }
   const points = Number(form.points);
   const maximumPoints = form.maximumPoints === '' ? null : Number(form.maximumPoints);
 

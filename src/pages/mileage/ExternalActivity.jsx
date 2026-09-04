@@ -259,6 +259,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
     setCertForm(EMPTY_CERT_FORM);
     setVolunteerForm(EMPTY_VOLUNTEER_FORM);
     setEvidenceFile(null);
+    setEvidenceFileResetKey((k) => k + 1);
   };
 
   const handleSelectType = (t) => {
