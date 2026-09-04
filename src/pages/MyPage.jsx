@@ -13,7 +13,7 @@ import { fetchCounselingReservations, fetchCounselingTypes } from '@/api/counsel
 import { fetchBoardPosts } from '@/api/boards';
 import { COUNSELING_RESERVATION_STATUS_LABEL } from '@/constants/domain';
 import { formatDate } from '@/utils/date';
-import { SEMESTER_LABELS } from '@/utils/academicPeriod';
+import { formatSemester } from '@/utils/academicPeriod';
 import {
   StatTile,
   PageHeader,
@@ -875,7 +875,7 @@ export default function MyPage() {
         </div>
         {period && (
           <span className="h-9 px-3 inline-flex items-center text-[13px] font-semibold text-[#1F2328] bg-white border border-[#E5E7EB] rounded-[6px]">
-            {SEMESTER_LABELS[period.semesterCode] ?? period.semesterCode}
+            {formatSemester(period.semesterCode)}
           </span>
         )}
       </div>

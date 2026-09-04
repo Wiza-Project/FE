@@ -262,7 +262,12 @@ function TabPolicySettings() {
   const [policies, setPolicies] = useState([]);
   const [activityTypes, setActivityTypes] = useState([]);
   const [pForm, setPForm] = useState(DEFAULT_POLICY_FORM);
-  const { data: semesterCodesRaw = [] } = useCommonCode('SEMESTER');
+  const {
+    data: semesterCodesRaw = [],
+    isLoading: semesterCodesLoading,
+    isError: semesterCodesError,
+    refetch: refetchSemesterCodes,
+  } = useCommonCode('SEMESTER');
   const registrationSemesterOptions = [
     { code: 'ALL', codeName: '연간' },
     ...semesterCodesRaw
@@ -327,6 +332,10 @@ function TabPolicySettings() {
   const resetCreateForm = () => setPForm(DEFAULT_POLICY_FORM);
 
   const addPolicy = async () => {
+    if (semesterCodesLoading || semesterCodesError) {
+      toast('학기 목록을 불러온 후 다시 시도해 주세요.', 'error');
+      return;
+    }
     const selectedActivityType = activityTypes.find(
       (activity) => String(activity.activityTypeId) === String(pForm.activityTypeId),
     );
@@ -432,6 +441,14 @@ function TabPolicySettings() {
         {activityTypesError && (
           <p className="mb-3 text-[12px] text-[#CF222E]">활동유형을 불러오지 못했습니다: {activityTypesError}</p>
         )}
+        {semesterCodesError && (
+          <p role="alert" className="mb-3 text-[12px] text-[#CF222E]">
+            학기 목록을 불러오지 못했습니다.{' '}
+            <button type="button" onClick={() => refetchSemesterCodes()} className="font-bold underline">
+              다시 시도
+            </button>
+          </p>
+        )}
         <div className="flex gap-3 items-end flex-wrap">
           <div>
             <label className="block text-[10px] font-semibold text-[#9AA0A6] mb-1">활동유형</label>
@@ -454,7 +471,7 @@ function TabPolicySettings() {
             <select
               value={pForm.semesterCode}
               onChange={(e) => updateCreateField('semesterCode', e.target.value)}
-              disabled={saving}
+              disabled={saving || semesterCodesLoading}
               className="h-8 w-28 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none"
             >
               {registrationSemesterOptions.map((opt) => (
@@ -522,7 +539,7 @@ function TabPolicySettings() {
           </div>
           <button
             onClick={addPolicy}
-            disabled={saving || activityTypesLoading}
+            disabled={saving || activityTypesLoading || semesterCodesLoading || semesterCodesError}
             className="h-8 px-4 text-[12px] font-bold text-white rounded-[6px] disabled:opacity-50"
             style={{ background: A }}
           >

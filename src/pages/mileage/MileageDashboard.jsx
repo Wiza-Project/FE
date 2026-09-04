@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { fetchCurrentMileagePeriod } from '@/api/mileage';
-import { SEMESTER_LABELS } from '@/utils/academicPeriod';
+import { formatSemester as formatSemesterCode } from '@/utils/academicPeriod';
 import ScholarshipTab from './ScholarshipTab';
 import ExternalActivity from './ExternalActivity';
 import { PageHeader, StatTile, Button, BarChart, Pagination, Drawer } from '@/components/common';
@@ -26,7 +26,7 @@ const TRANSACTION_STATUS_LABELS = {
 };
 
 const formatPoints = (value) => Number(value ?? 0).toLocaleString('ko-KR');
-const formatSemester = (semesterCode) => SEMESTER_LABELS[semesterCode] ?? semesterCode ?? '-';
+const formatSemester = (semesterCode) => formatSemesterCode(semesterCode, { emptyLabel: '-' });
 const parseDate = (value) => {
   if (!value) return null;
   const date = new Date(value);
@@ -129,8 +129,8 @@ function TrendChart({ data = [] }) {
         </span>
       ))}
       {/* Points + point value + x-axis labels */}
-      {pts.map((p) => (
-        <span key={p.d.label}>
+      {pts.map((p, i) => (
+        <span key={`${p.d.label}-${i}`}>
           <span
             className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
             style={{ ...toPct(p.x, p.y), background: ACCENT }}
@@ -349,7 +349,7 @@ export default function MileageDashboard() {
         </div>
       )}
       {dashboardError && !dashboardLoading && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[12px] text-[#92400E]">
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[12px] text-[#92400E]">
           <span>실제 마일리지 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</span>
           <Button size="sm" variant="outline" onClick={loadPeriod}>
             다시 시도

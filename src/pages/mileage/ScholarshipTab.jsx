@@ -9,7 +9,7 @@ import {
   StatTile,
   toast,
 } from '@/components/common';
-import { SEMESTER_LABELS } from '@/utils/academicPeriod';
+import { formatSemester } from '@/utils/academicPeriod';
 
 const ACCENT = '#D97706';
 const HISTORY_PAGE_SIZE = 10;
@@ -68,12 +68,8 @@ const formatDateTime = (value) => {
   });
 };
 
-const formatSemester = (semesterCode) => {
-  if (!semesterCode || semesterCode === 'ALL') return '연간';
-  return SEMESTER_LABELS[semesterCode] ?? semesterCode;
-};
-
-const formatPeriod = (semesterCode) => formatSemester(semesterCode);
+const formatPeriod = (semesterCode) =>
+  formatSemester(semesterCode, { allLabel: '연간', emptyLabel: '연간' });
 
 const isSemesterBenefit = (item) => item.semesterCode != null && item.semesterCode !== 'ALL';
 const isCumulativeBenefit = (item) => Number(item.cumulativeYears ?? 1) >= 2;
@@ -206,7 +202,6 @@ function ScholarshipCard({ item, onSelect, disabledReason }) {
           variant={item.canApply && !isDisabled ? 'primary' : 'outline'}
           style={item.canApply && !isDisabled ? { background: ACCENT } : undefined}
           onClick={() => onSelect(item)}
-          disabled={isDisabled}
         >
           {item.canApply && !isDisabled ? '신청하기' : '상세 보기'}
         </Button>

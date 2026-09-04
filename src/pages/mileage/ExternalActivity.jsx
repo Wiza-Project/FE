@@ -182,9 +182,9 @@ function VolunteerFields({ value, onChange }) {
   );
 }
 
-function DynamicFields({ activityName, certValue, onCertChange, volunteerValue, onVolunteerChange }) {
-  if (activityName === '자격증') return <CertFields value={certValue} onChange={onCertChange} />;
-  if (activityName === '봉사활동') return <VolunteerFields value={volunteerValue} onChange={onVolunteerChange} />;
+function DynamicFields({ activityCode, certValue, onCertChange, volunteerValue, onVolunteerChange }) {
+  if (activityCode === 'CERTIFICATE') return <CertFields value={certValue} onChange={onCertChange} />;
+  if (activityCode === 'VOLUNTEER') return <VolunteerFields value={volunteerValue} onChange={onVolunteerChange} />;
   return null;
 }
 
@@ -266,8 +266,8 @@ export default function ExternalActivity({ onBack, embedded = false }) {
     resetEvidenceForm();
   };
 
-  const isCert = selectedType?.name === '자격증';
-  const isVolunteer = selectedType?.name === '봉사활동';
+  const isCert = selectedType?.activityCode === 'CERTIFICATE';
+  const isVolunteer = selectedType?.activityCode === 'VOLUNTEER';
   const isSupportedType = isCert || isVolunteer;
   const usingFallbackPolicies = policies.length > 0 && policies.every((p) => p.isFallback);
   const canSubmit = Boolean(
@@ -423,7 +423,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                 ) : (
                   policies.map((t) => {
                     const isSelected = selectedType?.activityTypeId === t.activityTypeId;
-                    const isRowSupported = t.name === '자격증' || t.name === '봉사활동';
+                    const isRowSupported = t.activityCode === 'CERTIFICATE' || t.activityCode === 'VOLUNTEER';
                     const unsupportedReason = '아직 지원되지 않는 활동 유형입니다.';
                     return (
                       <tr
@@ -461,11 +461,11 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                               disabled={!isRowSupported}
                               onChange={() => isRowSupported && handleSelectType(t)}
                               aria-label={`${t.name} 선택`}
-                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                              className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
                             />
                             <div
                               aria-hidden="true"
-                              className={`pointer-events-none flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors ${isSelected ? 'border-[#D97706] bg-[#D97706]' : 'border-[#D1D5DB]'}`}
+                              className="pointer-events-none flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#D1D5DB] transition-colors peer-checked:border-[#D97706] peer-checked:bg-[#D97706] peer-focus-visible:ring-2 peer-focus-visible:ring-[#D97706] peer-focus-visible:ring-offset-2"
                             >
                               {isSelected && (
                                 <svg
@@ -552,7 +552,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
 
             <div className="flex flex-col gap-4">
               <DynamicFields
-                activityName={selectedType.name}
+                activityCode={selectedType.activityCode}
                 certValue={certForm}
                 onCertChange={setCertForm}
                 volunteerValue={volunteerForm}

@@ -9,7 +9,7 @@ import {
   toast,
 } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
-import { SEMESTER_LABELS } from '@/utils/academicPeriod';
+import { formatSemester } from '@/utils/academicPeriod';
 
 const ACCENT = '#1F2937';
 const BENEFIT_TYPE = 'SCHOLARSHIP';
@@ -77,12 +77,8 @@ const formatDateTime = (value) => {
   });
 };
 
-const formatSemester = (semesterCode) => {
-  if (!semesterCode || semesterCode === 'ALL') return '연간';
-  return SEMESTER_LABELS[semesterCode] ?? semesterCode;
-};
-
-const formatPeriod = (semesterCode) => formatSemester(semesterCode);
+const formatPeriod = (semesterCode) =>
+  formatSemester(semesterCode, { allLabel: '연간', emptyLabel: '연간' });
 
 const formatApplicationPeriod = (policy) => (
   `${policy.applicationStartsAt ? formatDateTime(policy.applicationStartsAt) : '상시'} ~ ${policy.applicationEndsAt ? formatDateTime(policy.applicationEndsAt) : '마감 없음'}`
@@ -192,7 +188,12 @@ function Field({ label, children, className = '' }) {
 }
 
 function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }) {
-  const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
+  const {
+    data: semesterCodes = [],
+    isLoading: semesterCodesLoading,
+    isError: semesterCodesError,
+    refetch: refetchSemesterCodes,
+  } = useCommonCode('SEMESTER');
   const semesterFormOptions = [{ code: 'ALL', codeName: '연간' }, ...semesterCodes];
   const update = (field) => (event) => onChange(field, event.target.value);
 
@@ -204,17 +205,30 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
             <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>{BENEFIT_TYPE}</div>
           </Field>
           <Field label="적용 학기">
-            <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>{formatSemester(form.semesterCode)}</div>
+            <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>{formatPeriod(form.semesterCode)}</div>
           </Field>
         </>
       ) : (
         <>
           <Field label="적용 학기">
-            <select value={form.semesterCode} onChange={update('semesterCode')} disabled={disabled} className={FIELD_CLASS}>
+            <select
+              value={form.semesterCode}
+              onChange={update('semesterCode')}
+              disabled={disabled || semesterCodesLoading}
+              className={FIELD_CLASS}
+            >
               {semesterFormOptions.map((opt) => (
                 <option key={opt.code} value={opt.code}>{opt.codeName}</option>
               ))}
             </select>
+            {semesterCodesError && (
+              <p role="alert" className="mt-1 text-[10px] text-[#CF222E]">
+                학기 목록을 불러오지 못했습니다.{' '}
+                <button type="button" onClick={() => refetchSemesterCodes()} className="font-bold underline">
+                  다시 시도
+                </button>
+              </p>
+            )}
           </Field>
         </>
       )}
@@ -296,6 +310,7 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
  * - PATCH /staff/mileage/benefit-policies/{benefitPolicyId}
  */
 export default function StaffScholarshipTab() {
+  const { isLoading: semesterCodesLoading, isError: semesterCodesError } = useCommonCode('SEMESTER');
   const [page, setPage] = useState(1);
   const [policyPage, setPolicyPage] = useState(EMPTY_POLICY_PAGE);
   const [loading, setLoading] = useState(true);
@@ -351,6 +366,10 @@ export default function StaffScholarshipTab() {
 
   const handleCreate = async (event) => {
     event.preventDefault();
+    if (semesterCodesLoading || semesterCodesError) {
+      toast('학기 목록을 불러온 후 다시 시도해 주세요.', 'error');
+      return;
+    }
     const validationMessage = validateForm(createForm);
     if (validationMessage) {
       toast(validationMessage, 'error');
@@ -485,7 +504,12 @@ export default function StaffScholarshipTab() {
           <p className="text-[10px] leading-relaxed text-[#9AA0A6]">
             혜택 유형은 학생 장학금 API와 연결되는 SCHOLARSHIP으로 고정됩니다. 신청 기간을 비워 두면 상시 신청입니다.
           </p>
-          <Button type="submit" loading={createSaving} style={{ background: ACCENT }}>
+          <Button
+            type="submit"
+            loading={createSaving}
+            disabled={semesterCodesLoading || semesterCodesError}
+            style={{ background: ACCENT }}
+          >
             정책 등록
           </Button>
         </div>
