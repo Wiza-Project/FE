@@ -6,9 +6,18 @@
  * @param {string} [props.unit]
  */
 export function BarChart({ data, color = '#2563EB', height = 180, unit = '' }) {
-  const max = Math.max(...data.map((d) => d.value));
+  const rawMax = Math.max(...data.map((d) => d.value));
+  const max = rawMax > 0 ? rawMax : 1;
+  const EDGE = 10;
+  const GAP = 12;
+  const CHAR_W = 9; // rough px/glyph for Hangul at fontSize 10, used to keep long labels from clipping
+  const LABEL_PAD = 10;
   const barW = Math.min(36, Math.floor(320 / data.length) - 8);
-  const chartW = data.length * (barW + 12) + 20;
+  const slotW = data.reduce(
+    (w, d) => Math.max(w, barW + GAP, String(d.label ?? '').length * CHAR_W + LABEL_PAD),
+    0,
+  );
+  const chartW = data.length * slotW + EDGE * 2;
 
   return (
     <svg width={chartW} height={height + 32} viewBox={`0 0 ${chartW} ${height + 32}`}>
@@ -16,9 +25,9 @@ export function BarChart({ data, color = '#2563EB', height = 180, unit = '' }) {
       {[0, 0.25, 0.5, 0.75, 1].map((r) => (
         <line
           key={r}
-          x1={10}
+          x1={EDGE}
           y1={height * (1 - r)}
-          x2={chartW - 10}
+          x2={chartW - EDGE}
           y2={height * (1 - r)}
           stroke="#E5E7EB"
           strokeWidth="1"
@@ -26,14 +35,15 @@ export function BarChart({ data, color = '#2563EB', height = 180, unit = '' }) {
         />
       ))}
       {data.map((d, i) => {
-        const x = 10 + i * (barW + 12) + 6;
+        const slotX = EDGE + i * slotW;
+        const x = slotX + (slotW - barW) / 2;
         const barH = (d.value / max) * height * 0.92;
         const y = height - barH;
         return (
           <g key={i}>
             <rect x={x} y={y} width={barW} height={barH} fill={color} opacity="0.85" rx="3" />
             <text
-              x={x + barW / 2}
+              x={slotX + slotW / 2}
               y={y - 4}
               textAnchor="middle"
               fontSize="10"
@@ -45,7 +55,7 @@ export function BarChart({ data, color = '#2563EB', height = 180, unit = '' }) {
               {unit}
             </text>
             <text
-              x={x + barW / 2}
+              x={slotX + slotW / 2}
               y={height + 14}
               textAnchor="middle"
               fontSize="10"

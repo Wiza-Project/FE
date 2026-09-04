@@ -1,18 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/api/client';
-import { fetchMileageSimulationOptions, simulateMileage } from '@/api/mileage';
 import {
-  PageHeader,
-  StatTile,
-  Button,
-  BarChart,
-  Pagination,
-  Drawer,
-  toast,
-} from '@/components/common';
+  fetchCurrentMileagePeriod,
+  fetchMileageDashboard,
+  fetchMileageGrade,
+} from '@/api/mileage';
+import { formatSemester as formatSemesterCode } from '@/utils/academicPeriod';
+import ScholarshipTab from './ScholarshipTab';
+import ExternalActivity from './ExternalActivity';
+import { PageHeader, StatTile, Button, BarChart, Pagination, Drawer } from '@/components/common';
 
 const ACCENT = '#D97706';
-const DASHBOARD_PERIOD = { academicYear: 2026, semesterCode: '1' };
 
 const PAGE_SIZE = 10;
 const SOURCE_LABELS = {
@@ -22,23 +20,25 @@ const SOURCE_LABELS = {
 };
 const TRANSACTION_TYPE_LABELS = {
   EARN: '적립',
-  CANCEL: '취소',
-  ADJUST: '정정',
 };
 const TRANSACTION_STATUS_LABELS = {
   POSTED: '확정',
   REQUESTED: '처리중',
   REJECTED: '반려',
 };
-const BENEFIT_STATUS_LABELS = {
-  ELIGIBLE: '가능',
-  APPLIED: '신청완료',
-  INSUFFICIENT_POINTS: '점수 부족',
+const BENEFIT_PROGRESS_STATUS_LABELS = {
+  ELIGIBLE: '신청 가능',
+  INSUFFICIENT_POINTS: '점수 미달',
   APPLICATION_NOT_OPEN: '신청 전',
   APPLICATION_CLOSED: '신청 마감',
+  APPLIED: '신청 접수',
+  APPROVED: '지급 승인',
+  REJECTED: '반려',
+  CANCELLED: '취소',
 };
 
 const formatPoints = (value) => Number(value ?? 0).toLocaleString('ko-KR');
+const formatSemester = (semesterCode) => formatSemesterCode(semesterCode, { emptyLabel: '-' });
 const parseDate = (value) => {
   if (!value) return null;
   const date = new Date(value);
@@ -74,115 +74,99 @@ function TrendChart({ data = [] }) {
     );
   }
 
-  const max = Math.max(...chartData.map((d) => d.value), 1);
+  const rawMax = Math.max(0, ...chartData.map((d) => Number(d.value) || 0));
+  const max = rawMax > 0 ? rawMax : 50;
   const pointDenominator = Math.max(chartData.length - 1, 1);
+  const isSinglePoint = chartData.length === 1;
   const pts = chartData.map((d, i) => ({
-    x: PAD.l + (i / pointDenominator) * cW,
+    x: isSinglePoint ? PAD.l + 24 : PAD.l + (i / pointDenominator) * cW,
     y: PAD.t + cH - (d.value / max) * cH * 0.88,
     d,
   }));
   const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
   const areaD = `${pathD} L${pts[pts.length - 1].x},${PAD.t + cH} L${pts[0].x},${PAD.t + cH} Z`;
 
+  // SVG 좌표(x, y)를 컨테이너 기준 % 위치로 변환 — 그래픽(선/점/그리드)은 SVG로 폭에 맞춰 스케일되지만,
+  // 텍스트는 HTML로 겹쳐 그려서 카드 폭이 넓어져도 글씨 크기가 함께 커지지 않도록 분리한다.
+  const toPct = (x, y) => ({ left: `${(x / W) * 100}%`, top: `${(y / H) * 100}%` });
+
   return (
-    <svg
-      width="100%"
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="xMidYMid meet"
-      role="img"
-      aria-label="학기별 적립 추이 그래프"
-    >
-      <defs>
-        <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={ACCENT} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={ACCENT} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      {/* Y gridlines */}
-      {[0.25, 0.5, 0.75, 1].map((r) => (
-        <line
-          key={r}
-          x1={PAD.l}
-          y1={PAD.t + cH * (1 - r * 0.88)}
-          x2={W - PAD.r}
-          y2={PAD.t + cH * (1 - r * 0.88)}
-          stroke="#E5E7EB"
-          strokeWidth="1"
-          strokeDasharray="3 3"
+    <div className="relative w-full" style={{ paddingTop: `${(H / W) * 100}%` }}>
+      <svg
+        className="absolute inset-0 h-full w-full"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="학기별 적립 추이 그래프"
+      >
+        <defs>
+          <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={ACCENT} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={ACCENT} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {/* Y gridlines */}
+        {[0.2, 0.4, 0.6, 0.8, 1].map((r) => (
+          <line
+            key={r}
+            x1={PAD.l}
+            y1={PAD.t + cH * (1 - r * 0.88)}
+            x2={W - PAD.r}
+            y2={PAD.t + cH * (1 - r * 0.88)}
+            stroke="#E5E7EB"
+            strokeWidth="1"
+            strokeDasharray="3 3"
+          />
+        ))}
+        {/* Area */}
+        <path d={areaD} fill="url(#trendGrad)" />
+        {/* Line */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke={ACCENT}
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
-      ))}
+      </svg>
       {/* Y labels */}
-      {[0, 150, 300, 450].map((v, i) => (
-        <text
-          key={i}
-          x={PAD.l - 4}
-          y={PAD.t + cH - (v / max) * cH * 0.88 + 4}
-          textAnchor="end"
-          fontSize="9"
-          fill="#9AA0A6"
-          fontFamily="Pretendard, sans-serif"
+      {[0, 0.2, 0.4, 0.6, 0.8, 1].map((r) => (
+        <span
+          key={r}
+          className="absolute -translate-x-full -translate-y-1/2 text-[14px] text-[#9AA0A6]"
+          style={toPct(PAD.l - 4, PAD.t + cH - cH * r * 0.88)}
         >
-          {v}
-        </text>
+          {Math.round(max * r)}
+        </span>
       ))}
-      {/* Area */}
-      <path d={areaD} fill="url(#trendGrad)" />
-      {/* Line */}
-      <path
-        d={pathD}
-        fill="none"
-        stroke={ACCENT}
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* Points + labels */}
-      {pts.map((p) => (
-        <g key={p.d.label}>
-          <circle cx={p.x} cy={p.y} r="4" fill={ACCENT} stroke="white" strokeWidth="2" />
-          <text
-            x={p.x}
-            y={p.y - 9}
-            textAnchor="middle"
-            fontSize="10"
-            fill={ACCENT}
-            fontFamily="Pretendard, sans-serif"
-            fontWeight="700"
+      {/* Points + point value + x-axis labels */}
+      {pts.map((p, i) => (
+        <span key={`${p.d.label}-${i}`}>
+          <span
+            className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
+            style={{ ...toPct(p.x, p.y), background: ACCENT }}
+          />
+          <span
+            className="absolute -translate-x-full -translate-y-1/2 text-[13px] font-bold"
+            style={{ ...toPct(p.x - 8, p.y), color: ACCENT }}
           >
-            {p.d.value}점
-          </text>
-          <text
-            x={p.x}
-            y={PAD.t + cH + 14}
-            textAnchor="middle"
-            fontSize="9"
-            fill="#656D76"
-            fontFamily="Pretendard, sans-serif"
+            {p.d.value}
+          </span>
+          <span
+            className="absolute -translate-x-1/2 -translate-y-1/2 text-[14px] text-[#656D76]"
+            style={toPct(p.x, PAD.t + cH + 14)}
           >
             {p.d.label}
-          </text>
-        </g>
+          </span>
+        </span>
       ))}
-    </svg>
+    </div>
   );
 }
 
-/**
- * @param {Object} props
- * @param {() => void} props.onExternal
- */
-export default function MileageDashboard({ onExternal }) {
+export default function MileageDashboard() {
   const [tab, setTab] = useState('dashboard');
-  const [simTarget, setSimTarget] = useState('');
-  const [simulationOptions, setSimulationOptions] = useState(null);
-  const [simulationOptionsLoading, setSimulationOptionsLoading] = useState(false);
-  const [simulationOptionsError, setSimulationOptionsError] = useState('');
-  const [selectedTargetBenefitPolicyId, setSelectedTargetBenefitPolicyId] = useState(null);
-  const [selectedActivities, setSelectedActivities] = useState([]);
-  const [simulationResult, setSimulationResult] = useState(null);
-  const [simulationLoading, setSimulationLoading] = useState(false);
-  const [simulationError, setSimulationError] = useState('');
-  const simulationRequestIdRef = useRef(0);
   const [page, setPage] = useState(1);
   const [dashboardData, setDashboardData] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
@@ -198,12 +182,36 @@ export default function MileageDashboard({ onExternal }) {
   const [transactionDetailLoading, setTransactionDetailLoading] = useState(false);
   const [transactionDetailError, setTransactionDetailError] = useState('');
 
+  const [period, setPeriod] = useState(null);
+
+  const loadPeriod = useCallback(() => {
+    setDashboardLoading(true);
+    setDashboardError('');
+    setGradeLoading(true);
+    setGradeError('');
+
+    return fetchCurrentMileagePeriod()
+      .then((data) => {
+        setPeriod(data);
+      })
+      .catch((error) => {
+        setDashboardError(error.message);
+        setDashboardLoading(false);
+        setGradeError(error.message);
+        setGradeLoading(false);
+      });
+  }, []);
+
   useEffect(() => {
+    loadPeriod();
+  }, [loadPeriod]);
+
+  useEffect(() => {
+    if (!period) return undefined;
     let mounted = true;
 
-    apiClient
-      .get('/students/mileage/dashboard', { params: DASHBOARD_PERIOD })
-      .then(({ data }) => {
+    fetchMileageDashboard({ semesterCode: period.semesterCode })
+      .then((data) => {
         if (mounted) {
           setDashboardData(data);
           setDashboardError('');
@@ -219,53 +227,14 @@ export default function MileageDashboard({ onExternal }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [period]);
 
   useEffect(() => {
-    if (tab !== 'simulation') {
-      simulationRequestIdRef.current += 1;
-      setSimulationLoading(false);
-      return undefined;
-    }
-
+    if (!period) return undefined;
     let mounted = true;
-    setSimulationOptionsLoading(true);
-    setSimulationOptionsError('');
-    setSimulationResult(null);
-    setSimulationError('');
 
-    fetchMileageSimulationOptions(DASHBOARD_PERIOD)
+    fetchMileageGrade({ semesterCode: period.semesterCode })
       .then((data) => {
-        if (!mounted) return;
-
-        const targets = Array.isArray(data?.targets) ? data.targets : [];
-        const firstTarget = targets[0];
-        setSimulationOptions(data ?? { targets: [], activities: [] });
-        setSelectedTargetBenefitPolicyId(firstTarget?.benefitPolicyId ?? null);
-        setSimTarget(String(firstTarget?.targetPoints ?? data?.currentPoints ?? ''));
-        setSelectedActivities([]);
-        setSimulationResult(null);
-        setSimulationError('');
-      })
-      .catch((error) => {
-        if (mounted) setSimulationOptionsError(error.message);
-      })
-      .finally(() => {
-        if (mounted) setSimulationOptionsLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-      simulationRequestIdRef.current += 1;
-    };
-  }, [tab]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    apiClient
-      .get('/students/mileage/grade', { params: DASHBOARD_PERIOD })
-      .then(({ data }) => {
         if (mounted) {
           setGradeData(data);
           setGradeError('');
@@ -281,7 +250,7 @@ export default function MileageDashboard({ onExternal }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [period]);
 
   useEffect(() => {
     if (tab !== 'ledger') return undefined;
@@ -292,7 +261,10 @@ export default function MileageDashboard({ onExternal }) {
 
     apiClient
       .get('/students/mileage/transactions', {
-        params: { page: page - 1, size: PAGE_SIZE },
+        params: {
+          page: page - 1,
+          size: PAGE_SIZE,
+        },
       })
       .then(({ data }) => {
         if (mounted) {
@@ -334,125 +306,39 @@ export default function MileageDashboard({ onExternal }) {
     setTransactionDetailError('');
   };
 
-  const selectSimulationTarget = (target) => {
-    setSelectedTargetBenefitPolicyId(target.benefitPolicyId);
-    setSimTarget(String(target.targetPoints ?? ''));
-    setSimulationResult(null);
-    setSimulationError('');
-  };
-
-  const selectCustomSimulationTarget = (value) => {
-    setSelectedTargetBenefitPolicyId(null);
-    setSimTarget(value);
-    setSimulationResult(null);
-    setSimulationError('');
-  };
-
-  const toggleSimulationActivity = (mileagePolicyId) => {
-    setSelectedActivities((current) => {
-      const exists = current.some((item) => item.mileagePolicyId === mileagePolicyId);
-      if (exists) {
-        return current.filter((item) => item.mileagePolicyId !== mileagePolicyId);
-      }
-      return [...current, { mileagePolicyId, quantity: 1 }];
-    });
-    setSimulationResult(null);
-    setSimulationError('');
-  };
-
-  const updateSimulationActivityQuantity = (mileagePolicyId, quantity) => {
-    const parsedQuantity = Number(quantity);
-    const flooredQuantity = Math.floor(parsedQuantity);
-    const nextQuantity = Number.isSafeInteger(flooredQuantity)
-      ? Math.max(1, flooredQuantity)
-      : 1;
-    setSelectedActivities((current) =>
-      current.map((item) =>
-        item.mileagePolicyId === mileagePolicyId ? { ...item, quantity: nextQuantity } : item,
-      ),
-    );
-    setSimulationResult(null);
-    setSimulationError('');
-  };
-
-  const runMileageSimulation = async () => {
-    const hasBenefitTarget = selectedTargetBenefitPolicyId != null;
-    const targetText = String(simTarget).trim();
-    const [integerPart = '', decimalPart = ''] = targetText.split('.');
-    const normalizedIntegerPart = integerPart.replace(/^0+(?=\d)/, '');
-    const targetPoints = Number(targetText);
-    const isValidTargetPoints =
-      targetText !== '' &&
-      targetText.split('.').length <= 2 &&
-      /^\d+$/.test(integerPart) &&
-      /^\d*$/.test(decimalPart) &&
-      normalizedIntegerPart.length <= 10 &&
-      decimalPart.length <= 2;
-
-    if (
-      !hasBenefitTarget &&
-      (!isValidTargetPoints || !Number.isFinite(targetPoints) || targetPoints < 0)
-    ) {
-      setSimulationError('목표 점수는 0 이상이며 정수 10자리·소수 둘째 자리까지 입력해주세요.');
-      return;
-    }
-
-    setSimulationLoading(true);
-    setSimulationResult(null);
-    setSimulationError('');
-    const requestId = simulationRequestIdRef.current + 1;
-    simulationRequestIdRef.current = requestId;
-
-    try {
-      const data = await simulateMileage({
-        academicYear: DASHBOARD_PERIOD.academicYear,
-        semesterCode: DASHBOARD_PERIOD.semesterCode,
-        targetBenefitPolicyId: hasBenefitTarget ? selectedTargetBenefitPolicyId : null,
-        targetPoints: hasBenefitTarget ? null : targetPoints,
-        plannedActivities: selectedActivities,
-      });
-      if (requestId === simulationRequestIdRef.current) setSimulationResult(data);
-    } catch (error) {
-      if (requestId === simulationRequestIdRef.current) {
-        setSimulationError(error.message);
-        setSimulationResult(null);
-      }
-    } finally {
-      if (requestId === simulationRequestIdRef.current) setSimulationLoading(false);
-    }
-  };
-
   const hasDashboardData = Boolean(dashboardData);
-  const currentScore = hasDashboardData
-    ? Number(dashboardData.summary?.cumulativePoints ?? 0)
-    : 0;
+  const currentScore = hasDashboardData ? Number(dashboardData.summary?.cumulativePoints ?? 0) : 0;
+  const annualScore = hasDashboardData ? Number(dashboardData.summary?.annualPoints ?? 0) : 0;
   const currentSemesterScore = hasDashboardData
     ? Number(dashboardData.summary?.currentSemesterPoints ?? 0)
     : 0;
-  const semesterLabel = dashboardData?.period
-    ? `${dashboardData.period.academicYear}-${dashboardData.period.semesterCode}학기`
-    : '-';
-  const shortenCompetencyLabel = (name) => {
-    const base = (name ?? '').replace(/역량$/, '').trim() || name || '';
-    return base.length > 4 ? `${base.slice(0, 4).trim()}…` : base;
-  };
+  const currentPeriod = dashboardData?.period ?? period;
+  const semesterLabel = currentPeriod ? formatSemester(currentPeriod.semesterCode) : '-';
+  const shortenCompetencyLabel = (name) => (name ?? '').replace(/역량$/, '').trim() || name || '';
   const competencyData = (dashboardData?.competencyBreakdown ?? []).map((item) => ({
     label: shortenCompetencyLabel(item.competencyName),
     value: Number(item.points ?? 0),
   }));
   const trendData = (dashboardData?.semesterTrend ?? []).map((item) => ({
-    label: `${item.academicYear}-${item.semesterCode}`,
+    label: formatSemester(item.semesterCode),
     value: Number(item.points ?? 0),
   }));
-  const benefitProgress = dashboardData?.benefitProgress ?? [];
-  const scholarshipBenefit = benefitProgress.find(
-    (item) =>
-      item.benefitName?.includes('우수') || item.benefitType?.toUpperCase().includes('SCHOLARSHIP'),
-  );
-  const scholarshipNeeded = scholarshipBenefit
-    ? Number(scholarshipBenefit.shortagePoints ?? 0)
-    : null;
-  const scholarshipTarget = scholarshipBenefit ? Number(scholarshipBenefit.targetPoints ?? 0) : null;
+  const programTypeData = (dashboardData?.programTypeBreakdown ?? []).map((item) => ({
+    label: item.programTypeName ?? '기타',
+    value: Number(item.points ?? 0),
+  }));
+  const benefitProgressData = (dashboardData?.benefitProgress ?? []).map((item) => {
+    const targetPoints = Number(item.targetPoints ?? 0);
+    const currentPoints = Number(item.currentPoints ?? 0);
+    return {
+      ...item,
+      targetPoints,
+      currentPoints,
+      progress: targetPoints > 0
+        ? Math.min(100, Math.max(0, (currentPoints / targetPoints) * 100))
+        : 0,
+    };
+  });
   const currentGradeName = gradeData?.currentGrade?.gradeName;
   const nextGradeName = gradeData?.nextGrade?.gradeName;
   const pointsToNextGrade = Number(gradeData?.pointsToNextGrade ?? 0);
@@ -467,10 +353,6 @@ export default function MileageDashboard({ onExternal }) {
         : nextGradeName
           ? `${nextGradeName}까지 ${formatPoints(pointsToNextGrade)}점`
           : '등급 기준 없음';
-  const simulationTargets = simulationOptions?.targets ?? [];
-  const simulationActivities = simulationOptions?.activities ?? [];
-  const simulationResultShortage = Number(simulationResult?.shortagePoints ?? 0);
-  const simulationResultActivities = simulationResult?.plannedActivities ?? [];
   const ledgerRows = ledgerData?.content ?? [];
   const ledgerTotalItems = ledgerData?.totalElements ?? 0;
   const ledgerTotalPages = Math.max(1, ledgerData?.totalPages ?? 1);
@@ -480,22 +362,8 @@ export default function MileageDashboard({ onExternal }) {
       <PageHeader
         breadcrumbs={[{ label: '학생 포털' }, { label: '마일리지' }]}
         title="마일리지"
-        subtitle="핵심역량 활동 마일리지 현황과 인증·장학 기준을 확인하세요."
+        subtitle="핵심역량 활동 마일리지 현황을 확인하세요."
         accentColor={ACCENT}
-        actions={
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={onExternal}>
-              외부활동 등록
-            </Button>
-            <Button
-              size="sm"
-              style={{ background: ACCENT }}
-              onClick={() => toast('장학금 신청 화면으로 이동합니다.', 'info')}
-            >
-              장학금 신청
-            </Button>
-          </div>
-        }
       />
 
       {dashboardLoading && (
@@ -504,22 +372,26 @@ export default function MileageDashboard({ onExternal }) {
         </div>
       )}
       {dashboardError && !dashboardLoading && (
-        <div className="mb-4 rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[12px] text-[#92400E]">
-          실제 마일리지 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
+        <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[12px] text-[#92400E]">
+          <span>실제 마일리지 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</span>
+          <Button size="sm" variant="outline" onClick={loadPeriod}>
+            다시 시도
+          </Button>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex bg-[#F3F4F6] rounded-[8px] p-1 mb-5 w-fit">
+      <div className="flex w-fit max-w-full overflow-x-auto rounded-[8px] bg-[#F3F4F6] p-1 mb-5">
         {[
           ['dashboard', '마일리지 현황'],
           ['ledger', '적립 원장'],
-          ['simulation', '인증·장학 시뮬레이션'],
+          ['scholarship', '장학금 신청'],
+          ['external', '외부활동 등록'],
         ].map(([k, l]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
-            className={`h-8 px-5 text-[13px] font-semibold rounded-[6px] transition-colors whitespace-nowrap ${tab === k ? 'bg-white text-[#1F2328] shadow-sm' : 'text-[#656D76] hover:text-[#1F2328]'}`}
+            className={`h-8 shrink-0 px-5 text-[13px] font-semibold rounded-[6px] transition-colors whitespace-nowrap ${tab === k ? 'bg-white text-[#1F2328] shadow-sm' : 'text-[#656D76] hover:text-[#1F2328]'}`}
           >
             {l}
           </button>
@@ -537,7 +409,11 @@ export default function MileageDashboard({ onExternal }) {
               <StatTile
                 label="누적 마일리지"
                 value={
-                  dashboardLoading ? '불러오는 중' : hasDashboardData ? `${formatPoints(currentScore)}점` : '-'
+                  dashboardLoading
+                    ? '불러오는 중'
+                    : hasDashboardData
+                      ? `${formatPoints(currentScore)}점`
+                      : '-'
                 }
                 sub={gradeSub}
                 accentColor={ACCENT}
@@ -561,96 +437,32 @@ export default function MileageDashboard({ onExternal }) {
               accentColor={ACCENT}
             />
             <StatTile
-              label={scholarshipBenefit?.benefitName ?? '장학·인증 기준'}
+              label="연간 적립"
               value={
-                !hasDashboardData
-                  ? '-'
-                  : scholarshipBenefit == null
-                    ? '기준 없음'
-                    : scholarshipNeeded === 0
-                      ? '달성'
-                      : `${formatPoints(scholarshipNeeded)}점 부족`
+                dashboardLoading
+                  ? '불러오는 중'
+                  : hasDashboardData
+                    ? `${formatPoints(annualScore)}점`
+                    : '-'
               }
-              sub={
-                scholarshipTarget == null
-                  ? '백엔드 기준 없음'
-                  : `목표 ${formatPoints(scholarshipTarget)}점`
-              }
-              accentColor="#CF222E"
+              sub="연간 공통 정책"
+              accentColor={ACCENT}
             />
           </div>
 
-          {/* Mid row: criteria table + bar chart */}
+          {/* Mid row: semester trend + competency bar chart */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_1fr]">
-            {/* Criteria table */}
+            {/* Semester trend */}
             <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
               <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
                 <div className="w-1 h-4 rounded-full bg-[#D97706]" />
-                <h2 className="text-[14px] font-bold text-[#1F2328]">마일리지 인증·장학 기준</h2>
+                <h2 className="text-[14px] font-bold text-[#1F2328]">학기별 적립 추이</h2>
+                <span className="ml-auto text-[12px] font-medium text-[#656D76]">단위: 점</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px] border-collapse text-[12px]">
-                <thead>
-                  <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                    {['구분', '기준 점수', '혜택', '현재 상태'].map((h) => (
-                      <th
-                        key={h}
-                        className="px-4 py-2.5 text-left text-[11px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {benefitProgress.length > 0 ? (
-                    benefitProgress.map((row) => {
-                      const rowNeeded = Number(row.shortagePoints ?? 0);
-                      const attainable = Boolean(row.canApply) || row.progressStatus === 'ELIGIBLE';
-                      const statusLabel = attainable
-                        ? '가능'
-                        : BENEFIT_STATUS_LABELS[row.progressStatus] ??
-                          `${formatPoints(rowNeeded)}점 부족`;
-
-                      return (
-                        <tr
-                          key={row.benefitPolicyId}
-                          className={`border-b border-[#F3F4F6] last:border-0 ${attainable ? 'bg-[#F0FDF4]' : ''}`}
-                        >
-                          <td className="px-4 py-3 font-semibold text-[#1F2328]">
-                            {row.benefitName}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-[#1F2328]">
-                            {formatPoints(row.targetPoints)}점
-                          </td>
-                          <td className="px-4 py-3 text-[#656D76]">
-                            {row.benefitAmount == null ? '-' : `${formatPoints(row.benefitAmount)}원`}
-                          </td>
-                          <td className="px-4 py-3">
-                            {attainable ? (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#1A7F37]">
-                                {statusLabel}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                                {statusLabel}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-[12px] text-[#9AA0A6]">
-                        {dashboardLoading
-                          ? '기준을 불러오는 중입니다.'
-                          : '등록된 인증·장학 기준이 없습니다.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                </table>
+              <div className="overflow-x-auto px-6 py-4">
+                <div className="w-full min-w-[560px]">
+                  <TrendChart data={trendData} />
+                </div>
               </div>
             </div>
 
@@ -659,7 +471,7 @@ export default function MileageDashboard({ onExternal }) {
               <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
                 <div className="w-1 h-4 rounded-full bg-[#D97706]" />
                 <h2 className="text-[14px] font-bold text-[#1F2328]">역량별 적립 분포</h2>
-                <span className="ml-auto text-[11px] text-[#9AA0A6]">단위: 점</span>
+                <span className="ml-auto text-[12px] font-medium text-[#656D76]">단위: 점</span>
               </div>
               <div className="flex min-h-[188px] justify-center overflow-x-auto px-4 py-4">
                 {competencyData.length > 0 ? (
@@ -673,16 +485,67 @@ export default function MileageDashboard({ onExternal }) {
             </div>
           </div>
 
-          {/* Semester trend */}
-          <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
-              <div className="w-1 h-4 rounded-full bg-[#D97706]" />
-              <h2 className="text-[14px] font-bold text-[#1F2328]">학기별 적립 추이</h2>
-              <span className="ml-auto text-[11px] text-[#9AA0A6]">단위: 점</span>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1.1fr]">
+            <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
+              <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-5 py-4">
+                <div className="h-4 w-1 rounded-full bg-[#D97706]" />
+                <h2 className="text-[14px] font-bold text-[#1F2328]">프로그램 유형별 적립</h2>
+                <span className="ml-auto text-[12px] font-medium text-[#656D76]">단위: 점</span>
+              </div>
+              <div className="flex min-h-[188px] justify-center overflow-x-auto px-4 py-4">
+                {programTypeData.length > 0 ? (
+                  <BarChart data={programTypeData} color={ACCENT} height={140} unit="점" />
+                ) : (
+                  <div className="flex items-center text-[12px] text-[#9AA0A6]">
+                    프로그램 유형별 적립 내역이 없습니다.
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="overflow-x-auto px-6 py-4">
-              <div className="min-w-[560px]">
-                <TrendChart data={trendData} />
+
+            <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
+              <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-5 py-4">
+                <div className="h-4 w-1 rounded-full bg-[#D97706]" />
+                <h2 className="text-[14px] font-bold text-[#1F2328]">혜택 달성 현황</h2>
+                <span className="ml-auto text-[12px] font-medium text-[#656D76]">현재 기준</span>
+              </div>
+              <div className="flex min-h-[188px] flex-col gap-3 overflow-y-auto px-5 py-4">
+                {benefitProgressData.length > 0 ? (
+                  benefitProgressData.map((item) => {
+                    const status = item.applicationStatus ?? item.progressStatus;
+                    const statusLabel = item.canApply
+                      ? '신청 가능'
+                      : BENEFIT_PROGRESS_STATUS_LABELS[status] ?? status ?? '확인 필요';
+                    return (
+                      <div key={item.benefitPolicyId ?? item.benefitName}>
+                        <div className="mb-1 flex items-center justify-between gap-3 text-[11px]">
+                          <span className="truncate font-semibold text-[#1F2328]" title={item.benefitName}>
+                            {item.benefitName ?? '혜택 기준'}
+                          </span>
+                          <span className="shrink-0 text-[#656D76]">{statusLabel}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[#F3F4F6]">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${item.progress}%`,
+                                background: item.canApply ? '#059669' : ACCENT,
+                              }}
+                            />
+                          </div>
+                          <span className="shrink-0 text-[10px] text-[#656D76]">
+                            {formatPoints(item.currentPoints)} / {formatPoints(item.targetPoints)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-[12px] text-[#9AA0A6]">
+                    현재 적용되는 혜택 기준이 없습니다.
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -696,9 +559,9 @@ export default function MileageDashboard({ onExternal }) {
         <div className="flex flex-col gap-4">
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-3 flex items-center gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
             <div>
-              <p className="text-[13px] font-bold text-[#1F2328]">확정 적립 원장</p>
-              <p className="text-[11px] text-[#9AA0A6] mt-0.5">
-                백엔드에 저장된 POSTED 적립 거래를 최신순으로 조회합니다.
+              <p className="text-[13px] font-bold text-[#1F2328]">적립 내역</p>
+              <p className="text-[13px] text-[#9AA0A6] mt-0.5">
+                확정된 적립 내역을 최신순으로 보여드립니다.
               </p>
             </div>
             <span className="ml-auto text-[12px] text-[#656D76]">
@@ -748,7 +611,9 @@ export default function MileageDashboard({ onExternal }) {
                       const transactionType =
                         TRANSACTION_TYPE_LABELS[row.transactionType] ?? row.transactionType ?? '-';
                       const statusLabel =
-                        TRANSACTION_STATUS_LABELS[row.transactionStatus] ?? row.transactionStatus ?? '-';
+                        TRANSACTION_STATUS_LABELS[row.transactionStatus] ??
+                        row.transactionStatus ??
+                        '-';
 
                       return (
                         <tr
@@ -769,7 +634,9 @@ export default function MileageDashboard({ onExternal }) {
                           <td className="px-3 py-2.5 text-left font-semibold text-[#1F2328]">
                             {row.activityName ?? '-'}
                           </td>
-                          <td className="px-3 py-2.5 text-center text-[#656D76]">{transactionType}</td>
+                          <td className="px-3 py-2.5 text-center text-[#656D76]">
+                            {transactionType}
+                          </td>
                           <td className="px-3 py-2.5 text-center font-black text-[#1A7F37]">
                             {points > 0 ? '+' : ''}
                             {formatPoints(points)}
@@ -799,8 +666,8 @@ export default function MileageDashboard({ onExternal }) {
               </table>
             </div>
             <div className="px-4 py-3 border-t border-[#E5E7EB] flex items-center gap-3">
-              <p className="text-[11px] text-[#9AA0A6]">
-                ※ 백엔드의 확정(EARN·POSTED) 적립 거래 기준입니다. 행을 클릭하면 상세 정보를 확인할 수 있습니다.
+              <p className="text-[13px] text-[#9AA0A6]">
+                ※ 확정된 적립 내역만 표시됩니다. 행을 클릭하면 상세 정보를 확인할 수 있습니다.
               </p>
               {ledgerTotalItems > 0 && (
                 <Pagination
@@ -816,242 +683,11 @@ export default function MileageDashboard({ onExternal }) {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* ③ SIMULATION TAB */}
-      {/* ═══════════════════════════════════════════════════════ */}
-      {tab === 'simulation' && (
-        <div className="max-w-[760px] flex flex-col gap-5">
-          {/* Simulation target */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <div className="w-1 h-4 rounded-full bg-[#D97706]" />
-              <h2 className="text-[14px] font-bold text-[#1F2328]">목표 점수 설정</h2>
-            </div>
-            {simulationOptionsLoading && (
-              <div className="rounded-[8px] border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-5 text-center text-[12px] text-[#656D76]">
-                시뮬레이션 선택지를 불러오는 중입니다.
-              </div>
-            )}
-            {!simulationOptionsLoading && simulationOptionsError && (
-              <div role="alert" className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
-                시뮬레이션 선택지를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
-              </div>
-            )}
-            {!simulationOptionsLoading && !simulationOptionsError && (
-              <>
-                <div className="mb-4">
-                  <p className="mb-2 text-[12px] font-semibold text-[#656D76]">목표 기준</p>
-                  <div className="flex flex-wrap gap-2">
-                    {simulationTargets.map((target) => {
-                      const selected = selectedTargetBenefitPolicyId === target.benefitPolicyId;
-                      return (
-                        <button
-                          key={target.benefitPolicyId}
-                          type="button"
-                          disabled={simulationLoading}
-                          onClick={() => selectSimulationTarget(target)}
-                          className={`h-8 rounded-[20px] border px-3 text-[11px] font-bold transition-colors ${selected ? 'border-[#D97706] bg-[#FEF3C7] text-[#D97706]' : 'border-[#E5E7EB] text-[#656D76] hover:border-[#D97706] hover:text-[#D97706]'}`}
-                        >
-                          {target.benefitName ?? '목표 기준'} {formatPoints(target.targetPoints)}점
-                        </button>
-                      );
-                    })}
-                    {simulationTargets.length === 0 && (
-                      <span className="text-[12px] text-[#9AA0A6]">
-                        등록된 목표 기준이 없습니다.
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mb-4 flex items-center gap-4">
-                  <label htmlFor="simulation-target-points" className="w-24 flex-shrink-0 text-[13px] text-[#656D76]">
-                    목표 점수
-                  </label>
-                  <input
-                    id="simulation-target-points"
-                    type="number"
-                    min="0"
-                    value={simTarget}
-                    disabled={simulationLoading}
-                    onChange={(event) => selectCustomSimulationTarget(event.target.value)}
-                    className="h-9 w-28 rounded-[6px] border-2 border-[#D97706] px-2 text-center text-[14px] font-black text-[#D97706] focus:outline-none"
-                  />
-                  <span className="text-[13px] text-[#656D76]">점</span>
-                  {selectedTargetBenefitPolicyId == null && (
-                    <span className="text-[11px] text-[#9AA0A6]">직접 입력 목표</span>
-                  )}
-                </div>
-
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    style={{ background: ACCENT }}
-                    loading={simulationLoading}
-                    disabled={simulationOptions == null}
-                    onClick={runMileageSimulation}
-                  >
-                    시뮬레이션 실행
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-
-          {simulationError && (
-            <div role="alert" className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
-              {simulationError}
-            </div>
-          )}
-
-          {!simulationOptionsLoading && !simulationOptionsError && simulationOptions && (
-            <div>
-              <h3 className="mb-3 text-[13px] font-bold text-[#1F2328]">계획 활동 선택</h3>
-              {simulationActivities.length === 0 ? (
-                <div className="rounded-[8px] border border-[#E5E7EB] bg-white px-4 py-8 text-center text-[12px] text-[#9AA0A6]">
-                  선택 가능한 활동이 없습니다.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  {simulationActivities.map((activity) => {
-                    const selectedActivity = selectedActivities.find(
-                      (item) => item.mileagePolicyId === activity.mileagePolicyId,
-                    );
-                    const selected = selectedActivity != null;
-                    return (
-                      <div
-                        key={activity.mileagePolicyId}
-                        className={`flex flex-col gap-3 rounded-[8px] border bg-white p-4 shadow-[0_1px_4px_rgba(0,0,0,0.05)] ${selected ? 'border-[#D97706]' : 'border-[#E5E7EB]'}`}
-                      >
-                        <div>
-                          <p className="mb-1 text-[13px] font-bold text-[#1F2328]">
-                            {activity.activityName ?? activity.activityCode ?? '마일리지 활동'}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-black text-[#D97706]">
-                              +{formatPoints(activity.points)}점
-                            </span>
-                            {activity.maximumPoints != null && (
-                              <span className="text-[10px] text-[#9AA0A6]">
-                                최대 {formatPoints(activity.maximumPoints)}점
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {selected && (
-                          <label className="flex items-center gap-2 text-[11px] text-[#656D76]">
-                            수량
-                            <input
-                              type="number"
-                              min="1"
-                              value={selectedActivity.quantity}
-                              disabled={simulationLoading}
-                              onChange={(event) =>
-                                updateSimulationActivityQuantity(
-                                  activity.mileagePolicyId,
-                                  event.target.value,
-                                )
-                              }
-                              className="h-7 w-16 rounded-[6px] border border-[#E5E7EB] px-2 text-center text-[12px] text-[#1F2328] focus:border-[#D97706] focus:outline-none"
-                            />
-                          </label>
-                        )}
-                        <button
-                          type="button"
-                          disabled={simulationLoading}
-                          onClick={() => toggleSimulationActivity(activity.mileagePolicyId)}
-                          className="h-8 rounded-[6px] text-[12px] font-bold text-white transition-colors"
-                          style={{ background: selected ? '#656D76' : ACCENT }}
-                        >
-                          {selected ? '선택 해제' : '활동 선택'}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {simulationResult && (
-            <div className="rounded-[8px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
-              <div className="mb-4 flex items-center gap-2">
-                <div className="h-4 w-1 rounded-full bg-[#D97706]" />
-                <h3 className="text-[14px] font-bold text-[#1F2328]">시뮬레이션 결과</h3>
-                <span
-                  className={`ml-auto rounded-full px-2.5 py-1 text-[11px] font-black ${simulationResult.achieved ? 'bg-[#DCFCE7] text-[#1A7F37]' : 'bg-[#FEF2F2] text-[#CF222E]'}`}
-                >
-                  {simulationResult.achieved ? '목표 달성' : '목표 미달성'}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {[
-                  ['현재 마일리지', simulationResult.currentPoints],
-                  ['계획 활동 점수', simulationResult.plannedPoints],
-                  ['예상 마일리지', simulationResult.projectedPoints],
-                  ['부족 점수', simulationResultShortage],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-[8px] bg-[#F9FAFB] p-3">
-                    <p className="text-[11px] text-[#9AA0A6]">{label}</p>
-                    <p className="mt-1 text-[16px] font-black text-[#D97706]">
-                      {formatPoints(value)}점
-                    </p>
-                  </div>
-                ))}
-              </div>
-              {simulationResult.target && (
-                <p className="mt-4 text-[12px] text-[#656D76]">
-                  목표 기준: {simulationResult.target.benefitName ?? '직접 입력 목표'}{' '}
-                  {formatPoints(simulationResult.target.targetPoints)}점
-                </p>
-              )}
-              {simulationResultActivities.length > 0 && (
-                <div className="mt-4 border-t border-[#F3F4F6] pt-4">
-                  <p className="mb-2 text-[12px] font-bold text-[#1F2328]">반영된 계획 활동</p>
-                  <div className="flex flex-col gap-2">
-                    {simulationResultActivities.map((plannedActivity) => {
-                      const activity = simulationActivities.find(
-                        (item) => item.mileagePolicyId === plannedActivity.mileagePolicyId,
-                      );
-                      return (
-                        <div
-                          key={plannedActivity.mileagePolicyId}
-                          className="flex items-center justify-between text-[12px]"
-                        >
-                          <span className="text-[#656D76]">
-                            {activity?.activityName ?? `정책 #${plannedActivity.mileagePolicyId}`}
-                          </span>
-                          <span className="font-semibold text-[#1F2328]">
-                            {plannedActivity.quantity}개
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Disclaimer */}
-          <div className="flex items-start gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-[8px] px-4 py-3">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 16 16"
-              fill="#9AA0A6"
-              className="flex-shrink-0 mt-0.5"
-            >
-              <circle cx="8" cy="8" r="7" />
-              <path d="M8 4v5M8 11h.01" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            <p className="text-[12px] text-[#9AA0A6] leading-snug">
-              시뮬레이션 결과는 참고값이며 실제 지급을 보장하지 않습니다. 장학금 지급 기준 및 세부
-              사항은 매 학기 장학 공지를 확인하시기 바랍니다.
-            </p>
-          </div>
-        </div>
+      {tab === 'scholarship' && (
+        <ScholarshipTab currentPoints={hasDashboardData ? currentScore : null} />
       )}
+
+      {tab === 'external' && <ExternalActivity embedded onBack={() => setTab('dashboard')} />}
 
       <Drawer
         open={selectedTransactionId != null}
@@ -1078,7 +714,9 @@ export default function MileageDashboard({ onExternal }) {
               <div>
                 <p className="text-[#9AA0A6]">원천</p>
                 <p className="mt-1 font-bold text-[#1F2328]">
-                  {SOURCE_LABELS[transactionDetail.sourceType] ?? transactionDetail.sourceType ?? '-'}
+                  {SOURCE_LABELS[transactionDetail.sourceType] ??
+                    transactionDetail.sourceType ??
+                    '-'}
                 </p>
               </div>
               <div>
@@ -1127,16 +765,20 @@ export default function MileageDashboard({ onExternal }) {
                 <div className="flex flex-col gap-2 rounded-[8px] border border-[#E5E7EB] p-4 text-[12px]">
                   <div className="flex justify-between gap-3">
                     <span className="text-[#9AA0A6]">활동 코드</span>
-                    <span className="font-mono text-[#1F2328]">{transactionDetail.policy.activityCode ?? '-'}</span>
+                    <span className="font-mono text-[#1F2328]">
+                      {transactionDetail.policy.activityCode ?? '-'}
+                    </span>
                   </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-[#9AA0A6]">분류</span>
-                    <span className="text-[#1F2328]">{transactionDetail.policy.categoryCode ?? '-'}</span>
+                    <span className="text-[#1F2328]">
+                      {transactionDetail.policy.categoryCode ?? '-'}
+                    </span>
                   </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-[#9AA0A6]">적용 학기</span>
                     <span className="text-[#1F2328]">
-                      {transactionDetail.policy.academicYear ?? '-'}-{transactionDetail.policy.semesterCode ?? '-'}
+                      {formatSemester(transactionDetail.policy.semesterCode)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-3">
