@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
-import { USER_TYPE, USER_ROLE, DEPARTMENT } from '@/constants/domain';
+import { USER_TYPE, DEPARTMENT, canAccessCounselOperation } from '@/constants/domain';
 import { UNIVERSITY_NAME } from '@/data/dummy';
 import { toast } from '@/components/common';
 import { fetchMyAcademicRecord } from '@/api/students';
@@ -218,16 +218,16 @@ export default function PortalShell() {
   const navigate = useNavigate();
 
   const portal = user?.userType === USER_TYPE.STAFF ? 'staff' : 'student';
-  const isCounselor = (user?.roleCodes ?? []).includes(USER_ROLE.COUNSELOR);
+  const canCounselOperation = canAccessCounselOperation(user?.roleCodes);
   const isProgramStaff = user?.department === DEPARTMENT.NON_SUBJECT_OPERATION;
-  // 교직원이지만 상담사(ST200)가 아니면 '상담 운영'을, 비교과운영부서(D200)가 아니면
-  // '비교과 운영'을 숨긴다. 이는 UX용 1차 숨김이고 실제 진입 차단은 라우트의
-  // CounselOperationRoute, 최종 권한은 BE가 판단한다.
+  // 교직원이지만 ST200 단독 또는 ST300 단독이 아니면(겸임·무역할 포함) '상담 운영'을,
+  // 비교과운영부서(D200)가 아니면 '비교과 운영'을 숨긴다. 이는 UX용 1차 숨김이고 실제
+  // 진입 차단은 라우트의 CounselOperationRoute, 최종 권한은 BE가 판단한다.
   const nav =
     portal === 'staff'
       ? NAV_STAFF.filter(
           (item) =>
-            (item.key !== 'counseling' || isCounselor) &&
+            (item.key !== 'counseling' || canCounselOperation) &&
             (item.key !== 'extracurr' || isProgramStaff),
         )
       : PORTAL_NAVS[portal];
