@@ -140,6 +140,7 @@ const parseCriteria = (value) => {
 const validateForm = (form) => {
   if (!form.benefitName.trim()) return '장학금명을 입력해 주세요.';
 
+  if (!String(form.minimumPoints).trim()) return '최소 기준 점수를 입력해 주세요.';
   const minimumPoints = Number(form.minimumPoints);
   if (!Number.isFinite(minimumPoints) || minimumPoints < 0) {
     return '최소 기준 점수를 0 이상으로 입력해 주세요.';

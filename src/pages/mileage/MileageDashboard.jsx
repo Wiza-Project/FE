@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { fetchCurrentMileagePeriod } from '@/api/mileage';
 import { SEMESTER_LABELS } from '@/utils/academicPeriod';
@@ -62,7 +62,8 @@ function TrendChart({ data = [] }) {
     );
   }
 
-  const max = 50;
+  const rawMax = Math.max(0, ...chartData.map((d) => Number(d.value) || 0));
+  const max = rawMax > 0 ? rawMax : 50;
   const pointDenominator = Math.max(chartData.length - 1, 1);
   const isSinglePoint = chartData.length === 1;
   const pts = chartData.map((d, i) => ({
@@ -171,26 +172,27 @@ export default function MileageDashboard() {
 
   const [period, setPeriod] = useState(null);
 
-  useEffect(() => {
-    let mounted = true;
+  const loadPeriod = useCallback(() => {
+    setDashboardLoading(true);
+    setDashboardError('');
+    setGradeLoading(true);
+    setGradeError('');
 
-    fetchCurrentMileagePeriod()
+    return fetchCurrentMileagePeriod()
       .then((data) => {
-        if (mounted) setPeriod(data);
+        setPeriod(data);
       })
       .catch((error) => {
-        if (mounted) {
-          setDashboardError(error.message);
-          setDashboardLoading(false);
-          setGradeError(error.message);
-          setGradeLoading(false);
-        }
+        setDashboardError(error.message);
+        setDashboardLoading(false);
+        setGradeError(error.message);
+        setGradeLoading(false);
       });
-
-    return () => {
-      mounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadPeriod();
+  }, [loadPeriod]);
 
   useEffect(() => {
     if (!period) return undefined;
@@ -198,7 +200,7 @@ export default function MileageDashboard() {
 
     apiClient
       .get('/students/mileage/dashboard', {
-        params: { semesterCode: period.semesterCode },
+        params: { academicYear: period.academicYear, semesterCode: period.semesterCode },
       })
       .then(({ data }) => {
         if (mounted) {
@@ -224,7 +226,7 @@ export default function MileageDashboard() {
 
     apiClient
       .get('/students/mileage/grade', {
-        params: { semesterCode: period.semesterCode },
+        params: { academicYear: period.academicYear, semesterCode: period.semesterCode },
       })
       .then(({ data }) => {
         if (mounted) {
@@ -347,8 +349,11 @@ export default function MileageDashboard() {
         </div>
       )}
       {dashboardError && !dashboardLoading && (
-        <div className="mb-4 rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[12px] text-[#92400E]">
-          실제 마일리지 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-[8px] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[12px] text-[#92400E]">
+          <span>실제 마일리지 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</span>
+          <Button size="sm" variant="outline" onClick={loadPeriod}>
+            다시 시도
+          </Button>
         </div>
       )}
 

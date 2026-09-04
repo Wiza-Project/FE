@@ -12,6 +12,7 @@ import {
 } from '@/components/common';
 
 const ACCENT = '#D97706';
+const MAX_EVIDENCE_FILE_SIZE = 10 * 1024 * 1024;
 
 // 현재 백엔드의 학생용 외부활동 정책 조회가 competency_id가 없는 기존 외부활동
 // 정책을 제외하고 있어, 활성 정책이 있어도 빈 배열이 내려오는 경우가 있습니다.
@@ -98,7 +99,7 @@ const normalizeClaim = (claim = {}) => ({
   name: claim.activityName ?? '-',
   score: claim.requestedPoints,
   status: CLAIM_STATUS_LABELS[claim.claimStatus] ?? claim.claimStatus ?? '-',
-  opinion: claim.rejectionReason ?? null,
+  opinion: claim.reviewReason ?? null,
 });
 
 // ── Dynamic form fields by category ──
@@ -190,7 +191,11 @@ export default function ExternalActivity({ onBack, embedded = false }) {
       const { data } = await apiClient.get('/students/mileage/external-activities/policies');
       const content = Array.isArray(data) ? data : data?.content ?? [];
       setPolicies(
-        (content.length > 0 ? content : DEFAULT_EXTERNAL_ACTIVITY_POLICIES).map(normalizePolicy),
+        content.length > 0
+          ? content.map(normalizePolicy)
+          : DEFAULT_EXTERNAL_ACTIVITY_POLICIES.map((policy) =>
+              normalizePolicy({ ...policy, isFallback: true }),
+            ),
       );
     } catch (error) {
       setPoliciesError(error.message ?? '외부활동 정책을 불러오지 못했습니다.');
@@ -236,8 +241,12 @@ export default function ExternalActivity({ onBack, embedded = false }) {
   };
 
   const isCert = selectedType?.name === '자격증';
+  const isVolunteer = selectedType?.name === '봉사활동';
+  const isSupportedType = isCert || isVolunteer;
   const canSubmit = Boolean(
     selectedType &&
+      isSupportedType &&
+      !selectedType?.isFallback &&
       evidenceFile &&
       (isCert
         ? certForm.name.trim() && certForm.acquiredAt
@@ -372,13 +381,23 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                 ) : (
                   policies.map((t) => {
                     const isSelected = selectedType?.activityTypeId === t.activityTypeId;
+                    const isRowSupported = t.name === '자격증' || t.name === '봉사활동';
+                    const unsupportedReason = '아직 지원되지 않는 활동 유형입니다.';
                     return (
                       <tr
                         key={t.mileagePolicyId ?? t.activityTypeId}
-                        onClick={() => handleSelectType(t)}
-                        className={`border-b border-[#F3F4F6] last:border-0 cursor-pointer transition-colors ${isSelected ? 'bg-[#FFFBEB] ring-1 ring-inset ring-[#FDE68A]' : 'hover:bg-[#FAFAFA]'}`}
+                        onClick={() => isRowSupported && handleSelectType(t)}
+                        title={isRowSupported ? undefined : unsupportedReason}
+                        className={`border-b border-[#F3F4F6] last:border-0 transition-colors ${!isRowSupported ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${isSelected ? 'bg-[#FFFBEB] ring-1 ring-inset ring-[#FDE68A]' : isRowSupported ? 'hover:bg-[#FAFAFA]' : ''}`}
                       >
-                        <td className="px-4 py-3 font-semibold text-[#1F2328]">{t.name}</td>
+                        <td className="px-4 py-3 font-semibold text-[#1F2328]">
+                          {t.name}
+                          {!isRowSupported && (
+                            <span className="ml-2 text-[11px] font-normal text-[#9AA0A6]">
+                              ({unsupportedReason})
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-center font-black text-[#D97706]">
                           {formatPoints(t.score)}
                         </td>
@@ -397,9 +416,10 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                               name="externalActivityType"
                               value={t.activityTypeId}
                               checked={isSelected}
-                              onChange={() => handleSelectType(t)}
+                              disabled={!isRowSupported}
+                              onChange={() => isRowSupported && handleSelectType(t)}
                               aria-label={`${t.name} 선택`}
-                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
                             />
                             <div
                               aria-hidden="true"
@@ -508,7 +528,14 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                 <FileUpload
                   accept=".pdf"
                   maxSize="10MB"
-                  onFiles={(files) => setEvidenceFile(files[0] ?? null)}
+                  onFiles={(files) => {
+                    const file = files[0] ?? null;
+                    if (file && file.size > MAX_EVIDENCE_FILE_SIZE) {
+                      toast('파일 크기는 10MB를 초과할 수 없습니다.', 'error');
+                      return;
+                    }
+                    setEvidenceFile(file);
+                  }}
                 />
               </div>
             </div>
