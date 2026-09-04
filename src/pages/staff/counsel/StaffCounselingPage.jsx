@@ -5,6 +5,7 @@ import SessionRecord from './SessionRecord';
 import SessionResult from './SessionResult';
 import MySchedule from './MySchedule';
 import { fetchPendingCounselorReservations, pendingReservationsQueryKey } from '@/api/counsel';
+import { useAuthStore } from '@/stores/authStore';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
@@ -29,6 +30,9 @@ const NAV_ITEMS = [
  * 그대로 쓰고, 화면에서 ST200/ST300에 따라 데이터를 다시 거르지 않는다.
  */
 export default function StaffCounselingPage() {
+  // 소속 표기는 하드코딩 대신 로그인 사용자 정보를 쓴다. departmentName은 nullable이라
+  // 없으면 이름만 노출한다(StaffDashboard.jsx의 subtitle 표현식과 동일한 규칙).
+  const user = useAuthStore((state) => state.user);
   const [nav, setNav] = useState(NAV_ITEMS[0].key);
   const current = NAV_ITEMS.find((item) => item.key === nav) ?? NAV_ITEMS[0];
   const selectedNav = current.key;
@@ -55,7 +59,9 @@ export default function StaffCounselingPage() {
             </div>
             <span className="text-[12px] font-black text-[#1F2328]">상담 운영</span>
           </div>
-          <p className="text-[10px] text-[#9AA0A6] leading-relaxed">김담당 · 비교과운영부서</p>
+          <p className="text-[10px] text-[#9AA0A6] leading-relaxed">
+            {`${user?.name ?? ''}${user?.departmentName ? ` · ${user.departmentName}` : ''}`}
+          </p>
         </div>
 
         <nav className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden">
