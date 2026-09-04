@@ -83,9 +83,11 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
   const pendingRef = useRef(new Set());
   const [pendingIds, setPendingIds] = useState(() => new Set());
 
-  // Q013(재학생 아님): 응시 시작 후 학적이 바뀐 경우. 저장·제출 어느 쪽에서 처음 걸리든 한 번만
-  // 안내하고 진단 안내 화면으로 벗어난다. 여러 문항 저장이 동시에 실패해도(버스트) 토스트·이탈이
-  // 중복되지 않도록 플래그로 가드하고, 저장·제출 onError가 같은 코드를 쓰도록 헬퍼로 묶는다.
+  /**
+   * Q013(재학생 아님): 응시 시작 후 학적이 바뀐 경우. 저장·제출 어느 쪽에서 처음 걸리든 한 번만
+   * 안내하고 진단 안내 화면으로 벗어난다. 여러 문항 저장이 동시에 실패해도(버스트) 토스트·이탈이
+   * 중복되지 않도록 플래그로 가드하고, 저장·제출 onError가 같은 코드를 쓰도록 헬퍼로 묶는다.
+   */
   const enrollmentLostRef = useRef(false);
   const bounceIfEnrollmentLost = (e) => {
     if (!(e instanceof ApiError) || e.code !== ASSESSMENT_ERROR_CODE.NOT_ENROLLED_STUDENT) return false;
@@ -134,9 +136,11 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
   const currentQs = items.slice(page * QUESTIONS_PER_PAGE, (page + 1) * QUESTIONS_PER_PAGE);
   const answeredCount = Object.keys(answers).length;
   const unanswered = items.length - answeredCount;
-  // pendingIds가 비어있어야 함: 마지막 문항 저장이 아직 서버에 도착 전이면(특히 이미 응답된
-  // 문항을 수정하는 경우 answeredCount는 계속 총 문항 수와 같아 이 조건 없이는 걸러지지 않는다)
-  // submitAssessment가 먼저 처리돼 서버가 그 문항을 미응답으로 판단할 수 있다.
+  /**
+   * pendingIds가 비어있어야 함: 마지막 문항 저장이 아직 서버에 도착 전이면(특히 이미 응답된
+   * 문항을 수정하는 경우 answeredCount는 계속 총 문항 수와 같아 이 조건 없이는 걸러지지 않는다)
+   * submitAssessment가 먼저 처리돼 서버가 그 문항을 미응답으로 판단할 수 있다.
+   */
   const canSubmit = items.length > 0 && unanswered === 0 && pendingIds.size === 0;
   const progress = items.length ? Math.round((answeredCount / items.length) * 100) : 0;
 
@@ -202,9 +206,11 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
 
   const handleSubmit = () => {
     setConfirmOpen(false);
-    // 버튼의 disabled 속성만으로는 다음 렌더 전에 들어오는 중복 클릭(예: 확인 다이얼로그를 빠르게
-    // 두 번 확정)을 못 막는다 — setAnswer의 pendingRef와 같은 이유로 여기서도 동기 가드를 둔다.
-    // canSubmit도 함께 확인: 다이얼로그가 열려 있는 사이 마지막 문항 저장이 아직 안 끝났을 수 있다.
+    /**
+     * 버튼의 disabled 속성만으로는 다음 렌더 전에 들어오는 중복 클릭(예: 확인 다이얼로그를 빠르게
+     * 두 번 확정)을 못 막는다 — setAnswer의 pendingRef와 같은 이유로 여기서도 동기 가드를 둔다.
+     * canSubmit도 함께 확인: 다이얼로그가 열려 있는 사이 마지막 문항 저장이 아직 안 끝났을 수 있다.
+     */
     if (!canSubmit || submitMutation.isPending) return;
     submitMutation.mutate(attemptId);
   };
