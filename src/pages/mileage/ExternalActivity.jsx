@@ -71,6 +71,26 @@ const formatPoints = (value) => {
   return Number.isFinite(points) ? `${points.toLocaleString('ko-KR')}점` : `${value}점`;
 };
 
+const getClaimPointsDisplay = ({ claimStatus, requestedPoints, policyPoints, grantedPoints }) => {
+  if (claimStatus === 'APPROVED') {
+    const primary = grantedPoints ?? policyPoints ?? requestedPoints;
+    const note =
+      grantedPoints != null && policyPoints != null && grantedPoints < policyPoints
+        ? `한도 적용으로 ${formatPoints(policyPoints)} 중 ${formatPoints(grantedPoints)} 지급`
+        : null;
+    return { primary, note };
+  }
+  if (claimStatus === 'REQUESTED') {
+    const primary = policyPoints ?? requestedPoints;
+    const note =
+      policyPoints != null && requestedPoints != null && requestedPoints !== policyPoints
+        ? `자기기입 ${formatPoints(requestedPoints)}`
+        : null;
+    return { primary, note };
+  }
+  return { primary: policyPoints ?? requestedPoints, note: null };
+};
+
 const formatMaximumPoints = (value) => (value == null || value === '' ? '제한 없음' : formatPoints(value));
 
 const getDuplicateRuleType = (rule) => {
@@ -97,7 +117,10 @@ const normalizeClaim = (claim = {}) => ({
   id: claim.externalClaimId,
   date: claim.applicationDate,
   name: claim.activityName ?? '-',
-  score: claim.requestedPoints,
+  claimStatus: claim.claimStatus,
+  requestedPoints: claim.requestedPoints,
+  policyPoints: claim.policyPoints ?? null,
+  grantedPoints: claim.grantedPoints ?? null,
   status: CLAIM_STATUS_LABELS[claim.claimStatus] ?? claim.claimStatus ?? '-',
   opinion: claim.reviewReason ?? null,
 });
@@ -642,30 +665,38 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                 </td>
               </tr>
             ) : (
-              applications.map((a, i) => (
-                <tr
-                  key={a.id ?? `${a.date}-${i}`}
-                  className={`border-b border-[#F3F4F6] last:border-0 ${a.status === '반려' ? 'bg-[#FFF5F5]' : i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}
-                >
-                  <td className="px-4 py-3 text-center text-[#9AA0A6] font-mono">
-                    {formatDate(a.date)}
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-[#1F2328]">{a.name}</td>
-                  <td className="px-4 py-3 text-center font-black text-[#D97706]">
-                    {formatPoints(a.score)}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <StatusBadge status={a.status} size="sm" />
-                  </td>
-                  <td className="px-4 py-3">
-                    {a.opinion ? (
-                      <span className="text-[12px] text-[#656D76]">{a.opinion}</span>
-                    ) : (
-                      <span className="text-[#9AA0A6]">-</span>
-                    )}
-                  </td>
-                </tr>
-              ))
+              applications.map((a, i) => {
+                const pointsDisplay = getClaimPointsDisplay(a);
+                return (
+                  <tr
+                    key={a.id ?? `${a.date}-${i}`}
+                    className={`border-b border-[#F3F4F6] last:border-0 ${a.status === '반려' ? 'bg-[#FFF5F5]' : i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}
+                  >
+                    <td className="px-4 py-3 text-center text-[#9AA0A6] font-mono">
+                      {formatDate(a.date)}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-[#1F2328]">{a.name}</td>
+                    <td className="px-4 py-3 text-center font-black text-[#D97706]">
+                      {formatPoints(pointsDisplay.primary)}
+                      {pointsDisplay.note && (
+                        <div className="text-[10px] font-normal text-[#9AA0A6] mt-0.5">
+                          {pointsDisplay.note}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <StatusBadge status={a.status} size="sm" />
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.opinion ? (
+                        <span className="text-[12px] text-[#656D76]">{a.opinion}</span>
+                      ) : (
+                        <span className="text-[#9AA0A6]">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
