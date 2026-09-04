@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchAssessmentComparison } from '@/api/competency';
 import { ApiError } from '@/api/client';
+import { ASSESSMENT_ERROR_CODE } from '@/constants/domain';
 import { useCommonCode } from '@/hooks/useCommonCode';
 import { COMP_COLOR, COMP_AVG_COLOR } from '@/data/competencyData';
 import { formatDate } from '@/utils/date';
@@ -48,7 +49,14 @@ export default function ComparisonPage({ pair, onBack }) {
     enabled: ready,
     // Q022(같은 응시)·Q023(사전·사후 쌍 아님)은 재시도해도 같은 결과라 스켈레톤만 길어진다.
     retry: (failureCount, err) =>
-      !(err instanceof ApiError && ['Q018', 'Q022', 'Q023'].includes(err.code)) && failureCount < 1,
+      !(
+        err instanceof ApiError &&
+        [
+          ASSESSMENT_ERROR_CODE.RESULT_NOT_AVAILABLE,
+          ASSESSMENT_ERROR_CODE.COMPARISON_SAME_ATTEMPT,
+          ASSESSMENT_ERROR_CODE.COMPARISON_NOT_PRE_POST_PAIR,
+        ].includes(err.code)
+      ) && failureCount < 1,
   });
 
   const header = (
@@ -96,7 +104,10 @@ export default function ComparisonPage({ pair, onBack }) {
   if (isError) {
     // Q023(NOT_PRE_POST_PAIR)·Q022(SAME_ATTEMPT)는 학생이 선택을 바꾸면 해결되는 안내성 에러다.
     const guided =
-      error instanceof ApiError && ['Q022', 'Q023'].includes(error.code);
+      error instanceof ApiError &&
+      [ASSESSMENT_ERROR_CODE.COMPARISON_SAME_ATTEMPT, ASSESSMENT_ERROR_CODE.COMPARISON_NOT_PRE_POST_PAIR].includes(
+        error.code,
+      );
     return (
       <div>
         {header}

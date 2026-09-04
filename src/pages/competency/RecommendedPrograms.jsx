@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchRecommendedPrograms } from '@/api/competency';
 import { applyToProgram } from '@/api/programApplications';
 import { ApiError } from '@/api/client';
+import { ASSESSMENT_ERROR_CODE } from '@/constants/domain';
 import { COMP_COLOR } from '@/data/competencyData';
 import { formatDate } from '@/utils/date';
 import { PageHeader, Button, EmptyState, SkeletonLoader, toast } from '@/components/common';
@@ -137,7 +138,10 @@ export default function RecommendedPrograms({ attemptId, onBack }) {
     staleTime: 0,
     // Q014(소유권)·Q018(미채점)은 재시도해도 동일 — 스켈레톤만 길어진다.
     retry: (failureCount, err) =>
-      !(err instanceof ApiError && ['Q014', 'Q018'].includes(err.code)) && failureCount < 1,
+      !(
+        err instanceof ApiError &&
+        [ASSESSMENT_ERROR_CODE.ATTEMPT_NOT_FOUND, ASSESSMENT_ERROR_CODE.RESULT_NOT_AVAILABLE].includes(err.code)
+      ) && failureCount < 1,
   });
 
   const header = (
@@ -187,8 +191,8 @@ export default function RecommendedPrograms({ attemptId, onBack }) {
   }
 
   if (isError) {
-    const notScored = error instanceof ApiError && error.code === 'Q018';
-    const notOwner = error instanceof ApiError && error.code === 'Q014';
+    const notScored = error instanceof ApiError && error.code === ASSESSMENT_ERROR_CODE.RESULT_NOT_AVAILABLE;
+    const notOwner = error instanceof ApiError && error.code === ASSESSMENT_ERROR_CODE.ATTEMPT_NOT_FOUND;
     const guided = notScored || notOwner;
     return (
       <div>

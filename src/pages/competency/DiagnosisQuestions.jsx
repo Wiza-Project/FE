@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { fetchAssessmentResume, saveAssessmentResponse, submitAssessment } from '@/api/competency';
 import { ApiError } from '@/api/client';
 import { ConfirmDialog, EmptyState, SkeletonLoader, toast } from '@/components/common';
+import { ASSESSMENT_ERROR_CODE } from '@/constants/domain';
 
 const LIKERT = [
   { value: 1, label: '전혀\n그렇지 않다' },
@@ -87,7 +88,7 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
   // 중복되지 않도록 플래그로 가드하고, 저장·제출 onError가 같은 코드를 쓰도록 헬퍼로 묶는다.
   const enrollmentLostRef = useRef(false);
   const bounceIfEnrollmentLost = (e) => {
-    if (!(e instanceof ApiError) || e.code !== 'Q013') return false;
+    if (!(e instanceof ApiError) || e.code !== ASSESSMENT_ERROR_CODE.NOT_ENROLLED_STUDENT) return false;
     if (!enrollmentLostRef.current) {
       enrollmentLostRef.current = true;
       toast(e.message, 'error');
@@ -183,7 +184,7 @@ export default function DiagnosisQuestions({ attemptId, onComplete, onBack }) {
       if (bounceIfEnrollmentLost(e)) return;
       // Q005(미응답 문항 있음): 서버 기준 미응답 문항을 로컬 answers에서도 제거해 화면이
       // "이미 응답됨"으로 잘못 표시되지 않게 한 뒤, 그 문항으로 자동 이동한다.
-      if (e instanceof ApiError && e.code === 'Q005' && Array.isArray(e.data)) {
+      if (e instanceof ApiError && e.code === ASSESSMENT_ERROR_CODE.INCOMPLETE_ANSWER && Array.isArray(e.data)) {
         const missingIds = e.data;
         applyAnswers((prev) => {
           const next = { ...prev };
