@@ -136,6 +136,7 @@ function CertFields({ value, onChange }) {
       <Input
         label="자격명"
         placeholder="예) 정보처리기사"
+        maxLength={200}
         value={value.name}
         onChange={update('name')}
       />
@@ -160,6 +161,7 @@ function VolunteerFields({ value, onChange }) {
         <Input
           label="봉사기관"
           placeholder="예) 사회복지법인 ○○원"
+          maxLength={200}
           value={value.org}
           onChange={update('org')}
         />
@@ -267,6 +269,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
   const isCert = selectedType?.name === '자격증';
   const isVolunteer = selectedType?.name === '봉사활동';
   const isSupportedType = isCert || isVolunteer;
+  const usingFallbackPolicies = policies.length > 0 && policies.every((p) => p.isFallback);
   const canSubmit = Boolean(
     selectedType &&
       isSupportedType &&
@@ -279,10 +282,14 @@ export default function ExternalActivity({ onBack, embedded = false }) {
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
+    const activityName = isCert ? certForm.name.trim() : volunteerForm.org.trim();
+    if (activityName.length > 200) {
+      toast('활동명은 200자를 초과할 수 없습니다.', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       const { fileGroupId } = await uploadExternalActivityFile(evidenceFile);
-      const activityName = isCert ? certForm.name.trim() : volunteerForm.org.trim();
       const activityDate = isCert ? certForm.acquiredAt : volunteerForm.startDate;
       const detailData = isCert
         ? { issuer: certForm.issuer.trim() || undefined }
@@ -390,6 +397,17 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                     <td colSpan={5} className="px-4 py-10 text-center text-[12px] text-[#CF222E]">
                       <div className="flex flex-col items-center gap-2">
                         <span>{policiesError}</span>
+                        <Button size="sm" variant="outline" onClick={loadPolicies}>
+                          다시 불러오기
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : usingFallbackPolicies ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-[12px] text-[#CF222E]">
+                      <div className="flex flex-col items-center gap-2">
+                        <span>외부활동 정책을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</span>
                         <Button size="sm" variant="outline" onClick={loadPolicies}>
                           다시 불러오기
                         </Button>
