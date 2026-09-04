@@ -31,8 +31,9 @@ const NAV_ITEMS = [
  * @param {Object} props
  * @param {() => void} props.onJobList 채용공고 목록 화면으로 이동하는 콜백
  */
-export default function CareerPrepPage({ onJobList }) {
-  const [view, setView] = useState('resume');
+// 403 나는 resume 대신 외부에서 넘겨준 initialView로 시작할 수 있도록 수정
+export default function CareerPrepPage({ onJobList, initialView = 'resume' }) {
+  const [view, setView] = useState(initialView);
   const current = NAV_ITEMS.find((n) => n.key === view) || NAV_ITEMS[0];
 
   return (

@@ -191,6 +191,13 @@ export const getJobPreference = () =>
     });
 
 /**
+ * [공통] 내 전체 동의 이력 조회 (PROFILING 선택동의 완료 여부 판별용)
+ * GET /api/consents/me
+ */
+export const getMyConsentHistory = () =>
+  apiClient.get('/consents/me').then((res) => res.data?.data || res.data || []);
+
+/**
  * [학생] 취업 희망조건 등록 및 수정
  * PUT /api/students/career/preference
  * @param {JobPreference} payload
