@@ -237,6 +237,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
   const [period, setPeriod] = useState(null);
 
   const loadPeriod = useCallback(async () => {
+    setScholarshipsLoading(true);
     setScholarshipsError('');
     try {
       const data = await fetchCurrentMileagePeriod();
@@ -341,6 +342,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
           size="sm"
           variant="outline"
           onClick={() => {
+            if (period == null) loadPeriod();
             loadScholarships();
             loadHistory(historyPage);
           }}

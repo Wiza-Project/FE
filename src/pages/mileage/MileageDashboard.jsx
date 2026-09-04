@@ -336,7 +336,7 @@ export default function MileageDashboard() {
       currentPoints,
       progress: targetPoints > 0
         ? Math.min(100, Math.max(0, (currentPoints / targetPoints) * 100))
-        : 100,
+        : 0,
     };
   });
   const currentGradeName = gradeData?.currentGrade?.gradeName;

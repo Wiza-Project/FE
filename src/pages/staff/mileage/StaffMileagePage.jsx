@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { Button, Modal, Drawer, Pagination, StatTile, toast } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
@@ -290,12 +290,14 @@ function TabPolicySettings() {
   const [policyError, setPolicyError] = useState('');
   const [activityTypesError, setActivityTypesError] = useState('');
   const [actionId, setActionId] = useState(null);
+  const policyRequestIdRef = useRef(0);
 
   const updateCreateField = (field, value) => {
     setPForm((current) => ({ ...current, [field]: value }));
   };
 
   const loadPolicies = useCallback(async (currentFilter) => {
+    const requestId = ++policyRequestIdRef.current;
     setLoading(true);
     setPolicyError('');
     try {
@@ -307,11 +309,15 @@ function TabPolicySettings() {
         ...(currentFilter.policyStatus ? { policyStatus: currentFilter.policyStatus } : {}),
       };
       const { data } = await apiClient.get('/staff/mileage/policies', { params });
+      if (requestId !== policyRequestIdRef.current) return;
       setPolicies((data?.content ?? []).map(normalizePolicy));
     } catch (error) {
+      if (requestId !== policyRequestIdRef.current) return;
       setPolicyError(error.message);
     } finally {
-      setLoading(false);
+      if (requestId === policyRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -477,7 +483,7 @@ function TabPolicySettings() {
               value={pForm.semesterCode}
               onChange={(e) => updateCreateField('semesterCode', e.target.value)}
               disabled={saving || semesterCodesLoading}
-              className="h-8 w-28 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none"
+              className="h-8 w-28 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#2563EB]"
             >
               {registrationSemesterOptions.map((opt) => (
                 <option key={opt.code} value={opt.code}>{opt.codeName}</option>

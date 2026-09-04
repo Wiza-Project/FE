@@ -245,8 +245,11 @@ export default function ExternalActivity({ onBack, embedded = false }) {
   };
 
   const handleSelectType = (t) => {
+    const isSameType = selectedType?.activityTypeId === t.activityTypeId;
     setSelectedType(t);
-    resetEvidenceForm();
+    if (!isSameType) {
+      resetEvidenceForm();
+    }
   };
 
   const isCert = selectedType?.activityCode === 'CERTIFICATE';
@@ -398,7 +401,10 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                     return (
                       <tr
                         key={t.mileagePolicyId ?? t.activityTypeId}
-                        onClick={() => isRowSupported && handleSelectType(t)}
+                        onClick={(event) => {
+                          if (event.target.closest?.('input[type="radio"]')) return;
+                          if (isRowSupported) handleSelectType(t);
+                        }}
                         title={isRowSupported ? undefined : unsupportedReason}
                         className={`border-b border-[#F3F4F6] last:border-0 transition-colors ${!isRowSupported ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${isSelected ? 'bg-[#FFFBEB] ring-1 ring-inset ring-[#FDE68A]' : isRowSupported ? 'hover:bg-[#FAFAFA]' : ''}`}
                       >
