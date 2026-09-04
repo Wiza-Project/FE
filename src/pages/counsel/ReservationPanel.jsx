@@ -14,6 +14,7 @@ import {
   COUNSELING_RESERVATION_ERROR_CODE,
   COUNSELING_RESERVATION_STATUS,
   COUNSELING_RESERVATION_STATUS_LABEL,
+  COUNSELING_TYPE_CODE,
 } from '@/constants/domain';
 import { formatKstDateTime } from './myCounselingDate';
 
@@ -39,7 +40,7 @@ const getReservationListErrorMessage = (error) => {
   return '예약 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
 };
 
-const getReservationMutationErrorMessage = (error, action) => {
+const getReservationMutationErrorMessage = (error, action, isCareerType) => {
   const errorCode = error?.code;
 
   if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.RESERVATION_NOT_FOUND) {
@@ -63,7 +64,9 @@ const getReservationMutationErrorMessage = (error, action) => {
   }
 
   if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
-    return '선택한 일정을 사용할 수 없습니다. 다른 일정을 선택해 주세요.';
+    return isCareerType
+      ? '선택한 일정을 더 이상 사용할 수 없습니다. 지도교수 또는 상담센터에 문의하거나 다른 일정을 선택해 주세요.'
+      : '선택한 일정을 사용할 수 없습니다. 다른 일정을 선택해 주세요.';
   }
 
   if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
@@ -213,6 +216,17 @@ export default function ReservationPanel() {
     counselingTypes.forEach((type) => map.set(type.counselingTypeId, type.typeName));
     return map;
   }, [counselingTypes]);
+  // 변경 대상 예약이 진로상담(CS200)인지 판별하기 위한 typeCode 맵. 이미 조회 중인
+  // counselingTypes 응답에서 파생만 하고, 이 값을 인가나 목록 필터링에는 쓰지 않는다.
+  const typeCodeById = useMemo(() => {
+    const map = new Map();
+    counselingTypes.forEach((type) => map.set(type.counselingTypeId, type.typeCode));
+    return map;
+  }, [counselingTypes]);
+  const isChangeModalCareerType =
+    changeModal != null &&
+    !hasCounselingTypesError &&
+    typeCodeById.get(changeModal.counselingTypeId) === COUNSELING_TYPE_CODE.CAREER;
   const alternativeSchedules = availableSchedules.filter(
     (schedule) => schedule.scheduleId !== changeModal?.counselingScheduleId,
   );
@@ -386,9 +400,15 @@ export default function ReservationPanel() {
         return;
       }
 
-      const message = getReservationMutationErrorMessage(error, 'change');
+      const message = getReservationMutationErrorMessage(error, 'change', isChangeModalCareerType);
 
       setChangeError(message);
+      // S002(SCHEDULE_NOT_AVAILABLE): 선택한 새 일정이 그 사이 사라졌다는 뜻이라, 낡은
+      // 선택값으로 재제출되지 않도록 비운다. 변경 가능 목록·예약 목록은 아래
+      // refreshReservationData가 무효화해 다시 조회한다.
+      if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
+        setChangeScheduleId('');
+      }
       await refreshReservationData();
       if (!isMountedRef.current) {
         return;
@@ -901,7 +921,9 @@ export default function ReservationPanel() {
               )}
               {!isAvailableSchedulesLoading && !availableSchedulesError && alternativeSchedules.length === 0 && (
                 <p className="rounded-[6px] bg-[#F6F8FA] px-3 py-4 text-center text-[12px] text-[#9AA0A6]">
-                  변경 가능한 다른 일정이 없습니다.
+                  {isChangeModalCareerType
+                    ? '변경 가능한 다른 진로상담 일정이 없습니다. 지도교수 또는 상담센터에 문의해 주세요.'
+                    : '변경 가능한 다른 일정이 없습니다.'}
                 </p>
               )}
               {!isAvailableSchedulesLoading && !availableSchedulesError && alternativeSchedules.length > 0 && (

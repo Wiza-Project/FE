@@ -22,10 +22,11 @@ const NAV_ITEMS = [
 ];
 
 /**
- * 상담사(ST200) 전용 상담 운영 화면 허브입니다. 일정·예약 관리·상담 기록·상담 결과를
- * 로컬 상태로 전환합니다. 이 화면에는 라우트에서 이미 ST200 겸임자만 도달하므로
- * (routes/router.jsx의 CounselOperationRoute 참고) 여기서 별도의 상담사 여부 분기를
- * 두지 않는다.
+ * 상담 운영 화면 허브입니다. 일정·예약 관리·상담 기록·상담 결과를
+ * 로컬 상태로 전환합니다. 이 화면에는 라우트에서 이미 ST200 단독 또는 ST300 단독인
+ * 사용자만 도달하므로(routes/CounselOperationRoute.jsx의 canAccessCounselOperation 참고)
+ * 여기서 별도의 역할 여부 분기를 두지 않는다. 서버 응답에 담긴 일정·예약·회기 범위를
+ * 그대로 쓰고, 화면에서 ST200/ST300에 따라 데이터를 다시 거르지 않는다.
  */
 export default function StaffCounselingPage() {
   const [nav, setNav] = useState(NAV_ITEMS[0].key);
