@@ -358,7 +358,7 @@ export default function MileageDashboard() {
       )}
 
       {/* Tabs */}
-      <div className="flex bg-[#F3F4F6] rounded-[8px] p-1 mb-5 w-fit">
+      <div className="flex w-fit max-w-full overflow-x-auto rounded-[8px] bg-[#F3F4F6] p-1 mb-5">
         {[
           ['dashboard', '마일리지 현황'],
           ['ledger', '적립 원장'],
@@ -368,7 +368,7 @@ export default function MileageDashboard() {
           <button
             key={k}
             onClick={() => setTab(k)}
-            className={`h-8 px-5 text-[13px] font-semibold rounded-[6px] transition-colors whitespace-nowrap ${tab === k ? 'bg-white text-[#1F2328] shadow-sm' : 'text-[#656D76] hover:text-[#1F2328]'}`}
+            className={`h-8 shrink-0 px-5 text-[13px] font-semibold rounded-[6px] transition-colors whitespace-nowrap ${tab === k ? 'bg-white text-[#1F2328] shadow-sm' : 'text-[#656D76] hover:text-[#1F2328]'}`}
           >
             {l}
           </button>

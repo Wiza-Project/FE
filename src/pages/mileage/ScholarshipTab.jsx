@@ -313,14 +313,16 @@ export default function ScholarshipTab({ currentPoints = null }) {
 
   const summary = useMemo(() => {
     const firstPoints = scholarships[0]?.currentPoints;
-    const eligibleCount = scholarships.filter((item) => item.canApply).length;
+    const eligibleCount = scholarships.filter(
+      (item) => item.canApply && !getDisabledReason(item, { period }),
+    ).length;
     const appliedCount = scholarships.filter((item) => item.applicationStatus != null).length;
     return {
       points: firstPoints ?? currentPoints,
       eligibleCount,
       appliedCount,
     };
-  }, [currentPoints, scholarships]);
+  }, [currentPoints, period, scholarships]);
 
   const historyRows = historyData?.content ?? [];
   const historyTotalPages = Math.max(1, historyData?.totalPages ?? 1);
