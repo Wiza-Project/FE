@@ -765,12 +765,12 @@ export default function MyPage() {
 
   const mileageQuery = useQuery({
     queryKey: ['dashboardMileageSummary', currentPeriod],
-    queryFn: () => fetchMileageDashboard(currentPeriod),
+    queryFn: () => fetchMileageDashboard({ semesterCode: currentPeriod.semesterCode }),
     enabled: !!currentPeriod,
   });
   const mileageGradeQuery = useQuery({
     queryKey: ['dashboardMileageGrade', currentPeriod],
-    queryFn: () => fetchMileageGrade(currentPeriod),
+    queryFn: () => fetchMileageGrade({ semesterCode: currentPeriod.semesterCode }),
     enabled: !!currentPeriod,
   });
 
@@ -875,7 +875,7 @@ export default function MyPage() {
         </div>
         {period && (
           <span className="h-9 px-3 inline-flex items-center text-[13px] font-semibold text-[#1F2328] bg-white border border-[#E5E7EB] rounded-[6px]">
-            {period.academicYear}학년도 {SEMESTER_LABELS[period.semesterCode] ?? period.semesterCode}
+            {SEMESTER_LABELS[period.semesterCode] ?? period.semesterCode}
           </span>
         )}
       </div>

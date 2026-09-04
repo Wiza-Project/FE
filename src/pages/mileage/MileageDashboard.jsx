@@ -200,7 +200,7 @@ export default function MileageDashboard() {
 
     apiClient
       .get('/students/mileage/dashboard', {
-        params: { academicYear: period.academicYear, semesterCode: period.semesterCode },
+        params: { semesterCode: period.semesterCode },
       })
       .then(({ data }) => {
         if (mounted) {
@@ -226,7 +226,7 @@ export default function MileageDashboard() {
 
     apiClient
       .get('/students/mileage/grade', {
-        params: { academicYear: period.academicYear, semesterCode: period.semesterCode },
+        params: { semesterCode: period.semesterCode },
       })
       .then(({ data }) => {
         if (mounted) {
@@ -313,7 +313,7 @@ export default function MileageDashboard() {
     value: Number(item.points ?? 0),
   }));
   const trendData = (dashboardData?.semesterTrend ?? []).map((item) => ({
-    label: `${item.academicYear ?? ''}${item.academicYear ? '년 ' : ''}${formatSemester(item.semesterCode)}`,
+    label: formatSemester(item.semesterCode),
     value: Number(item.points ?? 0),
   }));
   const currentGradeName = gradeData?.currentGrade?.gradeName;

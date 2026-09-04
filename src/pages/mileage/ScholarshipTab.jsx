@@ -76,7 +76,7 @@ const formatSemester = (semesterCode) => {
 const formatPeriod = (semesterCode) => formatSemester(semesterCode);
 
 const isSemesterBenefit = (item) => item.semesterCode != null && item.semesterCode !== 'ALL';
-const isCumulativeBenefit = (item) => /4년|누적/.test(item.benefitName ?? '');
+const isCumulativeBenefit = (item) => Number(item.cumulativeYears ?? 1) >= 2;
 
 const getDisabledReason = (item, { period }) => {
   if (isCumulativeBenefit(item)) {

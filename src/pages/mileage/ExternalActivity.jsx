@@ -177,6 +177,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
   const [certForm, setCertForm] = useState(EMPTY_CERT_FORM);
   const [volunteerForm, setVolunteerForm] = useState(EMPTY_VOLUNTEER_FORM);
   const [evidenceFile, setEvidenceFile] = useState(null);
+  const [evidenceFileResetKey, setEvidenceFileResetKey] = useState(0);
   const [policies, setPolicies] = useState([]);
   const [policiesLoading, setPoliciesLoading] = useState(true);
   const [policiesError, setPoliciesError] = useState('');
@@ -526,12 +527,15 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                   </span>
                 </label>
                 <FileUpload
+                  key={evidenceFileResetKey}
                   accept=".pdf"
                   maxSize="10MB"
                   onFiles={(files) => {
                     const file = files[0] ?? null;
                     if (file && file.size > MAX_EVIDENCE_FILE_SIZE) {
                       toast('파일 크기는 10MB를 초과할 수 없습니다.', 'error');
+                      setEvidenceFile(null);
+                      setEvidenceFileResetKey((k) => k + 1);
                       return;
                     }
                     setEvidenceFile(file);
