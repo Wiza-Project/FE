@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchAssessmentResult } from '@/api/competency';
 import { ApiError } from '@/api/client';
+import { ASSESSMENT_ERROR_CODE } from '@/constants/domain';
 import { COMP_COLOR } from '@/data/competencyData';
 import { formatDateTime } from '@/utils/date';
 import { PageHeader, RadarChart, Button, EmptyState, SkeletonLoader, toast } from '@/components/common';
@@ -31,7 +32,8 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
     queryFn: () => fetchAssessmentResult(attemptId),
     enabled: !!attemptId,
     // Q018(미제출)은 재시도해도 같은 결과라 전역 retry:1을 그대로 태우면 스켈레톤만 더 오래 뜬다.
-    retry: (failureCount, err) => !(err instanceof ApiError && err.code === 'Q018') && failureCount < 1,
+    retry: (failureCount, err) =>
+      !(err instanceof ApiError && err.code === ASSESSMENT_ERROR_CODE.RESULT_NOT_AVAILABLE) && failureCount < 1,
   });
 
   if (!attemptId) {
@@ -50,7 +52,7 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
 
   if (isError) {
     // Q018(RESULT_NOT_AVAILABLE): 아직 제출 전이라 채점되지 않은 attempt
-    const notAvailable = error instanceof ApiError && error.code === 'Q018';
+    const notAvailable = error instanceof ApiError && error.code === ASSESSMENT_ERROR_CODE.RESULT_NOT_AVAILABLE;
     return (
       <EmptyState
         message={

@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { fetchAssessmentIntro, startAssessmentAttempt } from '@/api/competency';
 import { fetchConsentPolicies, agreeToConsentPolicy } from '@/api/consent';
 import { ApiError } from '@/api/client';
-import { CONSENT_MODULE_CODE, ASSESSMENT_ATTEMPT_STATUS } from '@/constants/domain';
+import { CONSENT_MODULE_CODE, ASSESSMENT_ATTEMPT_STATUS, ASSESSMENT_ERROR_CODE } from '@/constants/domain';
 import { formatDate } from '@/utils/date';
 import { Button, EmptyState, SkeletonLoader, toast } from '@/components/common';
 
@@ -68,7 +68,7 @@ export default function DiagnosisGuide({ roundId, onStart, onViewResult }) {
     },
     onSuccess: (res) => onStart(res.attemptId),
     onError: (e) => {
-      if (e instanceof ApiError && e.code === 'Q003') {
+      if (e instanceof ApiError && e.code === ASSESSMENT_ERROR_CODE.PERIOD_CLOSED) {
         toast('진단 응시기간이 아닙니다.', 'error');
       } else {
         toast(e instanceof ApiError ? e.message : '진단 시작에 실패했습니다.', 'error');
