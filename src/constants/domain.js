@@ -249,6 +249,27 @@ export const ASSESSMENT_ATTEMPT_STATUS = {
 };
 
 /**
+ * 핵심역량 진단(응시·결과·비교·추천) API가 반환하는 업무 오류 코드.
+ * 백엔드 global/error/ErrorCode.java Q### 기준. 화면 분기·retry 예측에 리터럴 대신 이 상수를 쓴다.
+ */
+export const ASSESSMENT_ERROR_CODE = {
+  /** 진단검사 기간이 아닙니다. */
+  PERIOD_CLOSED: 'Q003',
+  /** 응답하지 않은 문항이 있습니다. (data: 미응답 questionId 배열) */
+  INCOMPLETE_ANSWER: 'Q005',
+  /** 재학생만 진단검사에 응시할 수 있습니다. */
+  NOT_ENROLLED_STUDENT: 'Q013',
+  /** 응시 정보를 찾을 수 없습니다. (없거나 본인 소유 아님 — 둘을 구분하지 않음) */
+  ATTEMPT_NOT_FOUND: 'Q014',
+  /** 아직 채점되지 않은 진단입니다. */
+  RESULT_NOT_AVAILABLE: 'Q018',
+  /** 비교할 두 응시는 서로 달라야 합니다. */
+  COMPARISON_SAME_ATTEMPT: 'Q022',
+  /** 사전·사후 비교는 같은 학년도의 사전·사후 한 쌍이어야 합니다. */
+  COMPARISON_NOT_PRE_POST_PAIR: 'Q023',
+};
+
+/**
  * 회기별 공개 상담 결과의 상태 — CounselorCounselingPublicResultResponse.resultStatus.
  * DB 상태 컬럼이 아니라 서버가 계산해 내려준다(행 없음=EMPTY, 미공개=DRAFT, 공개=PUBLISHED).
  * 학생 응답에는 이 필드가 없다(학생은 PUBLISHED만 조회하므로 항상 공개 상태).
