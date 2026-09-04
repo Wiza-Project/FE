@@ -463,4 +463,5 @@ export const STRESS_TEST_ERROR_CODE = {
  * @property {string|null} phone
  * @property {string|null} department
  * @property {string|null} departmentName
+ * @property {boolean} commonConsentCompleted 현재 유효한 COMMON 필수 약관 전부에 동의했는지
  */

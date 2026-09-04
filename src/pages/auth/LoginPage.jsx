@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { UNIVERSITY_NAME } from '@/data/dummy';
 import { useAuthStore } from '@/stores/authStore';
 import { login as loginApi } from '@/api/auth';
-import { USER_TYPE } from '@/constants/domain';
 import { publishActivity } from '@/lib/authSync';
+import { CONSENT_PATH, hasCompletedCommonConsent, resolvePostAuthPath } from '@/routes/redirects';
 
 // 포털(학생/교직원)을 화면에서 따로 선택받지 않고 학생 브랜드 컬러를 기본값으로 씁니다.
-// 로그인 후 completeLogin()이 응답에 담긴 user.userType으로 화면을 분기합니다.
+// 로그인 후 화면 분기는 아래 인증 가드가 응답의 user 를 보고 처리합니다.
 const BRAND_COLOR = '#2563EB';
 
 // 학번/교번 모두 숫자 8자리(university_no) 형식.
@@ -25,20 +25,27 @@ const LOGOUT_REASON_MESSAGE = {
 // 화면에 표시하려면 이 값을 기준으로 역산합니다 (MAX_ATTEMPTS - remainingAttempts).
 const MAX_ATTEMPTS = 5;
 
+// 아이디 저장은 사용자 편의 기능이라 localStorage 를 계속 씁니다.
+// 인증 상태나 동의 완료 여부는 절대 여기에 두지 않습니다 — 서버(DB) 판정값만 신뢰합니다.
 const SAVE_ID_KEY = 'sicms_saved_id';
-const FIRST_LOGIN_KEY = 'sicms_first_login_done';
 
 /**
  * 로그인 화면.
  *
  * 학생/교직원 포털을 화면에서 따로 선택받지 않고 하나의 폼으로 로그인합니다.
- * 로그인 성공 응답의 user.userType으로 completeLogin()이 이후 화면만 분기합니다.
+ * 로그인 성공 응답의 user 로 이후 화면을 분기합니다.
  *   TODO: 관리자 로그인이 실제로 필요해지면 별도 경로(/admin/login 등)로 분리예정
+ *
+ * 로그인 후 이동은 imperative navigate() 가 아니라 아래 인증 가드(<Navigate replace/>)가
+ * 담당합니다. 덕분에 (1) 폼 제출로 로그인한 경우, (2) 이미 로그인한 사용자가 뒤로가기·주소
+ * 직접 입력·새로고침으로 /login 에 들어온 경우가 같은 한 곳에서 같은 규칙으로 처리되고,
+ * 로그인 화면이 브라우저 이력에 남지 않습니다.
  */
 export default function LoginPage() {
-  const navigate = useNavigate();
   const location = useLocation();
   const authLogin = useAuthStore((s) => s.login);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
 
   const [id, setId] = useState(() => localStorage.getItem(SAVE_ID_KEY) ?? '');
   const [pw, setPw] = useState('');
@@ -48,21 +55,6 @@ export default function LoginPage() {
     return reason ? LOGOUT_REASON_MESSAGE[reason] : '';
   });
   const [loading, setLoading] = useState(false);
-
-  // 학생/교직원 모두 이 화면에서 로그인하고, 로그인 성공 후 응답의 user.userType으로만 분기합니다.
-  const completeLogin = (user) => {
-    if (user.userType === USER_TYPE.STUDENT) {
-      const isFirst = !localStorage.getItem(FIRST_LOGIN_KEY);
-      navigate(isFirst ? '/consent' : '/my');
-      return;
-    }
-    if (user.userType === USER_TYPE.STAFF) {
-      navigate('/staff');
-      return;
-    }
-    // STUDENT/STAFF 외 유형은 아직 연결된 포털이 없습니다.
-    navigate('/');
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -90,8 +82,9 @@ export default function LoginPage() {
       else localStorage.removeItem(SAVE_ID_KEY);
       // 이전 세션의 오래된 활동 시각이 새 로그인 직후 즉시 만료 처리되지 않게 합니다.
       publishActivity();
+      // 여기서 화면을 직접 옮기지 않습니다 — 스토어가 갱신되면 아래 인증 가드가
+      // 동의 여부·원래 목적지·역할을 보고 replace 이동시킵니다.
       authLogin(data.user, data.accessToken);
-      completeLogin(data.user);
     } catch (err) {
       if (err.code === 'U003') {
         // 아이디/비밀번호 불일치.
@@ -125,6 +118,17 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // 인증 가드 — 로그인된 사용자에게는 로그인 폼 자체를 렌더링하지 않습니다.
+  // (로그인 직후 / 뒤로가기 / 주소 직접 입력 / 새로고침 / 로그인 링크 재선택 모두 여기로 옵니다.)
+  if (isAuthenticated && user) {
+    // 공통 필수 약관 미동의면 먼저 동의 화면으로 보내고, 원래 목적지는 state.from 으로 넘겨
+    // 동의를 마친 뒤 그 화면으로 돌아갈 수 있게 합니다.
+    if (!hasCompletedCommonConsent(user)) {
+      return <Navigate to={CONSENT_PATH} state={{ from: location.state?.from ?? null }} replace />;
+    }
+    return <Navigate to={resolvePostAuthPath(location.state?.from, user)} replace />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F6F8FA]">

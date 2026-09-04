@@ -60,8 +60,9 @@ export const router = createBrowserRouter([
 
   // ── 로그인 / 최초 동의 (전체 화면, 헤더 없음) ─────────────
   { path: '/login', element: <LoginPage /> },
+  // /consent 는 "아직 공통 동의를 안 한 사람"이 보는 화면이라 공통 동의 게이트를 꺼야 합니다.
   {
-    element: <ProtectedRoute />,
+    element: <ProtectedRoute requireCommonConsent={false} />,
     children: [{ path: '/consent', element: <ConsentPage /> }],
   },
 
