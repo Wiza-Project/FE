@@ -169,7 +169,6 @@ const DUPLICATE_RULE_LABELS = {
   PER_TERM: '학기당',
   PER_YEAR: '연도당',
 };
-const SEMESTER_OPTIONS = ['ALL', 'SPRING', 'SUMMER', 'FALL', 'WINTER'];
 const DEFAULT_POLICY_FORM = {
   activityTypeId: '',
   semesterCode: 'ALL',
@@ -703,7 +702,6 @@ function TabReviewInbox() {
   const [cancelReason, setCancelReason] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
-  const [selected, setSelected] = useState([]);
 
   const loadClaims = useCallback(async (currentFilters, currentPage) => {
     setLoading(true);
@@ -727,12 +725,10 @@ function TabReviewInbox() {
 
       setClaimPage(nextPage);
       setReviews((nextPage.content ?? []).map(normalizeClaim));
-      setSelected([]);
     } catch (requestError) {
       setError(requestError.message ?? '마일리지 신청 목록을 불러오지 못했습니다.');
       setClaimPage(EMPTY_CLAIM_PAGE);
       setReviews([]);
-      setSelected([]);
     } finally {
       setLoading(false);
     }
@@ -851,12 +847,6 @@ function TabReviewInbox() {
     }
   };
 
-  const toggleSel = (id) =>
-    setSelected((current) => (
-      current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id]
-    ));
-
-  const allSelected = reviews.length > 0 && reviews.every((review) => selected.includes(review.id));
   const currentClaimStatus = drawerDetail?.claimStatus ?? drawerItem?.claimStatus;
   const currentStatusLabel = CLAIM_STATUS_LABELS[currentClaimStatus] ?? currentClaimStatus ?? '-';
   const detailStudent = drawerDetail?.student;
@@ -935,7 +925,7 @@ function TabReviewInbox() {
         title={`심사 목록 · ${Number(claimPage.totalElements ?? 0).toLocaleString()}건`}
         right={
           <span className="text-[11px] text-[#9AA0A6]">
-            {selected.length > 0 ? `${selected.length}건 선택 · ` : ''}페이지 {claimPage.page + 1} / {Math.max(claimPage.totalPages, 1)}
+            페이지 {claimPage.page + 1} / {Math.max(claimPage.totalPages, 1)}
           </span>
         }
       >
@@ -943,15 +933,6 @@ function TabReviewInbox() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-[#E5E7EB]">
-                <th className="w-10 px-4 py-2.5 bg-[#F6F8FA]">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    disabled={loading || reviews.length === 0}
-                    aria-label="현재 페이지 전체 선택"
-                    onChange={(event) => setSelected(event.target.checked ? reviews.map((review) => review.id) : [])}
-                  />
-                </th>
                 <TH>신청 ID</TH>
                 <TH>신청일</TH>
                 <TH>학번</TH>
@@ -966,13 +947,13 @@ function TabReviewInbox() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-[12px] text-[#9AA0A6]">
+                  <td colSpan={9} className="px-4 py-12 text-center text-[12px] text-[#9AA0A6]">
                     신청 목록을 불러오는 중입니다.
                   </td>
                 </tr>
               ) : reviews.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-[12px] text-[#9AA0A6]">
+                  <td colSpan={9} className="px-4 py-12 text-center text-[12px] text-[#9AA0A6]">
                     조건에 맞는 마일리지 신청이 없습니다.
                   </td>
                 </tr>
@@ -985,14 +966,6 @@ function TabReviewInbox() {
                       onClick={() => openDrawer(review)}
                       className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FFFBEB] cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(review.id)}
-                          aria-label={`${review.name} 신청 선택`}
-                          onChange={() => toggleSel(review.id)}
-                        />
-                      </td>
                       <TD cls="font-mono text-[10px]">
                         <span style={{ color: A }}>#{review.id ?? '-'}</span>
                       </TD>

@@ -38,6 +38,9 @@ const EMPTY_FORM = {
   criteriaData: '',
   applicationStartsAt: '',
   applicationEndsAt: '',
+  benefitGroupCode: '',
+  cumulativeYears: '1',
+  requiresExactPoints: false,
   active: true,
 };
 
@@ -84,6 +87,14 @@ const formatApplicationPeriod = (policy) => (
   `${policy.applicationStartsAt ? formatDateTime(policy.applicationStartsAt) : '상시'} ~ ${policy.applicationEndsAt ? formatDateTime(policy.applicationEndsAt) : '마감 없음'}`
 );
 
+const formatPolicyConditions = (policy) => {
+  const cumulativeYears = Number(policy.cumulativeYears ?? 1);
+  const accumulationLabel = cumulativeYears >= 2 ? `${cumulativeYears}년 누적` : '단일 기준';
+  const exactLabel = policy.requiresExactPoints ? '정확히 일치' : '이상 충족';
+  const groupLabel = policy.benefitGroupCode ? `그룹 ${policy.benefitGroupCode}` : '배타 그룹 없음';
+  return `${groupLabel} · ${accumulationLabel} · ${exactLabel}`;
+};
+
 const toDateTimeLocal = (value) => {
   if (!value) return '';
   const date = new Date(value);
@@ -120,6 +131,9 @@ const toPolicyForm = (policy = {}) => ({
   criteriaData: stringifyCriteria(policy.criteriaData),
   applicationStartsAt: toDateTimeLocal(policy.applicationStartsAt),
   applicationEndsAt: toDateTimeLocal(policy.applicationEndsAt),
+  benefitGroupCode: policy.benefitGroupCode ?? '',
+  cumulativeYears: policy.cumulativeYears == null ? '1' : String(policy.cumulativeYears),
+  requiresExactPoints: Boolean(policy.requiresExactPoints),
   active: policy.active !== false,
 });
 
@@ -140,6 +154,13 @@ const validateForm = (form) => {
   const minimumPoints = Number(form.minimumPoints);
   if (!Number.isFinite(minimumPoints) || minimumPoints < 0) {
     return '최소 기준 점수를 0 이상으로 입력해 주세요.';
+  }
+
+  if (String(form.cumulativeYears).trim()) {
+    const cumulativeYears = Number(form.cumulativeYears);
+    if (!Number.isInteger(cumulativeYears) || cumulativeYears < 1) {
+      return '누적 기준 연수는 1 이상의 정수로 입력해 주세요.';
+    }
   }
 
   if (form.benefitAmount !== '' && (!Number.isFinite(Number(form.benefitAmount)) || Number(form.benefitAmount) < 0)) {
@@ -166,17 +187,26 @@ const buildRegisterPayload = (form) => ({
   criteriaData: parseCriteria(form.criteriaData),
   applicationStartsAt: toInstant(form.applicationStartsAt),
   applicationEndsAt: toInstant(form.applicationEndsAt),
+  benefitGroupCode: form.benefitGroupCode.trim() || null,
+  cumulativeYears: form.cumulativeYears === '' ? null : Number(form.cumulativeYears),
+  requiresExactPoints: Boolean(form.requiresExactPoints),
 });
 
-const buildUpdatePayload = (form) => ({
-  benefitName: form.benefitName.trim(),
-  minimumPoints: Number(form.minimumPoints),
-  benefitAmount: form.benefitAmount === '' ? null : Number(form.benefitAmount),
-  criteriaData: parseCriteria(form.criteriaData),
-  applicationStartsAt: toInstant(form.applicationStartsAt),
-  applicationEndsAt: toInstant(form.applicationEndsAt),
-  active: form.active,
-});
+const buildUpdatePayload = (form) => {
+  const payload = {
+    benefitName: form.benefitName.trim(),
+    minimumPoints: Number(form.minimumPoints),
+    active: form.active,
+  };
+
+  // 백엔드 부분 수정 계약상 null은 값을 지우는 명령이 아니라 기존 값 유지입니다.
+  if (form.benefitAmount !== '') payload.benefitAmount = Number(form.benefitAmount);
+  if (form.criteriaData.trim()) payload.criteriaData = parseCriteria(form.criteriaData);
+  if (form.applicationStartsAt) payload.applicationStartsAt = toInstant(form.applicationStartsAt);
+  if (form.applicationEndsAt) payload.applicationEndsAt = toInstant(form.applicationEndsAt);
+
+  return payload;
+};
 
 function Field({ label, children, className = '' }) {
   return (
@@ -196,6 +226,7 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
   } = useCommonCode('SEMESTER');
   const semesterFormOptions = [{ code: 'ALL', codeName: '연간' }, ...semesterCodes];
   const update = (field) => (event) => onChange(field, event.target.value);
+  const updateCheckbox = (field) => (event) => onChange(field, event.target.checked);
 
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -232,6 +263,58 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
           </Field>
         </>
       )}
+
+      <Field label="혜택 그룹 코드">
+        {identityReadOnly ? (
+          <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>
+            {form.benefitGroupCode || '배타 그룹 없음'}
+          </div>
+        ) : (
+          <input
+            value={form.benefitGroupCode}
+            onChange={update('benefitGroupCode')}
+            disabled={disabled}
+            placeholder="선택 입력"
+            maxLength={50}
+            className={FIELD_CLASS}
+          />
+        )}
+      </Field>
+      <Field label="누적 기준 연수">
+        {identityReadOnly ? (
+          <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>
+            {form.cumulativeYears || '1'}년
+          </div>
+        ) : (
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={form.cumulativeYears}
+            onChange={update('cumulativeYears')}
+            disabled={disabled}
+            className={FIELD_CLASS}
+          />
+        )}
+      </Field>
+      <Field label="정확 점수 일치">
+        {identityReadOnly ? (
+          <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>
+            {form.requiresExactPoints ? '정확히 일치' : '기준 이상 충족'}
+          </div>
+        ) : (
+          <div className={`${FIELD_CLASS} flex items-center gap-2`}>
+            <input
+              type="checkbox"
+              checked={Boolean(form.requiresExactPoints)}
+              onChange={updateCheckbox('requiresExactPoints')}
+              disabled={disabled}
+              className="h-4 w-4 accent-[#1F2937]"
+            />
+            <span>최소 기준과 정확히 일치해야 함</span>
+          </div>
+        )}
+      </Field>
 
       <Field label="장학금명" className={identityReadOnly ? 'md:col-span-2' : 'md:col-span-2'}>
         <input
@@ -545,10 +628,10 @@ export default function StaffScholarshipTab() {
           <span className="text-[11px] text-[#9AA0A6]">총 {Number(policyPage.totalElements ?? 0).toLocaleString('ko-KR')}건</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-[12px]">
+          <table className="w-full min-w-[1120px] border-collapse text-[12px]">
             <thead>
               <tr className="border-b border-[#E5E7EB] bg-[#F6F8FA]">
-                {['정책 ID', '장학금명', '적용 학기', '최소 기준', '지급액', '신청기간', '세부 기준', '상태', '관리'].map((heading) => (
+                {['정책 ID', '장학금명', '적용 학기', '최소 기준', '지급액', '신청기간', '세부 기준', '정책 조건', '상태', '관리'].map((heading) => (
                   <th key={heading} className="whitespace-nowrap px-3 py-3 text-center text-[10px] font-semibold text-[#656D76]">
                     {heading}
                   </th>
@@ -557,10 +640,10 @@ export default function StaffScholarshipTab() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} className="px-4 py-12 text-center text-[12px] text-[#656D76]">장학금 정책을 불러오는 중입니다.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-12 text-center text-[12px] text-[#656D76]">장학금 정책을 불러오는 중입니다.</td></tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-[12px] text-[#CF222E]">
+                  <td colSpan={10} className="px-4 py-12 text-center text-[12px] text-[#CF222E]">
                     <div className="flex flex-col items-center gap-2">
                       <span>{error}</span>
                       <Button size="sm" variant="outline" onClick={() => loadPolicies(INITIAL_FILTERS, page)}>
@@ -571,7 +654,7 @@ export default function StaffScholarshipTab() {
                 </tr>
               ) : policies.length === 0 ? (
                 <tr>
-                  <td colSpan={9}><EmptyState message="조회된 장학금 정책이 없습니다." sub="검색 조건을 바꾸거나 새 정책을 등록해 주세요." /></td>
+                  <td colSpan={10}><EmptyState message="조회된 장학금 정책이 없습니다." sub="검색 조건을 바꾸거나 새 정책을 등록해 주세요." /></td>
                 </tr>
               ) : (
                 policies.map((policy, index) => (
@@ -583,6 +666,7 @@ export default function StaffScholarshipTab() {
                     <td className="whitespace-nowrap px-3 py-3 text-center font-semibold text-[#D97706]">{formatAmount(policy.benefitAmount)}</td>
                     <td className="max-w-[260px] px-3 py-3 text-center text-[11px] text-[#656D76]">{formatApplicationPeriod(policy)}</td>
                     <td className="max-w-[220px] truncate px-3 py-3 text-left text-[11px] text-[#656D76]" title={criteriaPreview(policy.criteriaData)}>{criteriaPreview(policy.criteriaData)}</td>
+                    <td className="max-w-[240px] px-3 py-3 text-center text-[11px] text-[#656D76]">{formatPolicyConditions(policy)}</td>
                     <td className="px-3 py-3 text-center">
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black ${policy.active ? 'bg-[#D1FAE5] text-[#047857]' : 'bg-[#F3F4F6] text-[#6B7280]'}`}>
                         {policy.active ? POLICY_STATUS_LABELS.ACTIVE : POLICY_STATUS_LABELS.INACTIVE}
@@ -643,12 +727,17 @@ export default function StaffScholarshipTab() {
         {editLoading || !editForm ? (
           <div className="py-10 text-center text-[12px] text-[#656D76]">장학금 정책 상세를 불러오는 중입니다.</div>
         ) : (
-          <PolicyFormFields
-            form={editForm}
-            onChange={updateEditField}
-            disabled={editSaving}
-            identityReadOnly
-          />
+          <>
+            <p className="mb-4 rounded-[6px] bg-[#F9FAFB] px-3 py-2 text-[11px] leading-relaxed text-[#656D76]">
+              선택 입력값을 비우면 부분 수정 API의 규칙에 따라 기존 값이 유지됩니다.
+            </p>
+            <PolicyFormFields
+              form={editForm}
+              onChange={updateEditField}
+              disabled={editSaving}
+              identityReadOnly
+            />
+          </>
         )}
       </Modal>
     </div>

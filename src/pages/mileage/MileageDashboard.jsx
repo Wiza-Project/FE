@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/api/client';
-import { fetchCurrentMileagePeriod } from '@/api/mileage';
+import {
+  fetchCurrentMileagePeriod,
+  fetchMileageDashboard,
+  fetchMileageGrade,
+} from '@/api/mileage';
 import { formatSemester as formatSemesterCode } from '@/utils/academicPeriod';
 import ScholarshipTab from './ScholarshipTab';
 import ExternalActivity from './ExternalActivity';
@@ -16,13 +20,21 @@ const SOURCE_LABELS = {
 };
 const TRANSACTION_TYPE_LABELS = {
   EARN: '적립',
-  CANCEL: '취소',
-  ADJUST: '정정',
 };
 const TRANSACTION_STATUS_LABELS = {
   POSTED: '확정',
   REQUESTED: '처리중',
   REJECTED: '반려',
+};
+const BENEFIT_PROGRESS_STATUS_LABELS = {
+  ELIGIBLE: '신청 가능',
+  INSUFFICIENT_POINTS: '점수 미달',
+  APPLICATION_NOT_OPEN: '신청 전',
+  APPLICATION_CLOSED: '신청 마감',
+  APPLIED: '신청 접수',
+  APPROVED: '지급 승인',
+  REJECTED: '반려',
+  CANCELLED: '취소',
 };
 
 const formatPoints = (value) => Number(value ?? 0).toLocaleString('ko-KR');
@@ -198,11 +210,8 @@ export default function MileageDashboard() {
     if (!period) return undefined;
     let mounted = true;
 
-    apiClient
-      .get('/students/mileage/dashboard', {
-        params: { semesterCode: period.semesterCode },
-      })
-      .then(({ data }) => {
+    fetchMileageDashboard({ semesterCode: period.semesterCode })
+      .then((data) => {
         if (mounted) {
           setDashboardData(data);
           setDashboardError('');
@@ -224,11 +233,8 @@ export default function MileageDashboard() {
     if (!period) return undefined;
     let mounted = true;
 
-    apiClient
-      .get('/students/mileage/grade', {
-        params: { semesterCode: period.semesterCode },
-      })
-      .then(({ data }) => {
+    fetchMileageGrade({ semesterCode: period.semesterCode })
+      .then((data) => {
         if (mounted) {
           setGradeData(data);
           setGradeError('');
@@ -302,6 +308,7 @@ export default function MileageDashboard() {
 
   const hasDashboardData = Boolean(dashboardData);
   const currentScore = hasDashboardData ? Number(dashboardData.summary?.cumulativePoints ?? 0) : 0;
+  const annualScore = hasDashboardData ? Number(dashboardData.summary?.annualPoints ?? 0) : 0;
   const currentSemesterScore = hasDashboardData
     ? Number(dashboardData.summary?.currentSemesterPoints ?? 0)
     : 0;
@@ -316,6 +323,22 @@ export default function MileageDashboard() {
     label: formatSemester(item.semesterCode),
     value: Number(item.points ?? 0),
   }));
+  const programTypeData = (dashboardData?.programTypeBreakdown ?? []).map((item) => ({
+    label: item.programTypeName ?? '기타',
+    value: Number(item.points ?? 0),
+  }));
+  const benefitProgressData = (dashboardData?.benefitProgress ?? []).map((item) => {
+    const targetPoints = Number(item.targetPoints ?? 0);
+    const currentPoints = Number(item.currentPoints ?? 0);
+    return {
+      ...item,
+      targetPoints,
+      currentPoints,
+      progress: targetPoints > 0
+        ? Math.min(100, Math.max(0, (currentPoints / targetPoints) * 100))
+        : 100,
+    };
+  });
   const currentGradeName = gradeData?.currentGrade?.gradeName;
   const nextGradeName = gradeData?.nextGrade?.gradeName;
   const pointsToNextGrade = Number(gradeData?.pointsToNextGrade ?? 0);
@@ -381,7 +404,7 @@ export default function MileageDashboard() {
       {tab === 'dashboard' && (
         <div className="flex flex-col gap-5">
           {/* Stat tiles */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="relative">
               <StatTile
                 label="누적 마일리지"
@@ -411,6 +434,18 @@ export default function MileageDashboard() {
                     : '-'
               }
               sub={semesterLabel}
+              accentColor={ACCENT}
+            />
+            <StatTile
+              label="연간 적립"
+              value={
+                dashboardLoading
+                  ? '불러오는 중'
+                  : hasDashboardData
+                    ? `${formatPoints(annualScore)}점`
+                    : '-'
+              }
+              sub="연간 공통 정책"
               accentColor={ACCENT}
             />
           </div>
@@ -444,6 +479,71 @@ export default function MileageDashboard() {
                 ) : (
                   <div className="flex items-center text-[12px] text-[#9AA0A6]">
                     역량별 적립 내역이 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1.1fr]">
+            <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
+              <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-5 py-4">
+                <div className="h-4 w-1 rounded-full bg-[#D97706]" />
+                <h2 className="text-[14px] font-bold text-[#1F2328]">프로그램 유형별 적립</h2>
+                <span className="ml-auto text-[12px] font-medium text-[#656D76]">단위: 점</span>
+              </div>
+              <div className="flex min-h-[188px] justify-center overflow-x-auto px-4 py-4">
+                {programTypeData.length > 0 ? (
+                  <BarChart data={programTypeData} color={ACCENT} height={140} unit="점" />
+                ) : (
+                  <div className="flex items-center text-[12px] text-[#9AA0A6]">
+                    프로그램 유형별 적립 내역이 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
+              <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-5 py-4">
+                <div className="h-4 w-1 rounded-full bg-[#D97706]" />
+                <h2 className="text-[14px] font-bold text-[#1F2328]">혜택 달성 현황</h2>
+                <span className="ml-auto text-[12px] font-medium text-[#656D76]">현재 기준</span>
+              </div>
+              <div className="flex min-h-[188px] flex-col gap-3 overflow-y-auto px-5 py-4">
+                {benefitProgressData.length > 0 ? (
+                  benefitProgressData.map((item) => {
+                    const status = item.applicationStatus ?? item.progressStatus;
+                    const statusLabel = item.canApply
+                      ? '신청 가능'
+                      : BENEFIT_PROGRESS_STATUS_LABELS[status] ?? status ?? '확인 필요';
+                    return (
+                      <div key={item.benefitPolicyId ?? item.benefitName}>
+                        <div className="mb-1 flex items-center justify-between gap-3 text-[11px]">
+                          <span className="truncate font-semibold text-[#1F2328]" title={item.benefitName}>
+                            {item.benefitName ?? '혜택 기준'}
+                          </span>
+                          <span className="shrink-0 text-[#656D76]">{statusLabel}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[#F3F4F6]">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${item.progress}%`,
+                                background: item.canApply ? '#059669' : ACCENT,
+                              }}
+                            />
+                          </div>
+                          <span className="shrink-0 text-[10px] text-[#656D76]">
+                            {formatPoints(item.currentPoints)} / {formatPoints(item.targetPoints)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-[12px] text-[#9AA0A6]">
+                    현재 적용되는 혜택 기준이 없습니다.
                   </div>
                 )}
               </div>

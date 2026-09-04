@@ -14,36 +14,6 @@ import {
 const ACCENT = '#D97706';
 const MAX_EVIDENCE_FILE_SIZE = 10 * 1024 * 1024;
 
-// 현재 백엔드의 학생용 외부활동 정책 조회가 competency_id가 없는 기존 외부활동
-// 정책을 제외하고 있어, 활성 정책이 있어도 빈 배열이 내려오는 경우가 있습니다.
-// 정책 API가 정상적으로 데이터를 주면 아래 값은 사용하지 않고 서버 응답을 우선합니다.
-const DEFAULT_EXTERNAL_ACTIVITY_POLICIES = [
-  {
-    mileagePolicyId: 'certificate-fallback',
-    activityTypeId: 14,
-    activityCode: 'CERTIFICATE',
-    activityName: '자격증',
-    categoryCode: 'EXTERNAL_ACTIVITY',
-    earningRoute: 'EXTERNAL_CLAIM',
-    points: 10,
-    maximumPoints: null,
-    duplicateRule: null,
-    policyStatus: 'ACTIVE',
-  },
-  {
-    mileagePolicyId: 'volunteer-fallback',
-    activityTypeId: 15,
-    activityCode: 'VOLUNTEER',
-    activityName: '봉사활동',
-    categoryCode: 'EXTERNAL_ACTIVITY',
-    earningRoute: 'EXTERNAL_CLAIM',
-    points: 10,
-    maximumPoints: null,
-    duplicateRule: null,
-    policyStatus: 'ACTIVE',
-  },
-];
-
 const DUPLICATE_RULE_LABELS = {
   NONE: '제한 없음',
   ONCE: '1회',
@@ -234,13 +204,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
     try {
       const { data } = await apiClient.get('/students/mileage/external-activities/policies');
       const content = Array.isArray(data) ? data : data?.content ?? [];
-      setPolicies(
-        content.length > 0
-          ? content.map(normalizePolicy)
-          : DEFAULT_EXTERNAL_ACTIVITY_POLICIES.map((policy) =>
-              normalizePolicy({ ...policy, isFallback: true }),
-            ),
-      );
+      setPolicies(content.map(normalizePolicy));
     } catch (error) {
       setPoliciesError(error.message ?? '외부활동 정책을 불러오지 못했습니다.');
       setPolicies([]);
@@ -288,11 +252,9 @@ export default function ExternalActivity({ onBack, embedded = false }) {
   const isCert = selectedType?.activityCode === 'CERTIFICATE';
   const isVolunteer = selectedType?.activityCode === 'VOLUNTEER';
   const isSupportedType = isCert || isVolunteer;
-  const usingFallbackPolicies = policies.length > 0 && policies.every((p) => p.isFallback);
   const canSubmit = Boolean(
     selectedType &&
       isSupportedType &&
-      !selectedType?.isFallback &&
       evidenceFile &&
       (isCert
         ? certForm.name.trim() && certForm.acquiredAt
@@ -416,17 +378,6 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                     <td colSpan={5} className="px-4 py-10 text-center text-[12px] text-[#CF222E]">
                       <div className="flex flex-col items-center gap-2">
                         <span>{policiesError}</span>
-                        <Button size="sm" variant="outline" onClick={loadPolicies}>
-                          다시 불러오기
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : usingFallbackPolicies ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-[12px] text-[#CF222E]">
-                      <div className="flex flex-col items-center gap-2">
-                        <span>외부활동 정책을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</span>
                         <Button size="sm" variant="outline" onClick={loadPolicies}>
                           다시 불러오기
                         </Button>

@@ -71,18 +71,20 @@ const formatDateTime = (value) => {
 const formatPeriod = (semesterCode) =>
   formatSemester(semesterCode, { allLabel: '연간', emptyLabel: '연간' });
 
-const isSemesterBenefit = (item) => item.semesterCode != null && item.semesterCode !== 'ALL';
-const isCumulativeBenefit = (item) => Number(item.cumulativeYears ?? 1) >= 2;
-const isAnnualBenefit = (item) => !isSemesterBenefit(item) && !isCumulativeBenefit(item);
+const getDisabledReason = (item) => {
+  if (item?.canApply) return null;
 
-const getDisabledReason = (item, { period }) => {
-  if (isCumulativeBenefit(item)) {
-    return null;
-  }
-  if (isAnnualBenefit(item)) {
-    return period?.semesterCode === 'FALL' ? null : '2학기에만 신청할 수 있는 장학금입니다.';
-  }
-  return null;
+  const status = item?.applicationStatus ?? item?.eligibilityStatus;
+  const reasons = {
+    INSUFFICIENT_POINTS: '최소 기준 점수를 충족하지 못했습니다.',
+    APPLICATION_NOT_OPEN: '아직 신청 기간이 시작되지 않았습니다.',
+    APPLICATION_CLOSED: '신청 기간이 종료되었습니다.',
+    APPLIED: '이미 신청한 장학금입니다.',
+    APPROVED: '이미 지급 승인된 장학금입니다.',
+    REJECTED: '반려된 장학금 신청입니다.',
+    CANCELLED: '취소된 장학금 신청입니다.',
+  };
+  return reasons[status] ?? '현재 신청할 수 없는 장학금입니다.';
 };
 
 const getStatusLabel = (item) => {
@@ -152,11 +154,11 @@ function ScholarshipCard({ item, onSelect, disabledReason }) {
     ? Math.min(100, Math.max(0, (currentPoints / minimumPoints) * 100))
     : 100;
   const shortagePoints = Number(item.shortagePoints ?? Math.max(0, minimumPoints - currentPoints));
-  const isDisabled = Boolean(disabledReason);
+  const canApply = Boolean(item.canApply) && !disabledReason;
 
   return (
     <article
-      className={`flex min-w-0 flex-col gap-4 rounded-[8px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.04)] ${isDisabled ? 'opacity-60 grayscale' : ''}`}
+      className={`flex min-w-0 flex-col gap-4 rounded-[8px] border border-[#E5E7EB] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.04)] ${!canApply ? 'opacity-60 grayscale' : ''}`}
       title={disabledReason ?? undefined}
     >
       <div className="flex items-start justify-between gap-3">
@@ -200,11 +202,11 @@ function ScholarshipCard({ item, onSelect, disabledReason }) {
       <div className="flex items-center justify-end gap-3 border-t border-[#F3F4F6] pt-3">
         <Button
           size="sm"
-          variant={item.canApply && !isDisabled ? 'primary' : 'outline'}
-          style={item.canApply && !isDisabled ? { background: ACCENT } : undefined}
+          variant={canApply ? 'primary' : 'outline'}
+          style={canApply ? { background: ACCENT } : undefined}
           onClick={() => onSelect(item)}
         >
-          {item.canApply && !isDisabled ? '신청하기' : '상세 보기'}
+          {canApply ? '신청하기' : '상세 보기'}
         </Button>
       </div>
     </article>
@@ -312,23 +314,18 @@ export default function ScholarshipTab({ currentPoints = null }) {
   };
 
   const summary = useMemo(() => {
-    const firstPoints = scholarships[0]?.currentPoints;
-    const eligibleCount = scholarships.filter(
-      (item) => item.canApply && !getDisabledReason(item, { period }),
-    ).length;
+    const eligibleCount = scholarships.filter((item) => Boolean(item.canApply)).length;
     const appliedCount = scholarships.filter((item) => item.applicationStatus != null).length;
     return {
-      points: firstPoints ?? currentPoints,
+      points: currentPoints,
       eligibleCount,
       appliedCount,
     };
-  }, [currentPoints, period, scholarships]);
+  }, [currentPoints, scholarships]);
 
   const historyRows = historyData?.content ?? [];
   const historyTotalPages = Math.max(1, historyData?.totalPages ?? 1);
-  const selectedDisabledReason = selectedScholarship
-    ? getDisabledReason(selectedScholarship, { period })
-    : null;
+  const selectedDisabledReason = selectedScholarship ? getDisabledReason(selectedScholarship) : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -411,7 +408,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
                     key={item.benefitPolicyId}
                     item={item}
                     onSelect={setSelectedScholarship}
-                    disabledReason={getDisabledReason(item, { period })}
+                    disabledReason={getDisabledReason(item)}
                 />
               ))}
             </div>
