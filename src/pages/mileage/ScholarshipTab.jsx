@@ -73,12 +73,13 @@ const formatPeriod = (semesterCode) =>
 
 const isSemesterBenefit = (item) => item.semesterCode != null && item.semesterCode !== 'ALL';
 const isCumulativeBenefit = (item) => Number(item.cumulativeYears ?? 1) >= 2;
+const isAnnualBenefit = (item) => !isSemesterBenefit(item) && !isCumulativeBenefit(item);
 
 const getDisabledReason = (item, { period }) => {
   if (isCumulativeBenefit(item)) {
     return null;
   }
-  if (!isSemesterBenefit(item)) {
+  if (isAnnualBenefit(item)) {
     return period?.semesterCode === 'FALL' ? null : '2학기에만 신청할 수 있는 장학금입니다.';
   }
   return null;

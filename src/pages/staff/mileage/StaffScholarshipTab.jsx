@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/api/client';
 import {
   Button,
@@ -326,7 +326,11 @@ export default function StaffScholarshipTab() {
 
   const policies = policyPage.content ?? [];
 
+  const loadRequestIdRef = useRef(0);
+  const editRequestIdRef = useRef(0);
+
   const loadPolicies = useCallback(async (currentFilters, currentPage) => {
+    const requestId = ++loadRequestIdRef.current;
     setLoading(true);
     setError('');
     try {
@@ -343,16 +347,24 @@ export default function StaffScholarshipTab() {
         ? { ...EMPTY_POLICY_PAGE, content: data, totalElements: data.length, totalPages: 1 }
         : { ...EMPTY_POLICY_PAGE, ...(data ?? {}) };
 
+      if (requestId !== loadRequestIdRef.current) {
+        return;
+      }
       if (nextPage.totalPages > 0 && currentPage > nextPage.totalPages) {
         setPage(nextPage.totalPages);
         return;
       }
       setPolicyPage(nextPage);
     } catch (requestError) {
+      if (requestId !== loadRequestIdRef.current) {
+        return;
+      }
       setError(requestError.message ?? '장학금 정책을 불러오지 못했습니다.');
       setPolicyPage(EMPTY_POLICY_PAGE);
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -391,19 +403,28 @@ export default function StaffScholarshipTab() {
   };
 
   const openEdit = async (policyId) => {
+    const requestId = ++editRequestIdRef.current;
     setEditOpen(true);
     setEditPolicyId(policyId);
     setEditForm(null);
     setEditLoading(true);
     try {
       const { data } = await apiClient.get(`/staff/mileage/benefit-policies/${policyId}`);
+      if (requestId !== editRequestIdRef.current) {
+        return;
+      }
       setEditForm(toPolicyForm(data));
     } catch (requestError) {
+      if (requestId !== editRequestIdRef.current) {
+        return;
+      }
       toast(requestError.message ?? '장학금 정책 상세를 불러오지 못했습니다.', 'error');
       setEditOpen(false);
       setEditPolicyId(null);
     } finally {
-      setEditLoading(false);
+      if (requestId === editRequestIdRef.current) {
+        setEditLoading(false);
+      }
     }
   };
 
@@ -538,7 +559,16 @@ export default function StaffScholarshipTab() {
               {loading ? (
                 <tr><td colSpan={9} className="px-4 py-12 text-center text-[12px] text-[#656D76]">장학금 정책을 불러오는 중입니다.</td></tr>
               ) : error ? (
-                <tr><td colSpan={9} className="px-4 py-12 text-center text-[12px] text-[#CF222E]">{error}</td></tr>
+                <tr>
+                  <td colSpan={9} className="px-4 py-12 text-center text-[12px] text-[#CF222E]">
+                    <div className="flex flex-col items-center gap-2">
+                      <span>{error}</span>
+                      <Button size="sm" variant="outline" onClick={() => loadPolicies(INITIAL_FILTERS, page)}>
+                        다시 시도
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
               ) : policies.length === 0 ? (
                 <tr>
                   <td colSpan={9}><EmptyState message="조회된 장학금 정책이 없습니다." sub="검색 조건을 바꾸거나 새 정책을 등록해 주세요." /></td>

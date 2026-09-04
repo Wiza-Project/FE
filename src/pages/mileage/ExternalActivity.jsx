@@ -129,19 +129,32 @@ const normalizeClaim = (claim = {}) => ({
 const EMPTY_CERT_FORM = { name: '', acquiredAt: '', issuer: '' };
 const EMPTY_VOLUNTEER_FORM = { org: '', hours: '', startDate: '', endDate: '' };
 
+function RequiredLabel({ children }) {
+  return (
+    <>
+      {children} <span className="text-[#CF222E]">*</span>
+    </>
+  );
+}
+
 function CertFields({ value, onChange }) {
   const update = (field) => (e) => onChange({ ...value, [field]: e.target.value });
   return (
     <>
       <Input
-        label="자격명"
+        label={<RequiredLabel>자격명</RequiredLabel>}
         placeholder="예) 정보처리기사"
         maxLength={200}
         value={value.name}
         onChange={update('name')}
       />
       <div className="grid grid-cols-2 gap-4">
-        <Input label="취득일" type="date" value={value.acquiredAt} onChange={update('acquiredAt')} />
+        <Input
+          label={<RequiredLabel>취득일</RequiredLabel>}
+          type="date"
+          value={value.acquiredAt}
+          onChange={update('acquiredAt')}
+        />
         <Input
           label="발급기관"
           placeholder="예) 한국산업인력공단"
@@ -159,7 +172,7 @@ function VolunteerFields({ value, onChange }) {
     <>
       <div className="grid grid-cols-2 gap-4">
         <Input
-          label="봉사기관"
+          label={<RequiredLabel>봉사기관</RequiredLabel>}
           placeholder="예) 사회복지법인 ○○원"
           maxLength={200}
           value={value.org}
@@ -175,7 +188,12 @@ function VolunteerFields({ value, onChange }) {
         />
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Input label="활동기간 시작일" type="date" value={value.startDate} onChange={update('startDate')} />
+        <Input
+          label={<RequiredLabel>활동기간 시작일</RequiredLabel>}
+          type="date"
+          value={value.startDate}
+          onChange={update('startDate')}
+        />
         <Input label="활동기간 종료일" type="date" value={value.endDate} onChange={update('endDate')} />
       </div>
     </>
