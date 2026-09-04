@@ -27,7 +27,7 @@ const EMPTY_POLICY_PAGE = {
 
 const INITIAL_FILTERS = {
   semesterCode: '',
-  active: 'true',
+  active: '',
 };
 
 const EMPTY_FORM = {
@@ -127,7 +127,15 @@ const toPolicyForm = (policy = {}) => ({
   active: policy.active !== false,
 });
 
-const parseCriteria = (value) => (value.trim() ? JSON.parse(value) : null);
+const parseCriteria = (value) => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return trimmed;
+  }
+};
 
 const validateForm = (form) => {
   if (!form.benefitName.trim()) return '장학금명을 입력해 주세요.';
@@ -146,14 +154,6 @@ const validateForm = (form) => {
     const endsAt = new Date(form.applicationEndsAt);
     if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || startsAt >= endsAt) {
       return '신청 시작일은 종료일보다 빨라야 합니다.';
-    }
-  }
-
-  if (form.criteriaData.trim()) {
-    try {
-      parseCriteria(form.criteriaData);
-    } catch {
-      return '세부 기준은 올바른 JSON 형식으로 입력해 주세요.';
     }
   }
 

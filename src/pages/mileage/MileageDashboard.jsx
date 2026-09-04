@@ -311,7 +311,7 @@ export default function MileageDashboard() {
     value: Number(item.points ?? 0),
   }));
   const trendData = (dashboardData?.semesterTrend ?? []).map((item) => ({
-    label: formatSemester(item.semesterCode),
+    label: `${item.academicYear ?? ''}${item.academicYear ? '년 ' : ''}${formatSemester(item.semesterCode)}`,
     value: Number(item.points ?? 0),
   }));
   const currentGradeName = gradeData?.currentGrade?.gradeName;

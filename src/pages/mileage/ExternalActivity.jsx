@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/api/client';
+import { uploadExternalActivityFile, submitExternalActivityClaim } from '@/api/mileage';
 import {
   PageHeader,
   Stepper,
@@ -101,41 +102,63 @@ const normalizeClaim = (claim = {}) => ({
 });
 
 // ── Dynamic form fields by category ──
-function CertFields() {
+const EMPTY_CERT_FORM = { name: '', acquiredAt: '', issuer: '' };
+const EMPTY_VOLUNTEER_FORM = { org: '', hours: '', startDate: '', endDate: '' };
+
+function CertFields({ value, onChange }) {
+  const update = (field) => (e) => onChange({ ...value, [field]: e.target.value });
   return (
     <>
-      <Input label="자격명" placeholder="예) 정보처리기사" />
+      <Input
+        label="자격명"
+        placeholder="예) 정보처리기사"
+        value={value.name}
+        onChange={update('name')}
+      />
       <div className="grid grid-cols-2 gap-4">
-        <Input label="취득일" type="date" />
-        <Input label="발급기관" placeholder="예) 한국산업인력공단" />
+        <Input label="취득일" type="date" value={value.acquiredAt} onChange={update('acquiredAt')} />
+        <Input
+          label="발급기관"
+          placeholder="예) 한국산업인력공단"
+          value={value.issuer}
+          onChange={update('issuer')}
+        />
       </div>
     </>
   );
 }
 
-function VolunteerFields() {
+function VolunteerFields({ value, onChange }) {
+  const update = (field) => (e) => onChange({ ...value, [field]: e.target.value });
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
-        <Input label="봉사기관" placeholder="예) 사회복지법인 ○○원" />
+        <Input
+          label="봉사기관"
+          placeholder="예) 사회복지법인 ○○원"
+          value={value.org}
+          onChange={update('org')}
+        />
         <Input
           label="봉사시간"
           placeholder="예) 40"
           hint="증빙서류에 기재된 봉사시간"
           type="number"
+          value={value.hours}
+          onChange={update('hours')}
         />
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Input label="활동기간 시작일" type="date" />
-        <Input label="활동기간 종료일" type="date" />
+        <Input label="활동기간 시작일" type="date" value={value.startDate} onChange={update('startDate')} />
+        <Input label="활동기간 종료일" type="date" value={value.endDate} onChange={update('endDate')} />
       </div>
     </>
   );
 }
 
-function DynamicFields({ activityName }) {
-  if (activityName === '자격증') return <CertFields />;
-  if (activityName === '봉사활동') return <VolunteerFields />;
+function DynamicFields({ activityName, certValue, onCertChange, volunteerValue, onVolunteerChange }) {
+  if (activityName === '자격증') return <CertFields value={certValue} onChange={onCertChange} />;
+  if (activityName === '봉사활동') return <VolunteerFields value={volunteerValue} onChange={onVolunteerChange} />;
   return null;
 }
 
@@ -150,6 +173,9 @@ export default function ExternalActivity({ onBack, embedded = false }) {
   const [step, setStep] = useState(0);
   const [selectedType, setSelectedType] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [certForm, setCertForm] = useState(EMPTY_CERT_FORM);
+  const [volunteerForm, setVolunteerForm] = useState(EMPTY_VOLUNTEER_FORM);
+  const [evidenceFile, setEvidenceFile] = useState(null);
   const [policies, setPolicies] = useState([]);
   const [policiesLoading, setPoliciesLoading] = useState(true);
   const [policiesError, setPoliciesError] = useState('');
@@ -198,16 +224,54 @@ export default function ExternalActivity({ onBack, embedded = false }) {
     loadPolicies();
   }, [loadPolicies]);
 
-  const handleSelectType = (t) => {
-    setSelectedType(t);
+  const resetEvidenceForm = () => {
+    setCertForm(EMPTY_CERT_FORM);
+    setVolunteerForm(EMPTY_VOLUNTEER_FORM);
+    setEvidenceFile(null);
   };
 
+  const handleSelectType = (t) => {
+    setSelectedType(t);
+    resetEvidenceForm();
+  };
+
+  const isCert = selectedType?.name === '자격증';
+  const canSubmit = Boolean(
+    selectedType &&
+      evidenceFile &&
+      (isCert
+        ? certForm.name.trim() && certForm.acquiredAt
+        : volunteerForm.org.trim() && volunteerForm.startDate),
+  );
+
   const handleSubmit = async () => {
+    if (!canSubmit) return;
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSubmitting(false);
-    setStep(2);
-    toast('외부활동 증빙이 제출되었습니다. 담당자 검토 후 적립됩니다.', 'success');
+    try {
+      const { fileGroupId } = await uploadExternalActivityFile(evidenceFile);
+      const activityName = isCert ? certForm.name.trim() : volunteerForm.org.trim();
+      const activityDate = isCert ? certForm.acquiredAt : volunteerForm.startDate;
+      const detailData = isCert
+        ? { issuer: certForm.issuer.trim() || undefined }
+        : { hours: volunteerForm.hours || undefined, endDate: volunteerForm.endDate || undefined };
+
+      await submitExternalActivityClaim({
+        activityTypeId: selectedType.activityTypeId,
+        activityName,
+        activityDate,
+        requestedPoints: selectedType.score,
+        detailData,
+        fileGroupId,
+      });
+
+      setStep(2);
+      toast('외부활동 증빙이 제출되었습니다. 담당자 검토 후 적립됩니다.', 'success');
+      loadApplications();
+    } catch (error) {
+      toast(error.message ?? '증빙 제출에 실패했습니다.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const STEPS = ['활동유형 선택', '증빙 입력', '제출 완료'];
@@ -327,22 +391,34 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <div
-                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mx-auto transition-colors ${isSelected ? 'border-[#D97706] bg-[#D97706]' : 'border-[#D1D5DB]'}`}
-                          >
-                            {isSelected && (
-                              <svg
-                                width="10"
-                                height="8"
-                                viewBox="0 0 10 8"
-                                fill="none"
-                                stroke="white"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              >
-                                <path d="M1 4l3 3 5-6" />
-                              </svg>
-                            )}
+                          <div className="relative mx-auto flex h-5 w-5 items-center justify-center">
+                            <input
+                              type="radio"
+                              name="externalActivityType"
+                              value={t.activityTypeId}
+                              checked={isSelected}
+                              onChange={() => handleSelectType(t)}
+                              aria-label={`${t.name} 선택`}
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            />
+                            <div
+                              aria-hidden="true"
+                              className={`pointer-events-none flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors ${isSelected ? 'border-[#D97706] bg-[#D97706]' : 'border-[#D1D5DB]'}`}
+                            >
+                              {isSelected && (
+                                <svg
+                                  width="10"
+                                  height="8"
+                                  viewBox="0 0 10 8"
+                                  fill="none"
+                                  stroke="white"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                >
+                                  <path d="M1 4l3 3 5-6" />
+                                </svg>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -413,7 +489,13 @@ export default function ExternalActivity({ onBack, embedded = false }) {
             </div>
 
             <div className="flex flex-col gap-4">
-              <DynamicFields activityName={selectedType.name} />
+              <DynamicFields
+                activityName={selectedType.name}
+                certValue={certForm}
+                onCertChange={setCertForm}
+                volunteerValue={volunteerForm}
+                onVolunteerChange={setVolunteerForm}
+              />
 
               {/* File upload */}
               <div>
@@ -423,7 +505,11 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                     (PDF 10MB 이하)
                   </span>
                 </label>
-                <FileUpload accept=".pdf" maxSize="10MB" />
+                <FileUpload
+                  accept=".pdf"
+                  maxSize="10MB"
+                  onFiles={(files) => setEvidenceFile(files[0] ?? null)}
+                />
               </div>
             </div>
           </div>
@@ -435,7 +521,8 @@ export default function ExternalActivity({ onBack, embedded = false }) {
             <Button
               size="sm"
               loading={submitting}
-              style={{ background: ACCENT }}
+              disabled={!canSubmit}
+              style={canSubmit ? { background: ACCENT } : {}}
               onClick={handleSubmit}
             >
               제출
@@ -465,6 +552,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
               onClick={() => {
                 setStep(0);
                 setSelectedType(null);
+                resetEvidenceForm();
               }}
             >
               추가 등록

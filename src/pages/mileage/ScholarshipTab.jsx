@@ -238,21 +238,20 @@ export default function ScholarshipTab({ currentPoints = null }) {
   const [applyingId, setApplyingId] = useState(null);
   const [period, setPeriod] = useState(null);
 
-  useEffect(() => {
-    let mounted = true;
-
-    fetchCurrentMileagePeriod()
-      .then((data) => {
-        if (mounted) setPeriod(data);
-      })
-      .catch((error) => {
-        if (mounted) setScholarshipsError(error.message ?? '학기 정보를 불러오지 못했습니다.');
-      });
-
-    return () => {
-      mounted = false;
-    };
+  const loadPeriod = useCallback(async () => {
+    setScholarshipsError('');
+    try {
+      const data = await fetchCurrentMileagePeriod();
+      setPeriod(data);
+    } catch (error) {
+      setScholarshipsError(error.message ?? '학기 정보를 불러오지 못했습니다.');
+      setScholarshipsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadPeriod();
+  }, [loadPeriod]);
 
   const loadScholarships = useCallback(async () => {
     if (!period) return;
@@ -375,8 +374,11 @@ export default function ScholarshipTab({ currentPoints = null }) {
       </div>
 
       {scholarshipsError && (
-        <div role="alert" className="rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
-          {scholarshipsError}
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-[8px] border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[12px] text-[#CF222E]">
+          <span>{scholarshipsError}</span>
+          <Button size="sm" variant="outline" onClick={loadPeriod}>
+            다시 시도
+          </Button>
         </div>
       )}
 

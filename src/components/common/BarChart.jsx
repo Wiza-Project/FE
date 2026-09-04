@@ -6,7 +6,8 @@
  * @param {string} [props.unit]
  */
 export function BarChart({ data, color = '#2563EB', height = 180, unit = '' }) {
-  const max = Math.max(...data.map((d) => d.value));
+  const rawMax = Math.max(...data.map((d) => d.value));
+  const max = rawMax > 0 ? rawMax : 1;
   const EDGE = 10;
   const GAP = 12;
   const CHAR_W = 9; // rough px/glyph for Hangul at fontSize 10, used to keep long labels from clipping
