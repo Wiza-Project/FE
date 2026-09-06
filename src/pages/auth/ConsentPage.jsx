@@ -211,8 +211,9 @@ export default function ConsentPage() {
                   id="agreeAll"
                   type="checkbox"
                   checked={allChecked}
+                  disabled={saveMutation.isPending}
                   onChange={(e) => toggleAll(e.target.checked)}
-                  className="w-5 h-5 rounded-[4px] accent-[#2563EB] cursor-pointer"
+                  className="w-5 h-5 rounded-[4px] accent-[#2563EB] cursor-pointer disabled:cursor-not-allowed"
                 />
                 <label
                   htmlFor="agreeAll"
@@ -242,7 +243,8 @@ export default function ConsentPage() {
                           id={`agree-${policy.consentPolicyId}`}
                           type="checkbox"
                           checked={checked}
-                          disabled={locked}
+                          // 저장 중에는 선택을 잠근다.
+                          disabled={locked || saveMutation.isPending}
                           onChange={(e) => toggleOne(policy.consentPolicyId, e.target.checked)}
                           className="w-4.5 h-4.5 rounded-[3px] accent-[#2563EB] cursor-pointer flex-shrink-0 disabled:cursor-not-allowed"
                         />
