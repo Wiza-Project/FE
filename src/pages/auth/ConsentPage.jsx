@@ -163,10 +163,16 @@ export default function ConsentPage() {
             </p>
           </div>
 
+          
+          {/* 스크린 리더용 로딩 상태. */}
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {isLoading ? '약관을 불러오는 중입니다.' : ''}
+          </div>
+
           {isLoading && (
             <div
               className="bg-white rounded-[10px] border border-[#E5E7EB] px-5 py-12 flex flex-col items-center gap-3"
-              role="status"
+              aria-hidden="true"
             >
               <span className="w-7 h-7 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin" />
               <span className="text-[13px] text-[#656D76]">약관을 불러오는 중입니다…</span>
@@ -174,7 +180,10 @@ export default function ConsentPage() {
           )}
 
           {!isLoading && isError && (
-            <div className="bg-white rounded-[10px] border border-[#E5E7EB] px-5 py-10 flex flex-col items-center gap-3">
+            <div
+              role="alert"
+              className="bg-white rounded-[10px] border border-[#E5E7EB] px-5 py-10 flex flex-col items-center gap-3"
+            >
               <p className="text-[13px] text-[#656D76] text-center">
                 약관 정보를 불러오지 못했습니다.
                 <br />
