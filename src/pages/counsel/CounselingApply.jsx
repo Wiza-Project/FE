@@ -21,13 +21,19 @@ import {
   CONSENT_TYPE,
   COUNSELING_RESERVATION_ERROR_CODE,
   COUNSELING_RESERVATION_STATUS_LABEL,
+  COUNSELING_TYPE_CODE,
 } from '@/constants/domain';
 
 // 신청 실패 사유를 사용자가 이해할 수 있는 문구로 바꾼다. 문서에 명시된 코드만 분기한다.
-const getSubmitErrorMessage = (error) => {
+// isCareerType은 선택한 유형이 진로상담(CS200)인지 여부다 — 진로상담 일정은 지도교수
+// 개인이 여는 것이라, 일정이 사라졌을 때 "다른 일정을 선택"만으로는 해결되지 않을 수
+// 있어 문의 경로를 함께 안내한다.
+const getSubmitErrorMessage = (error, isCareerType) => {
   const errorCode = error?.code;
   if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
-    return '선택한 일정을 더 이상 사용할 수 없습니다. 다른 일정을 선택해 주세요.';
+    return isCareerType
+      ? '선택한 일정을 더 이상 사용할 수 없습니다. 지도교수 또는 상담센터에 문의하거나 다른 일정을 선택해 주세요.'
+      : '선택한 일정을 더 이상 사용할 수 없습니다. 다른 일정을 선택해 주세요.';
   }
   if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
     return '신청 내용을 확인해 주세요.';
@@ -340,6 +346,8 @@ export default function CounselingApply({ onComplete, onBack }) {
   const HAS_CONFLICT = false; // set true to demo duplicate error
 
   const chosenType = counselingTypes.find((type) => type.typeCode === selectedType);
+  // 진로상담(CS200)인지 여부. 빈 일정 문구·S002 문구에서만 쓰고 인가·필터링에는 쓰지 않는다.
+  const isCareerType = chosenType?.typeCode === COUNSELING_TYPE_CODE.CAREER;
 
   // Step 2 — schedule. 유형별 실제 예약 가능 일정만 조회한다(서버가 이미 필터링해서 내려줌).
   const {
@@ -396,7 +404,7 @@ export default function CounselingApply({ onComplete, onBack }) {
         returnToConsentStep();
         return;
       }
-      setSubmitError(getSubmitErrorMessage(error));
+      setSubmitError(getSubmitErrorMessage(error, isCareerType));
       if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
         setSelectedSlot(null);
         queryClient.invalidateQueries({ queryKey: ['availableSchedules'] });
@@ -847,12 +855,24 @@ export default function CounselingApply({ onComplete, onBack }) {
                   </div>
                 )}
 
-                {!isSchedulesLoading && !hasSchedulesError && filteredSchedules.length === 0 && (
-                  <EmptyState
-                    message="예약 가능한 일정이 없습니다."
-                    sub="다른 상담 유형이나 상담자를 확인해 주세요."
-                  />
-                )}
+                {/* 서버가 내려준 원본 일정(schedules) 자체가 비어 있는지, 아니면 상담자
+                    필터 때문에 filteredSchedules만 비었는지를 구분한다. 진로상담(CS200)은
+                    지도교수 개인이 여는 일정이라 원본이 비었을 때는 "다른 상담자를
+                    확인"이라는 문구가 맞지 않으므로 별도 안내를 쓴다. */}
+                {!isSchedulesLoading &&
+                  !hasSchedulesError &&
+                  filteredSchedules.length === 0 &&
+                  (isCareerType && schedules.length === 0 ? (
+                    <EmptyState
+                      message="예약 가능한 진로상담 일정이 없습니다."
+                      sub="지도교수 또는 상담센터에 문의해 주세요."
+                    />
+                  ) : (
+                    <EmptyState
+                      message="예약 가능한 일정이 없습니다."
+                      sub="다른 상담 유형이나 상담자를 확인해 주세요."
+                    />
+                  ))}
 
                 {!isSchedulesLoading && !hasSchedulesError && filteredSchedules.length > 0 && (
                   <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">

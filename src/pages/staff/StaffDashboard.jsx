@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
-import { DEPARTMENT, USER_ROLE } from '@/constants/domain';
+import { DEPARTMENT, canAccessCounselOperation } from '@/constants/domain';
 import { apiClient, ApiError } from '@/api/client';
 import { fetchProgramsAdmin, fetchProgramApplications } from '@/api/programs';
 import { fetchPendingCounselorReservations, fetchCounselorSchedules } from '@/api/counsel';
@@ -176,7 +176,8 @@ function WorkRow({ item, onProcess }) {
  *   D200(비교과운영부서) — 비교과 신청 심사, 담당 프로그램 현황
  *   D100(학생역량센터)   — 마일리지 증빙 심사
  *   D400(취창업지원과)   — 구인 신청 검수
- *   ST200(카운셀러 역할) — 오늘의 본인 상담, 본인 상담 예약 승인·일정
+ *   ST200 단독 또는 ST300 단독 — 오늘의 본인 상담, 본인 상담 예약 승인·일정
+ *   (ST200+ST300 겸임은 정상 조합이 아니라 숨김 — canAccessCounselOperation 참고)
  *   전체 교직원          — 공지 등록, 최근 공지
  *
  * ADMIN 계정은 이 화면(및 교직원 포털 전체)에 접근할 수 없다(router.jsx 참고 —
@@ -191,7 +192,9 @@ export default function StaffDashboard() {
   const canProgramReview = department === DEPARTMENT.NON_SUBJECT_OPERATION; // D200
   const canMileageReview = department === DEPARTMENT.STUDENT_COMPETENCY_CENTER; // D100
   const canCareerReview = department === DEPARTMENT.CAREER_SUPPORT_OFFICE; // D400
-  const canCounsel = roleCodes.includes(USER_ROLE.COUNSELOR); // ST200
+  // ST200(카운셀러) 단독 또는 ST300(지도교수) 단독일 때만 상담 위젯을 보여준다.
+  // 두 역할을 함께 가진 잘못된 겸임은 서버가 403으로 막으므로 위젯도 같은 조건으로 숨긴다.
+  const canCounsel = canAccessCounselOperation(roleCodes);
 
   const [activeTab, setActiveTab] = useState(null);
 
@@ -243,7 +246,7 @@ export default function StaffDashboard() {
   const mileageClaimRows = (mileageClaimsQuery.data?.content ?? []).map(toMileageClaimRow);
   const mileageClaimsCount = mileageClaimsQuery.data?.totalElements ?? 0;
 
-  // ── ST200: 상담 예약 승인 + 본인 일정 ────────────────────────────────────
+  // ── ST200 단독 또는 ST300 단독: 상담 예약 승인 + 본인 일정 ──────────────────
   const pendingReservationsQuery = useQuery({
     queryKey: ['staffDashboardPendingReservations'],
     queryFn: () => fetchPendingCounselorReservations({ size: 30 }),
@@ -531,7 +534,7 @@ export default function StaffDashboard() {
 
         {/* RIGHT column */}
         <div className="flex flex-col gap-4">
-          {/* 본인 상담 일정 (ST200) */}
+          {/* 본인 상담 일정 (ST200 단독 또는 ST300 단독) */}
           {canCounsel && (
             <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
               <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
