@@ -61,6 +61,7 @@ export const uploadExternalActivityFile = async (file) => {
  * 외부활동·자격증 증빙 신청 제출
  * @param {Object} payload
  * @param {number} payload.activityTypeId
+ * @param {number} [payload.mileagePolicyId] 학생이 화면에서 선택한 정책. 같은 활동유형에 학기별 정책이 여러 개일 때 서버가 그대로 적용한다.
  * @param {string} payload.activityName
  * @param {string} payload.activityDate yyyy-MM-dd
  * @param {number} payload.requestedPoints

@@ -247,7 +247,10 @@ export default function ScholarshipTab({ currentPoints = null }) {
     setScholarshipsError('');
     try {
       const data = await fetchCurrentMileagePeriod();
-      setPeriod(data);
+      setPeriod(data ?? null);
+      if (data == null) {
+        setScholarshipsLoading(false);
+      }
     } catch (error) {
       setScholarshipsError(error.message ?? '학기 정보를 불러오지 못했습니다.');
       setScholarshipsLoading(false);

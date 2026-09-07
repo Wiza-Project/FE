@@ -63,6 +63,8 @@ const getClaimPointsDisplay = ({ claimStatus, requestedPoints, policyPoints, gra
 
 const formatMaximumPoints = (value) => (value == null || value === '' ? '제한 없음' : formatPoints(value));
 
+const getPolicyKey = (t) => (t == null ? null : t.mileagePolicyId ?? t.activityTypeId);
+
 const getDuplicateRuleType = (rule) => {
   if (rule == null || rule === '') return 'NONE';
   if (typeof rule === 'string') return rule;
@@ -245,7 +247,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
   };
 
   const handleSelectType = (t) => {
-    const isSameType = selectedType?.activityTypeId === t.activityTypeId;
+    const isSameType = getPolicyKey(selectedType) === getPolicyKey(t);
     setSelectedType(t);
     if (!isSameType) {
       resetEvidenceForm();
@@ -281,6 +283,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
 
       await submitExternalActivityClaim({
         activityTypeId: selectedType.activityTypeId,
+        mileagePolicyId: selectedType.mileagePolicyId,
         activityName,
         activityDate,
         requestedPoints: selectedType.score,
@@ -395,7 +398,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                   </tr>
                 ) : (
                   policies.map((t) => {
-                    const isSelected = selectedType?.activityTypeId === t.activityTypeId;
+                    const isSelected = getPolicyKey(selectedType) === getPolicyKey(t);
                     const isRowSupported = t.activityCode === 'CERTIFICATE' || t.activityCode === 'VOLUNTEER';
                     const unsupportedReason = '아직 지원되지 않는 활동 유형입니다.';
                     return (
@@ -432,7 +435,7 @@ export default function ExternalActivity({ onBack, embedded = false }) {
                             <input
                               type="radio"
                               name="externalActivityType"
-                              value={t.activityTypeId}
+                              value={getPolicyKey(t)}
                               checked={isSelected}
                               disabled={!isRowSupported}
                               onChange={() => isRowSupported && handleSelectType(t)}

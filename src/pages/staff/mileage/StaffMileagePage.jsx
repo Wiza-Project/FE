@@ -644,7 +644,7 @@ function TabPolicySettings() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 rounded-[8px] bg-[#F9FAFB] p-4 text-[12px]">
                 <div><p className="text-[10px] text-[#9AA0A6]">정책 ID</p><p className="font-bold text-[#1F2328]">#{editId}</p></div>
                 <div><p className="text-[10px] text-[#9AA0A6]">활동유형</p><p className="font-bold text-[#1F2328]">{policies.find((item) => item.mileagePolicyId === editId)?.activityName ?? '-'}</p></div>
-                <div><p className="text-[10px] text-[#9AA0A6]">학기</p><p className="font-bold text-[#1F2328]">{formatPeriod(semesterCodesRaw, editForm.semesterCode)}</p></div>
+                <div><p className="text-[10px] text-[#9AA0A6]">학기</p><p className="font-bold text-[#1F2328]">{semesterCodesLoading ? '불러오는 중...' : formatPeriod(semesterCodesRaw, editForm.semesterCode)}</p></div>
               </div>
               <div className="flex gap-3 items-end flex-wrap">
                 <div>
@@ -692,7 +692,7 @@ function TabPolicySettings() {
 // ─── Tab ② 심사 접수함 ─────────────────────────────────────────────────────────
 
 function TabReviewInbox() {
-  const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
+  const { data: semesterCodes = [], isLoading: semesterCodesLoading } = useCommonCode('SEMESTER');
   const [reviews, setReviews] = useState([]);
   const [claimPage, setClaimPage] = useState(EMPTY_CLAIM_PAGE);
   const [draftFilters, setDraftFilters] = useState({ status: 'REQUESTED', keyword: '' });
@@ -1261,10 +1261,12 @@ function TabReviewInbox() {
                     },
                     {
                       l: '적용 정책',
-                      v: detailPolicy
-                        ? formatPeriod(semesterCodes, detailPolicy.semesterCode) + ' / v' +
-                          String(detailPolicy.versionNo ?? '-')
-                        : '-',
+                      v: !detailPolicy
+                        ? '-'
+                        : semesterCodesLoading
+                          ? '불러오는 중...'
+                          : formatPeriod(semesterCodes, detailPolicy.semesterCode) + ' / v' +
+                            String(detailPolicy.versionNo ?? '-'),
                     },
                     {
                       l: '연계 활동',
