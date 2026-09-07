@@ -933,3 +933,152 @@ export const stressTestResultsQueryKey = (page, size = 20) => [
   page,
   size,
 ];
+
+// ─── 스트레스 결과 기반 상담 제안 ───────────────────────────────────────────
+
+/**
+ * @typedef {Object} CounselingProposalEligibleResult
+ * @property {number} resultId
+ * @property {string} universityNo
+ * @property {string} studentName
+ * @property {number} totalScore
+ * @property {string} resultLevel
+ * @property {string} testedAt UTC ISO-8601 Instant
+ */
+
+/**
+ * @typedef {Object} CounselingProposalEligibleResultPage
+ * @property {CounselingProposalEligibleResult[]} content
+ * @property {number} page 0부터 시작
+ * @property {number} size
+ * @property {number} totalElements
+ * @property {number} totalPages
+ * @property {boolean} first
+ * @property {boolean} last
+ */
+
+/**
+ * 상담사(ST200 only)가 학생별 최신 17점 이상·미제안 결과 후보를 조회한다.
+ * 이 조회는 생성 권한을 예약하지 않는다 — 생성 API가 최신성·점수·중복을 다시 검증한다.
+ *
+ * @param {Object} [params]
+ * @param {number} [params.page=0]
+ * @param {number} [params.size=20]
+ * @returns {Promise<CounselingProposalEligibleResultPage>}
+ */
+export const fetchEligibleCounselingProposalResults = async ({ page = 0, size = 20 } = {}) => {
+  const { data } = await apiClient.get('/counselors/counseling-proposals/eligible-results', {
+    params: { page, size },
+  });
+  return data;
+};
+
+/**
+ * @typedef {Object} CreateCounselingProposalRequest
+ * @property {number} psychologicalTestResultId
+ * @property {string} proposalContent 앞뒤 공백 제거 후 1~1,000자
+ */
+
+/**
+ * @typedef {Object} CounselingProposal
+ * @property {number} proposalId
+ * @property {number} resultId
+ * @property {number} totalScore
+ * @property {string} resultLevel
+ * @property {string} testedAt UTC ISO-8601 Instant
+ * @property {string} proposalContent
+ * @property {'PENDING'|'ACCEPTED'|'REJECTED'|'EXPIRED'} responseStatus
+ * @property {string} responseDeadline UTC ISO-8601 Instant
+ * @property {string|null} respondedAt UTC ISO-8601 Instant. 미응답이면 null
+ * @property {number|null} createdReservationId 수락 전에는 null
+ * @property {string} createdAt UTC ISO-8601 Instant
+ */
+
+/**
+ * 상담사(ST200 only)가 학생별 최신 17점 이상 결과에 제안을 생성한다.
+ * 학생 ID·제안자 ID·기한·점수·상태는 서버가 결정하므로 요청에 포함하지 않는다.
+ *
+ * @param {CreateCounselingProposalRequest} request
+ * @returns {Promise<CounselingProposal>}
+ */
+export const createCounselingProposal = async (request) => {
+  const { data } = await apiClient.post('/counselors/counseling-proposals', request);
+  return data;
+};
+
+/**
+ * @typedef {Object} CounselingProposalPage
+ * @property {CounselingProposal[]} content
+ * @property {number} page 0부터 시작
+ * @property {number} size
+ * @property {number} totalElements
+ * @property {number} totalPages
+ * @property {boolean} first
+ * @property {boolean} last
+ */
+
+/**
+ * 로그인 학생 본인의 상담 제안을 최신 생성순으로 조회한다.
+ *
+ * @param {Object} [params]
+ * @param {number} [params.page=0]
+ * @param {number} [params.size=20]
+ * @returns {Promise<CounselingProposalPage>}
+ */
+export const fetchMyCounselingProposals = async ({ page = 0, size = 20 } = {}) => {
+  const { data } = await apiClient.get('/students/counseling-proposals', {
+    params: { page, size },
+  });
+  return data;
+};
+
+/**
+ * @typedef {Object} AcceptCounselingProposalRequest
+ * @property {number} scheduleId 예약 가능한 활성 CS300 + DIRECT 일정
+ * @property {number} consentId 본인 소유 유효한 COUNSELING+PERSONAL_INFO 동의
+ */
+
+/**
+ * 학생 본인의 기한 전 PENDING 제안을 수락하고 REQUESTED 예약을 생성한다.
+ * 상담 유형 ID·제안 내용·신청 문구·응답 기한은 서버가 결정하므로 보내지 않는다.
+ *
+ * @param {number} proposalId
+ * @param {AcceptCounselingProposalRequest} request
+ * @returns {Promise<CounselingProposal>}
+ */
+export const acceptCounselingProposal = async (proposalId, request) => {
+  const { data } = await apiClient.patch(
+    `/students/counseling-proposals/${proposalId}/accept`,
+    request,
+  );
+  return data;
+};
+
+/**
+ * 학생 본인의 기한 전 PENDING 제안을 사유 없이 즉시 거절한다. 요청 본문은 없다.
+ *
+ * @param {number} proposalId
+ * @returns {Promise<CounselingProposal>}
+ */
+export const rejectCounselingProposal = async (proposalId) => {
+  const { data } = await apiClient.patch(
+    `/students/counseling-proposals/${proposalId}/reject`,
+  );
+  return data;
+};
+
+// 상담사 제안 후보 query key. 결과·학생 데이터를 key에 넣지 않는다. 화면 언마운트 시에는
+// 이 함수가 아니라 prefix ['eligibleCounselingProposalResults']로 removeQueries한다.
+export const eligibleCounselingProposalResultsQueryKey = (page, size = 20) => [
+  'eligibleCounselingProposalResults',
+  page,
+  size,
+];
+
+// 학생 본인 제안 목록 query key. 제안 내용·점수·동의 ID를 key에 넣지 않는다. 언마운트 시에는
+// prefix ['myCounselingProposals']로 removeQueries한다.
+export const myCounselingProposalsQueryKey = (page, size = 20) => [
+  'myCounselingProposals',
+  page,
+  size,
+];
