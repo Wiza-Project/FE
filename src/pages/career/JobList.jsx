@@ -26,171 +26,6 @@ function calculateDDay(endDateStr) {
   return { label: `D-${diffDays}`, urgent: diffDays <= 3 };
 }
 
-// function AiRecommendationBanner({ onDetail, onGoPreference, latestFallbackJobs }) {
-//   const navigate = useNavigate();
-//   const [activeTab, setActiveTab] = useState('LATEST');
-//   const [consentInfoModalOpen, setConsentInfoModalOpen] = useState(false);
-//   const [needConsentModalOpen, setNeedConsentModalOpen] = useState(false);
-
-//   // 공통 동의 이력 조회 (THIRD_PARTY_SHARE 선택동의 완료 여부 및 시각 확인)
-//   const { data: consentHistory = [] } = useQuery({
-//     queryKey: ['myConsentHistory'],
-//     queryFn: () => getMyConsentHistory(),
-//     retry: false,
-//   });
-
-//   // THIRD_PARTY_SHARE 선택동의 여부 확인
-//   const thirdPartyShareConsent = Array.isArray(consentHistory)
-//     ? consentHistory.find((c) => c.consentType === 'THIRD_PARTY_SHARE' && !c.withdrawnAt)
-//     : null;
-//   const isProfilingAgreed = Boolean(thirdPartyShareConsent);
-
-//   // 희망조건 조회 (404 발생 시 retry 차단 및 null 수신)
-//   const { data: preference } = useQuery({
-//     queryKey: ['careerJobPreference'],
-//     queryFn: () => getJobPreference(),
-//     retry: false,
-//   });
-
-//  // AI 맞춤 추천 공고 조회 (동의가 되어 있을 때만 실행)
-//   const { data: resData, isLoading } = useQuery({
-//     queryKey: ['careerRecommendedJobs'],
-//     queryFn: () => getRecommendedPostings(),
-//     enabled: isProfilingAgreed,
-//   });
-
-//   // 응답 데이터 포맷 정규화
-//   const rawList = resData?.data || resData?.content || resData;
-//   const recommendedJobs = Array.isArray(rawList) ? rawList : [];
-//   // 최신 공고 탭용 데이터: 추천 API 응답이 없으면 현재 전체 목록(jobList)을 fallback으로 사용
-//   const displayLatestJobs = recommendedJobs.length > 0 ? recommendedJobs : (latestFallbackJobs || []);
-//   // 희망조건 존재 여부 판정
-//   const hasPreference = !!(preference?.ncsStandardId || preference?.ncsJobName);
-
-//   // 맞춤 추천 동의 관리 버튼 클릭 시
-//   const handleConsentManageClick = () => {
-//     if (isProfilingAgreed) {
-//       setConsentInfoModalOpen(true); // 이미 동의했으면 시각 모달 오픈
-//     } else {
-//       setNeedConsentModalOpen(true); // 미동의면 동의 유도 모달 오픈
-//     }
-//   };
-
-//   return (
-//     <div className="bg-gradient-to-r from-[#ECFDF5] to-[#F0FDF4] border border-[#A7F3D0] rounded-[10px] p-4 mb-5 shadow-[0_1px_4px_rgba(5,150,105,0.06)]">
-//       <div className="flex items-center justify-between mb-3">
-//         <div className="flex items-center gap-2">
-//           <button
-//             onClick={() => {
-//               if (!isProfilingAgreed) {
-//                 setNeedConsentModalOpen(true);
-//                 return;
-//               }
-//               setActiveTab('AI');
-//             }}
-//             className={`px-3 py-1 text-[12px] font-bold rounded-[6px] transition-all ${
-//               activeTab === 'AI' ? 'bg-[#065F46] text-white shadow-sm' : 'bg-white text-[#065F46] border border-[#A7F3D0]'
-//             }`}
-//           >
-//             ✨ AI 역량 맞춤 추천
-//           </button>
-//           <button
-//             onClick={() => setActiveTab('LATEST')}
-//             className={`px-3 py-1 text-[12px] font-bold rounded-[6px] transition-all ${
-//               activeTab === 'LATEST' ? 'bg-[#065F46] text-white shadow-sm' : 'bg-white text-[#065F46] border border-[#A7F3D0]'
-//             }`}
-//           >
-//             🔥 실시간 최신 공고 (전체)
-//           </button>
-//         </div>
-
-//         <button
-//           onClick={handleConsentManageClick}
-//           className="text-[11px] font-semibold text-[#059669] hover:underline"
-//         >
-//           맞춤 추천 설정/동의 관리 ⚙️
-//         </button>
-//       </div>
-
-//       {activeTab === 'AI' ? (
-//         !isProfilingAgreed ? (
-//           <div className="bg-white rounded-[8px] border border-[#D1FAE5] p-5 text-center flex flex-col items-center justify-center gap-2">
-//             <p className="text-[13px] font-bold text-[#1F2328]">
-//               AI 맞춤 추천 서비스를 이용하시려면 [맞춤 프로파일링(PROFILING)] 선택 동의가 필요합니다.
-//             </p>
-//             <Button size="sm" style={{ background: ACCENT }} onClick={() => navigate('/consent')}>
-//               선택 동의 설정하러 가기 →
-//             </Button>
-//           </div>
-//         ) : !hasPreference ? (
-//           <div className="bg-white rounded-[8px] border border-[#D1FAE5] p-5 text-center flex flex-col items-center justify-center gap-2">
-//             <p className="text-[13px] font-bold text-[#1F2328]">
-//               ✓ 선택 동의 완료 상태입니다. 아직 등록된 [취업 희망 직무]가 없습니다.
-//             </p>
-//             <p className="text-[11px] text-[#656D76]">
-//               희망 직무(NCS)를 설정하시면 사전 적재된 직무 벡터 기반 코사인 유사도 맞춤 공고가 즉시 서빙됩니다.
-//             </p>
-//             <Button size="sm" style={{ background: ACCENT }} onClick={onGoPreference}>
-//               희망 직무 설정하러 가기 →
-//             </Button>
-//           </div>
-//         ) : (
-//           renderCards(recommendedJobs, isLoading, onDetail, '직무맞춤')
-//         )
-//       ) : (
-//         // 최신등록 탭에서는 displayLatestJobs를 제공
-//         renderCards(displayLatestJobs, isLoading, onDetail, '최신등록')
-//       )}
-
-//       {/* 미동의 시 유도 다이얼로그 */}
-//       <ConfirmDialog
-//         open={needConsentModalOpen}
-//         title="AI 맞춤 추천 서비스 동의 안내"
-//         message="AI 역량 분석 및 희망 조건 기반 맞춤 채용공고를 추천받으시려면 [개인정보 맞춤 프로파일링(PROFILING)] 선택 동의가 필요합니다. 동의 설정 페이지로 이동하시겠습니까?"
-//         confirmLabel="설정하러 가기"
-//         cancelLabel="취소"
-//         onConfirm={() => {
-//           setNeedConsentModalOpen(false);
-//           navigate('/consent');
-//         }}
-//         onCancel={() => setNeedConsentModalOpen(false)}
-//       />
-
-//       {/* 이미 동의한 경우 완료 시각 안내 모달 */}
-//       <Modal
-//         open={consentInfoModalOpen}
-//         onClose={() => setConsentInfoModalOpen(false)}
-//         title="맞춤 추천 개인정보 동의 현황"
-//         footer={
-//           <Button size="sm" onClick={() => setConsentInfoModalOpen(false)}>
-//             확인
-//           </Button>
-//         }
-//       >
-//         <div className="flex flex-col gap-3 text-[12px] text-[#1F2328]">
-//           <div className="p-3 bg-[#F0FDF4] border border-[#BBF7D0] rounded-[6px]">
-//             <div className="flex items-center justify-between">
-//               <span className="font-bold text-[#059669]">AI 맞춤 프로파일링 (PROFILING)</span>
-//               <span className="font-black px-2 py-0.5 rounded text-[10px] bg-[#DCFCE7] text-[#15803D]">
-//                 동의 완료
-//               </span>
-//             </div>
-//             <p className="text-[11px] text-[#656D76] mt-2">
-//               <strong>동의 일시: </strong>
-//               {thirdPartyShareConsent?.consentedAt
-//                 ? String(thirdPartyShareConsent.consentedAt).replace('T', ' ').slice(0, 19) + ' (KST)'
-//                 : '동의 기록 있음'}
-//             </p>
-//           </div>
-//           <p className="text-[11px] text-[#656D76]">
-//             해당 동의 내역을 바탕으로 회원님의 직무 벡터와 채용공고 간의 코사인 유사도 매칭이 안전하게 수행됩니다.
-//           </p>
-//         </div>
-//       </Modal>
-//     </div>
-//   );
-// }
-
 function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -202,21 +37,6 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
   // 공통 코드 조회 (NCS 직무, 근무 지역)
   const { data: ncsList = [] } = useCommonCode('NCS_CODE');
   const { data: regionList = [] } = useCommonCode('REGION_CODE');
-
-  // // 공통 동의 이력 조회 (유효 동의 여부 및 시각 확인)
-  // const { data: consentHistory = [] } = useQuery({
-  //   queryKey: ['myConsentHistory'],
-  //   queryFn: () => getMyConsentHistory(),
-  //   retry: false,
-  // });
-
-  // // 선택 동의(PROFILING 또는 THIRD_PARTY_SHARE) 유효 동의 객체 확인
-  // const activeConsent = Array.isArray(consentHistory)
-  //   ? consentHistory.find(
-  //       (c) => (c.consentType === 'PROFILING' || c.consentType === 'THIRD_PARTY_SHARE') && !c.withdrawnAt
-  //     ) || consentHistory.find((c) => !c.withdrawnAt)
-  //   : null;
-  // const isProfilingAgreed = Boolean(activeConsent);
 
   // 공통 동의 이력 조회 (유효 동의 여부 및 시각 확인)
   const { data: consentRaw = [] } = useQuery({
@@ -252,7 +72,7 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
   // 희망조건 존재 여부 판정
   // const hasPreference = Boolean(preference?.ncsStandardId || preference?.ncsCodeId || preference?.ncsJobName);
 
-  // 수정 후 (백엔드 DTO 필드명 전체 대응 + 객체 존재 시 true)
+  // 백엔드 DTO 필드명 전체 대응 + 객체 존재 시 true
   const prefObj = preference?.data || preference;
   const hasPreference = Boolean(
     prefObj && (
@@ -326,7 +146,10 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
   const rawList = resData?.data?.content || resData?.data || resData?.content || resData;
   const recommendedJobs = Array.isArray(rawList) ? rawList : [];
   // 최신 공고 탭용 데이터: 추천 API 응답이 없으면 현재 전체 목록(jobList)을 fallback으로 사용
-  const displayLatestJobs = recommendedJobs.length > 0 ? recommendedJobs : (latestFallbackJobs || []);
+  // const displayLatestJobs = recommendedJobs.length > 0 ? recommendedJobs : (latestFallbackJobs || []);
+
+  // AI 추천 여부와 상관없이 부모가 내려준 전체 최신 공고를 그대로 사용
+  const displayLatestJobs = latestFallbackJobs || [];
 
   // 맞춤 추천 동의 관리 버튼 클릭 시
   const handleConsentManageClick = () => {
