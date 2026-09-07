@@ -2,15 +2,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { Button, Modal, Drawer, Pagination, StatTile, toast } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
-import { formatSemester } from '@/utils/academicPeriod';
 import StaffScholarshipTab from './StaffScholarshipTab';
 
 const A = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── shared helpers ────────────────────────────────────────────────────────────
 
-const formatPeriod = (semesterCode) =>
-  formatSemester(semesterCode, { allLabel: '연간', emptyLabel: '연간' });
+const getSemesterLabel = (semesterCodes, code, { allLabel, emptyLabel } = {}) => {
+  if (!code) return emptyLabel !== undefined ? emptyLabel : code;
+  if (code === 'ALL' && allLabel !== undefined) return allLabel;
+  return semesterCodes.find((s) => s.code === code)?.codeName ?? code;
+};
+const formatPeriod = (semesterCodes, code) =>
+  getSemesterLabel(semesterCodes, code, { allLabel: '연간', emptyLabel: '연간' });
 
 /**
  * @param {Object} props
@@ -274,11 +278,10 @@ function TabPolicySettings() {
     refetch: refetchSemesterCodes,
   } = useCommonCode('SEMESTER');
   const registrationSemesterOptions = [
-    { code: 'ALL', codeName: formatPeriod('ALL') },
+    { code: 'ALL', codeName: '연간' },
     ...semesterCodesRaw
       .filter((s) => s.code === 'SPRING' || s.code === 'FALL')
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((s) => ({ ...s, codeName: formatPeriod(s.code) })),
+      .sort((a, b) => a.sortOrder - b.sortOrder),
   ];
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState(null);
@@ -641,7 +644,7 @@ function TabPolicySettings() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 rounded-[8px] bg-[#F9FAFB] p-4 text-[12px]">
                 <div><p className="text-[10px] text-[#9AA0A6]">정책 ID</p><p className="font-bold text-[#1F2328]">#{editId}</p></div>
                 <div><p className="text-[10px] text-[#9AA0A6]">활동유형</p><p className="font-bold text-[#1F2328]">{policies.find((item) => item.mileagePolicyId === editId)?.activityName ?? '-'}</p></div>
-                <div><p className="text-[10px] text-[#9AA0A6]">학기</p><p className="font-bold text-[#1F2328]">{formatPeriod(editForm.semesterCode)}</p></div>
+                <div><p className="text-[10px] text-[#9AA0A6]">학기</p><p className="font-bold text-[#1F2328]">{formatPeriod(semesterCodesRaw, editForm.semesterCode)}</p></div>
               </div>
               <div className="flex gap-3 items-end flex-wrap">
                 <div>
@@ -689,6 +692,7 @@ function TabPolicySettings() {
 // ─── Tab ② 심사 접수함 ─────────────────────────────────────────────────────────
 
 function TabReviewInbox() {
+  const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
   const [reviews, setReviews] = useState([]);
   const [claimPage, setClaimPage] = useState(EMPTY_CLAIM_PAGE);
   const [draftFilters, setDraftFilters] = useState({ status: 'REQUESTED', keyword: '' });
@@ -1258,7 +1262,7 @@ function TabReviewInbox() {
                     {
                       l: '적용 정책',
                       v: detailPolicy
-                        ? formatPeriod(detailPolicy.semesterCode) + ' / v' +
+                        ? formatPeriod(semesterCodes, detailPolicy.semesterCode) + ' / v' +
                           String(detailPolicy.versionNo ?? '-')
                         : '-',
                     },

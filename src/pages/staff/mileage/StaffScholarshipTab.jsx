@@ -9,7 +9,6 @@ import {
   toast,
 } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
-import { formatSemester } from '@/utils/academicPeriod';
 
 const ACCENT = '#1F2937';
 const BENEFIT_TYPE = 'SCHOLARSHIP';
@@ -80,8 +79,13 @@ const formatDateTime = (value) => {
   });
 };
 
-const formatPeriod = (semesterCode) =>
-  formatSemester(semesterCode, { allLabel: '연간', emptyLabel: '연간' });
+const getSemesterLabel = (semesterCodes, code, { allLabel, emptyLabel } = {}) => {
+  if (!code) return emptyLabel !== undefined ? emptyLabel : code;
+  if (code === 'ALL' && allLabel !== undefined) return allLabel;
+  return semesterCodes.find((s) => s.code === code)?.codeName ?? code;
+};
+const formatPeriod = (semesterCodes, code) =>
+  getSemesterLabel(semesterCodes, code, { allLabel: '연간', emptyLabel: '연간' });
 
 const formatApplicationPeriod = (policy) => (
   `${policy.applicationStartsAt ? formatDateTime(policy.applicationStartsAt) : '상시'} ~ ${policy.applicationEndsAt ? formatDateTime(policy.applicationEndsAt) : '마감 없음'}`
@@ -236,7 +240,7 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
             <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>{BENEFIT_TYPE}</div>
           </Field>
           <Field label="적용 학기">
-            <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>{formatPeriod(form.semesterCode)}</div>
+            <div className={`${FIELD_CLASS} flex items-center text-[#656D76]`}>{formatPeriod(semesterCodes, form.semesterCode)}</div>
           </Field>
         </>
       ) : (
@@ -393,7 +397,11 @@ function PolicyFormFields({ form, onChange, disabled, identityReadOnly = false }
  * - PATCH /staff/mileage/benefit-policies/{benefitPolicyId}
  */
 export default function StaffScholarshipTab() {
-  const { isLoading: semesterCodesLoading, isError: semesterCodesError } = useCommonCode('SEMESTER');
+  const {
+    data: semesterCodes = [],
+    isLoading: semesterCodesLoading,
+    isError: semesterCodesError,
+  } = useCommonCode('SEMESTER');
   const [page, setPage] = useState(1);
   const [policyPage, setPolicyPage] = useState(EMPTY_POLICY_PAGE);
   const [loading, setLoading] = useState(true);
@@ -661,7 +669,7 @@ export default function StaffScholarshipTab() {
                   <tr key={policy.benefitPolicyId} className={`border-b border-[#F3F4F6] last:border-0 ${index % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}>
                     <td className="whitespace-nowrap px-3 py-3 text-center font-mono text-[10px] text-[#656D76]">#{policy.benefitPolicyId}</td>
                     <td className="px-3 py-3 text-left font-semibold text-[#1F2328]">{policy.benefitName ?? '-'}</td>
-                    <td className="whitespace-nowrap px-3 py-3 text-center text-[#656D76]">{formatPeriod(policy.semesterCode)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-center text-[#656D76]">{formatPeriod(semesterCodes, policy.semesterCode)}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-center font-black text-[#1F2328]">{formatPoints(policy.minimumPoints)}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-center font-semibold text-[#D97706]">{formatAmount(policy.benefitAmount)}</td>
                     <td className="max-w-[260px] px-3 py-3 text-center text-[11px] text-[#656D76]">{formatApplicationPeriod(policy)}</td>

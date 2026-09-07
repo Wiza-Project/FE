@@ -5,7 +5,7 @@ import {
   fetchMileageDashboard,
   fetchMileageGrade,
 } from '@/api/mileage';
-import { formatSemester as formatSemesterCode } from '@/utils/academicPeriod';
+import { useCommonCode } from '@/hooks/useCommonCode';
 import ScholarshipTab from './ScholarshipTab';
 import ExternalActivity from './ExternalActivity';
 import { PageHeader, StatTile, Button, BarChart, Pagination, Drawer } from '@/components/common';
@@ -38,7 +38,11 @@ const BENEFIT_PROGRESS_STATUS_LABELS = {
 };
 
 const formatPoints = (value) => Number(value ?? 0).toLocaleString('ko-KR');
-const formatSemester = (semesterCode) => formatSemesterCode(semesterCode, { emptyLabel: '-' });
+const getSemesterLabel = (semesterCodes, code, { allLabel, emptyLabel } = {}) => {
+  if (!code) return emptyLabel !== undefined ? emptyLabel : code;
+  if (code === 'ALL' && allLabel !== undefined) return allLabel;
+  return semesterCodes.find((s) => s.code === code)?.codeName ?? code;
+};
 const parseDate = (value) => {
   if (!value) return null;
   const date = new Date(value);
@@ -166,6 +170,7 @@ function TrendChart({ data = [] }) {
 }
 
 export default function MileageDashboard() {
+  const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
   const [tab, setTab] = useState('dashboard');
   const [page, setPage] = useState(1);
   const [dashboardData, setDashboardData] = useState(null);
@@ -313,14 +318,14 @@ export default function MileageDashboard() {
     ? Number(dashboardData.summary?.currentSemesterPoints ?? 0)
     : 0;
   const currentPeriod = dashboardData?.period ?? period;
-  const semesterLabel = currentPeriod ? formatSemester(currentPeriod.semesterCode) : '-';
+  const semesterLabel = currentPeriod ? getSemesterLabel(semesterCodes, currentPeriod.semesterCode, { emptyLabel: '-' }) : '-';
   const shortenCompetencyLabel = (name) => (name ?? '').replace(/역량$/, '').trim() || name || '';
   const competencyData = (dashboardData?.competencyBreakdown ?? []).map((item) => ({
     label: shortenCompetencyLabel(item.competencyName),
     value: Number(item.points ?? 0),
   }));
   const trendData = (dashboardData?.semesterTrend ?? []).map((item) => ({
-    label: formatSemester(item.semesterCode),
+    label: getSemesterLabel(semesterCodes, item.semesterCode, { emptyLabel: '-' }),
     value: Number(item.points ?? 0),
   }));
   const programTypeData = (dashboardData?.programTypeBreakdown ?? []).map((item) => ({
@@ -778,7 +783,7 @@ export default function MileageDashboard() {
                   <div className="flex justify-between gap-3">
                     <span className="text-[#9AA0A6]">적용 학기</span>
                     <span className="text-[#1F2328]">
-                      {formatSemester(transactionDetail.policy.semesterCode)}
+                      {getSemesterLabel(semesterCodes, transactionDetail.policy.semesterCode, { emptyLabel: '-' })}
                     </span>
                   </div>
                   <div className="flex justify-between gap-3">
