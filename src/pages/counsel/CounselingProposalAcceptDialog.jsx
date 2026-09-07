@@ -259,20 +259,32 @@ export default function CounselingProposalAcceptDialog({ proposal, onClose, onAc
       const isScheduleGone =
         error instanceof ApiError &&
         error.code === COUNSELING_PROPOSAL_ERROR_CODE.SCHEDULE_NOT_AVAILABLE;
-      const isConsentInvalid =
+      const isForbidden =
         error instanceof ApiError && error.code === COUNSELING_PROPOSAL_ERROR_CODE.FORBIDDEN;
       const isProposalStale =
         error instanceof ApiError &&
         (error.code === COUNSELING_PROPOSAL_ERROR_CODE.PROPOSAL_NOT_FOUND ||
           error.code === COUNSELING_PROPOSAL_ERROR_CODE.PROPOSAL_NOT_RESPONDABLE);
       if (isScheduleGone) await queryClient.invalidateQueries({ queryKey: ['availableSchedules'] });
-      if (isConsentInvalid) {
-        queryClient.invalidateQueries({ queryKey: CONSENT_POLICIES_QUERY_KEY });
-        queryClient.invalidateQueries({ queryKey: MY_CONSENTS_QUERY_KEY });
+      if (isForbidden) {
+        // A004는 동의 오류와 학생 권한 오류를 구분하지 않으므로, 동의만 다시 읽고
+        // 현재 수락 화면을 유지하면 유효한 activeConsent로 같은 요청을 반복할 수 있다.
+        // 동의와 학생 전용 제안 목록을 함께 재조회한 뒤 수락 흐름을 닫아 실패를 보수적으로 처리한다.
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: CONSENT_POLICIES_QUERY_KEY }),
+          queryClient.invalidateQueries({ queryKey: MY_CONSENTS_QUERY_KEY }),
+          queryClient.invalidateQueries({ queryKey: ['myCounselingProposals'] }),
+        ]);
       }
       if (isProposalStale)
         await queryClient.invalidateQueries({ queryKey: ['myCounselingProposals'] });
       if (!isMountedRef.current) return;
+      if (isForbidden) {
+        resetAcceptState();
+        toast(getAcceptErrorMessage(error), 'error');
+        onClose();
+        return;
+      }
       if (isProposalStale) {
         resetAcceptState();
         toast(getAcceptErrorMessage(error), 'error');
@@ -282,8 +294,6 @@ export default function CounselingProposalAcceptDialog({ proposal, onClose, onAc
       setAcceptConfirmOpen(false);
       setAcceptError(getAcceptErrorMessage(error));
       if (isScheduleGone) setSelectedScheduleId(null);
-      if (isConsentInvalid)
-        setCheckedConsent({ checked: false, consentPolicyId: null, version: null });
     },
     onSettled: () => {
       acceptInFlightRef.current = false;
