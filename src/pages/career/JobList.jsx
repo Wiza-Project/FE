@@ -52,7 +52,7 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
     ? consentRaw
     : [];
 
-  // 선택 동의(THIRD_PARTY_SHARE 또는 PROFILING) 유효 객체 탐색
+  // 선택 동의(필수동의 THIRD_PARTY_SHARE 방어로직, 선택동의 PROFILING) 유효 객체 탐색
   const activeConsent = consentHistory.find((c) => {
     const type = c.consentType || c.policyConsentType || c.type;
     const isTargetType = type === 'THIRD_PARTY_SHARE' || type === 'PROFILING';
