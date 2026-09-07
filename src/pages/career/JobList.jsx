@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { PageHeader, Button, Pagination, ConfirmDialog, Modal, toast } from '@/components/common';
-import { getJobPostings, getRecommendedPostings, toggleJobScrap, getJobPreference, getJobBookmarks, getMyConsentHistory, saveJobPreference } from '@/api/career';
+import { getJobPostings, getRecommendedPostings, getLatestSliderPostings, toggleJobScrap, getJobPreference, getJobBookmarks, getMyConsentHistory, saveJobPreference } from '@/api/career';
 import { POSTING_TYPE, POSTING_TYPE_LABEL } from '@/constants/domain';
 import { useCommonCode } from '@/hooks/useCommonCode';
+
+import { agreeToConsentPolicy } from '@/api/consent'; // 프로젝트 내 consent API 경로
 
 const ACCENT = '#059669';
 const PAGE_SIZE = 10;
@@ -27,6 +29,7 @@ function calculateDDay(endDateStr) {
 }
 
 function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
+// function AiRecommendationBanner({ onDetail }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('AI');
@@ -52,15 +55,52 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
     ? consentRaw
     : [];
 
-  // 선택 동의(필수동의 THIRD_PARTY_SHARE 방어로직, 선택동의 PROFILING) 유효 객체 탐색
+  // // 선택 동의(필수동의 THIRD_PARTY_SHARE 방어로직, 선택동의 PROFILING) 유효 객체 탐색
+  // const activeConsent = consentHistory.find((c) => {
+  //   const type = c.consentType || c.policyConsentType || c.type;
+  //   const isTargetType = type === 'THIRD_PARTY_SHARE' || type === 'PROFILING';
+  //   const isValid = !c.withdrawnAt && !c.isWithdrawn;
+  //   return isTargetType && isValid;
+  // }) || consentHistory.find((c) => !c.withdrawnAt && !c.isWithdrawn);
+
+  // const isProfilingAgreed = Boolean(activeConsent);
+
+  // 오직 취창업 맞춤 추천(PROFILING)에 유효하게 동의했는지만 검사
   const activeConsent = consentHistory.find((c) => {
     const type = c.consentType || c.policyConsentType || c.type;
-    const isTargetType = type === 'THIRD_PARTY_SHARE' || type === 'PROFILING';
+    const module = c.moduleCode || c.module;
     const isValid = !c.withdrawnAt && !c.isWithdrawn;
-    return isTargetType && isValid;
-  }) || consentHistory.find((c) => !c.withdrawnAt && !c.isWithdrawn);
+    
+    // 필수동의(COMMON)는 완전히 배제하고, PROFILING 또는 CAREER 모듈 동의만 타겟팅
+    const isProfilingType = type === 'PROFILING' || (module === 'CAREER' && type === 'THIRD_PARTY_SHARE');
+    return isProfilingType && isValid;
+  });
 
   const isProfilingAgreed = Boolean(activeConsent);
+
+  // 1. 취창업(CAREER) 활성 정책 목록 조회 (consentPolicyId 획득용)
+  const { data: careerPolicies = [] } = useQuery({
+    queryKey: ['careerConsentPolicies'],
+    queryFn: () => fetchConsentPolicies('CAREER'),
+  });
+
+  // 2. 모달 동의 클릭 시 백엔드 DB 적재(POST /consents) Mutation
+  const agreeConsentMutation = useMutation({
+    mutationFn: () => agreeToConsentPolicy(7), // DB 7번 정책: AI 맞춤형 채용공고 추천 활용 동의(PROFILING)
+    onSuccess: async () => {
+      toast('취창업 맞춤 추천 서비스 동의가 완료되었습니다.', 'success');
+      setNeedConsentModalOpen(false);
+      // 동의 내역 캐시 무효화 -> 화면 즉시 isProfilingAgreed = true로 전환
+      await queryClient.invalidateQueries({ queryKey: ['myConsentHistory'] });
+      await queryClient.invalidateQueries({ queryKey: ['careerRecommendedJobs'] });
+      if (!hasPreference) {
+        setPreferenceModalOpen(true);
+      }
+    },
+    onError: (err) => {
+      toast(err?.response?.data?.message || '동의 처리에 실패했습니다.', 'error');
+    },
+  });
 
   // 희망조건 조회 (404 발생 시 retry 차단 및 null 수신)
   const { data: preference } = useQuery({
@@ -136,20 +176,38 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
   };
 
   // AI 맞춤 추천 공고 조회 (희망조건이 등록되어 있을 때 실행)
-  const { data: resData, isLoading } = useQuery({
+  // const { data: resData, isLoading } = useQuery({
+  //   queryKey: ['careerRecommendedJobs'],
+  //   queryFn: () => getRecommendedPostings(),
+  //   enabled: hasPreference,
+  // });
+  const { data: resData, isLoading: isAiLoading } = useQuery({
     queryKey: ['careerRecommendedJobs'],
     queryFn: () => getRecommendedPostings(),
-    enabled: hasPreference,
+    enabled: isProfilingAgreed && hasPreference,
   });
 
   // 응답 데이터 포맷 정규화
-  const rawList = resData?.data?.content || resData?.data || resData?.content || resData;
-  const recommendedJobs = Array.isArray(rawList) ? rawList : [];
+  // const rawList = resData?.data?.content || resData?.data || resData?.content || resData;
+  const rawAiList = resData?.data?.content || resData?.data || resData?.content || resData;
+  // const recommendedJobs = Array.isArray(rawList) ? rawList : [];
+  const recommendedJobs = Array.isArray(rawAiList) ? rawAiList : [];
   // 최신 공고 탭용 데이터: 추천 API 응답이 없으면 현재 전체 목록(jobList)을 fallback으로 사용
   // const displayLatestJobs = recommendedJobs.length > 0 ? recommendedJobs : (latestFallbackJobs || []);
 
   // AI 추천 여부와 상관없이 부모가 내려준 전체 최신 공고를 그대로 사용
-  const displayLatestJobs = latestFallbackJobs || [];
+  // const displayLatestJobs = latestFallbackJobs || [];
+
+  const latestJobs = latestFallbackJobs || [];
+
+  // 0907 최신 활성 공고 상위 10건 단독 조회
+  // const { data: latestSliderRaw, isLoading: isLatestLoading } = useQuery({
+  //   queryKey: ['careerLatestSliderJobs'],
+  //   queryFn: () => getLatestSliderPostings(),
+  // });
+
+  // const rawLatestList = latestSliderRaw?.data?.content || latestSliderRaw?.data || latestSliderRaw?.content || latestSliderRaw;
+  // const latestJobs = Array.isArray(rawLatestList) ? rawLatestList : [];
 
   // 맞춤 추천 동의 관리 버튼 클릭 시
   const handleConsentManageClick = () => {
@@ -178,7 +236,7 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
               activeTab === 'LATEST' ? 'bg-[#065F46] text-white shadow-sm' : 'bg-white text-[#065F46] border border-[#A7F3D0]'
             }`}
           >
-            🔥 실시간 최신 공고 (전체)
+            🔥 마감 임박 공고 (전체)
           </button>
         </div>
 
@@ -215,11 +273,13 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
             </Button>
           </div>
         ) : (
-          renderCards(recommendedJobs, isLoading, onDetail, '직무맞춤')
+          // renderCards(recommendedJobs, isLoading, onDetail, '직무맞춤')
+          renderCards(recommendedJobs, isAiLoading, onDetail, '직무맞춤')
         )
       ) : (
         // 최신등록 탭에서는 displayLatestJobs를 제공
-        renderCards(displayLatestJobs, isLoading, onDetail, '최신등록')
+        // renderCards(latestJobs, isLatestLoading, onDetail, '최신등록')원래
+        renderCards(latestJobs, false, onDetail, '마감임박')
       )}
 
       {/* 1. 인라인 취업 희망조건 설정/수정 모달 */}
@@ -349,7 +409,7 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
       </Modal>
 
       {/* 3. 미동의 시 유도 다이얼로그 */}
-      <ConfirmDialog
+      {/* <ConfirmDialog
         open={needConsentModalOpen}
         title="AI 맞춤 추천 서비스 동의 안내"
         message="AI 역량 분석 및 희망 조건 기반 맞춤 채용공고를 추천받으시려면 개인정보 선택 동의가 필요합니다. 동의 설정 페이지로 이동하시겠습니까?"
@@ -358,6 +418,17 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
         onConfirm={() => {
           setNeedConsentModalOpen(false);
           navigate('/consent');
+        }}
+        onCancel={() => setNeedConsentModalOpen(false)}
+      /> */}
+      <ConfirmDialog
+        open={needConsentModalOpen}
+        title="AI 맞춤 추천 서비스 동의 안내"
+        message="AI 역량 분석 및 희망 조건 기반 맞춤 채용공고를 추천받으시려면 개인정보 선택 동의가 필요합니다. 동의하고 서비스를 이용하시겠습니까?"
+        confirmLabel={agreeConsentMutation.isPending ? '처리 중...' : '동의하고 추천받기'}
+        cancelLabel="취소"
+        onConfirm={() => {
+          agreeConsentMutation.mutate();
         }}
         onCancel={() => setNeedConsentModalOpen(false)}
       />
@@ -373,12 +444,14 @@ function renderCards(jobs, isLoading, onDetail, defaultBadge) {
     return <div className="text-[12px] text-[#656D76] py-4 text-center">현재 등록된 공고가 없습니다.</div>;
   }
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {jobs.slice(0, 3).map((job) => (
+    // <div className="grid grid-cols-3 gap-3">
+    <div className="flex flex-nowrap gap-3 overflow-x-auto pb-2.5 pt-1 snap-x snap-mandatory scrollbar-thin">
+      {jobs.slice(0, 10).map((job) => (
         <div
           key={job.jobPostingId}
           onClick={() => onDetail(job.jobPostingId)}
-          className="bg-white rounded-[8px] border border-[#D1FAE5] p-3 hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
+          // className="bg-white rounded-[8px] border border-[#D1FAE5] p-3 hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
+          className="w-[300px] min-w-[300px] flex-shrink-0 snap-start bg-white rounded-[8px] border border-[#D1FAE5] p-3 hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -390,7 +463,8 @@ function renderCards(jobs, isLoading, onDetail, defaultBadge) {
               </span>
             </div>
             <p className="text-[12px] font-bold text-[#1F2328] line-clamp-1 hover:text-[#059669]">
-              {job.postingTitle}
+              {/* {job.postingTitle} */}
+              {job.postingTitle?.replace(/\s*\([^)]*No[^)]*\)/gi, '').trim()}
             </p>
             <p className="text-[11px] text-[#656D76] mt-0.5">{job.companyName}</p>
           </div>
@@ -494,6 +568,9 @@ export default function JobList({ onDetail, onBookmarks, onGoPreference }) {
         // onGoPreference={onGoPreference}
         latestFallbackJobs={jobList}
       />
+      {/* <AiRecommendationBanner
+        onDetail={onDetail}
+      /> */}
 
       {/* 4분할 검색 필터 바 */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-3 mb-4 flex items-end gap-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
@@ -639,7 +716,8 @@ export default function JobList({ onDetail, onBookmarks, onGoPreference }) {
                         </span>
                       )}
                       <span className="font-semibold text-[#1F2328] hover:text-[#059669] transition-colors leading-snug">
-                        {j.postingTitle}
+                        {/* {j.postingTitle} */}
+                        {j.postingTitle?.replace(/\s*\([^)]*No[^)]*\)/gi, '').trim()}
                       </span>
                     </div>
                   </td>

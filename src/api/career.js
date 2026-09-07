@@ -86,6 +86,15 @@ export const getJobPostingDetail = (id) =>
 export const getRecommendedPostings = () =>
   apiClient.get('/students/career/matching/recommendations').then((res) => res.data);
 
+
+/**0907
+ * [학생] 메인 대시보드 배너 슬라이더용 최신 활성 채용공고 상위 10건 조회
+ * GET /api/career/job-postings/latest-slider
+ * @returns {Promise<Array<JobPostingSummaryResponseDTO>>}
+ */
+export const getLatestSliderPostings = () =>
+  apiClient.get('/students/career/job-postings/latest-slider').then((res) => res.data);
+
 /**
  * @typedef {Object} JobRelationRequest
  * @property {number} jobPostingId 지원할 채용공고 식별자
