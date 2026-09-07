@@ -57,7 +57,6 @@ const BTN_MAP = {
   신청완료: { label: '취소', variant: 'outline' },
   승인: { label: '취소', variant: 'danger' },
   반려: { label: '사유확인', variant: 'secondary' },
-  미수료: { label: '이의신청', variant: 'secondary' },
   대기: { label: '취소', variant: 'outline' },
   취소: { label: '재신청', variant: 'outline' },
 };
@@ -498,20 +497,22 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
                             >
                               출결
                             </button>
-                            <button
-                              onClick={() => handleBtn(app)}
-                              disabled={cancelingIds.has(app.programId)}
-                              className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                                app.status === '반려'
-                                  ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
-                                  : 'border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'
-                              }`}
-                              style={
-                                app.status === '수료' ? { background: '#7C3AED', color: 'white' } : {}
-                              }
-                            >
-                              {cancelingIds.has(app.programId) ? '처리 중...' : (btn?.label ?? app.status)}
-                            </button>
+                            {app.status !== '미수료' && (
+                              <button
+                                onClick={() => handleBtn(app)}
+                                disabled={cancelingIds.has(app.programId)}
+                                className={`h-7 px-3 text-[11px] font-bold rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                                  app.status === '반려'
+                                    ? 'text-[#CF222E] border border-[#CF222E] hover:bg-[#FEF2F2]'
+                                    : 'border border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'
+                                }`}
+                                style={
+                                  app.status === '수료' ? { background: '#7C3AED', color: 'white' } : {}
+                                }
+                              >
+                                {cancelingIds.has(app.programId) ? '처리 중...' : (btn?.label ?? app.status)}
+                              </button>
+                            )}
                           </>
                         )}
                       </div>

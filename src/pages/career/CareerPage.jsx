@@ -8,6 +8,8 @@ import CareerPrepPage from './CareerPrepPage';
  * 취업·창업 화면 허브. 상단 섹션 스위처(채용공고/취업 준비) + 채용공고 하위
  * 뷰(목록/상세/관심공고)를 로컬 상태로 전환하는 하나의 화면입니다.
  */
+
+// TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
 export default function CareerPage() {
   const [section, setSection] = useState('jobs');
   const [jobView, setJobView] = useState('list');

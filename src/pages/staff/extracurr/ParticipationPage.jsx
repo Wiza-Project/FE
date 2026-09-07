@@ -7,6 +7,9 @@ import {
   rejectApplication,
   bulkApproveApplications,
   bulkRejectApplications,
+  fetchProgramDetailAdmin,
+  fetchSessionAttendance,
+  recordAttendance,
 } from '@/api/programs';
 import { formatDate } from '@/utils/date';
 import { fetchAllPages } from '@/utils/pagination';
@@ -68,136 +71,27 @@ const APPR_STYLE = {
   CANCELLED: { bg: '#F3F4F6', text: '#9AA0A6' },
 };
 
-// ─── Dummy data (②③ 탭용, 백엔드 API 준비 전까지 유지) ─────────────────────────
+// ─── ② 출결 관리용 상수 ────────────────────────────────────────────────────────
+// 백엔드 출결 상태는 PRESENT/ABSENT 2단계만 존재한다(LATE 없음). 아직 기록되지
+// 않은 (학생, 회차)는 unrecorded(null)로 취급한다.
 
 const ATT_STYLE = {
-  출: { bg: '#D1FAE5', text: '#059669', label: '출' },
-  지: { bg: '#FEF3C7', text: '#D97706', label: '지' },
-  결: { bg: '#FEE2E2', text: '#CF222E', label: '결' },
+  PRESENT: { bg: '#D1FAE5', text: '#059669', label: '출' },
+  ABSENT: { bg: '#FEE2E2', text: '#CF222E', label: '결' },
 };
+const UNRECORDED_STYLE = { bg: '#F3F4F6', text: '#9AA0A6', label: '-' };
 
-const ATT_CYCLE = ['출', '지', '결'];
-
-const STUDENTS_RAW = [
-  {
-    studentId: '20231234',
-    name: '홍길동',
-    dept: '컴퓨터공학과',
-    att: ['출', '출', '출', '출', '출'],
-    journalCount: 5,
-    surveyDone: true,
-  },
-  {
-    studentId: '20231111',
-    name: '김영희',
-    dept: '경영학과',
-    att: ['출', '출', '출', '지', '출'],
-    journalCount: 5,
-    surveyDone: true,
-  },
-  {
-    studentId: '20230777',
-    name: '이민수',
-    dept: '산업공학과',
-    att: ['출', '출', '결', '출', '출'],
-    journalCount: 4,
-    surveyDone: true,
-  },
-  {
-    studentId: '20232050',
-    name: '최지수',
-    dept: '심리학과',
-    att: ['출', '출', '출', '출', '지'],
-    journalCount: 5,
-    surveyDone: false,
-  },
-  {
-    studentId: '20231876',
-    name: '정하준',
-    dept: '컴퓨터공학과',
-    att: ['출', '결', '결', '출', '출'],
-    journalCount: 3,
-    surveyDone: true,
-  },
-  {
-    studentId: '20231654',
-    name: '윤태양',
-    dept: '경영학과',
-    att: ['출', '출', '출', '출', '결'],
-    journalCount: 5,
-    surveyDone: true,
-  },
-  {
-    studentId: '20230912',
-    name: '임채원',
-    dept: '컴퓨터공학과',
-    att: ['출', '출', '지', '출', '출'],
-    journalCount: 5,
-    surveyDone: true,
-  },
-  {
-    studentId: '20232200',
-    name: '강다은',
-    dept: '심리학과',
-    att: ['결', '결', '결', '출', '출'],
-    journalCount: 2,
-    surveyDone: false,
-  },
-  {
-    studentId: '20231010',
-    name: '조현우',
-    dept: '사회복지학과',
-    att: ['출', '출', '출', '출', '출'],
-    journalCount: 5,
-    surveyDone: true,
-  },
-  {
-    studentId: '20231780',
-    name: '전민재',
-    dept: '경영학과',
-    att: ['출', '출', '출', '결', '출'],
-    journalCount: 4,
-    surveyDone: true,
-  },
-  {
-    studentId: '20231900',
-    name: '문지호',
-    dept: '컴퓨터공학과',
-    att: ['출', '출', '출', '출', '출'],
-    journalCount: 5,
-    surveyDone: true,
-  },
-  {
-    studentId: '20232510',
-    name: '신지민',
-    dept: '심리학과',
-    att: ['출', '지', '출', '출', '출'],
-    journalCount: 5,
-    surveyDone: true,
-  },
-  {
-    studentId: '20232100',
-    name: '방수진',
-    dept: '경영학과',
-    att: ['결', '결', '출', '출', '결'],
-    journalCount: 1,
-    surveyDone: false,
-  },
-  {
-    studentId: '20240610',
-    name: '황은서',
-    dept: '산업공학과',
-    att: ['출', '출', '출', '출', '지'],
-    journalCount: 5,
-    surveyDone: true,
-  },
-];
+// 셀 클릭 시 상태 순환: 미기록 → 출 → 결 → 출 → ... (미기록으로 되돌리는 것은 불가)
+function nextAttStatus(current) {
+  return current === 'PRESENT' ? 'ABSENT' : 'PRESENT';
+}
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function attRate(att) {
-  const present = att.filter((a) => a === '출' || a === '지').length;
-  return Math.round((present / att.length) * 100);
+  const recorded = att.filter((a) => a === 'PRESENT' || a === 'ABSENT');
+  const present = recorded.filter((a) => a === 'PRESENT').length;
+  return recorded.length === 0 ? 0 : Math.round((present / recorded.length) * 100);
 }
 
 // ─── ① 신청 심사 ─────────────────────────────────────────────────────────────
@@ -602,37 +496,92 @@ function ApplicationReview({ programId }) {
 
 // ─── ② 출결 관리 ─────────────────────────────────────────────────────────────
 
-function AttendanceManage() {
-  const TOTAL_ROUNDS = 5;
-  const [students, setStudents] = useState(STUDENTS_RAW.map((s) => ({ ...s, att: [...s.att] })));
+function AttendanceManage({ programId }) {
+  const queryClient = useQueryClient();
   const [editTarget, setEditTarget] = useState(null);
   const [editReason, setEditReason] = useState('');
 
-  const handleAttChange = (sid, round) => {
-    setEditTarget({ sid, round });
+  const { data: programDetail, isLoading: isDetailLoading, isError: isDetailError } = useQuery({
+    queryKey: ['adminProgramDetail', programId],
+    queryFn: () => fetchProgramDetailAdmin(programId),
+    enabled: !!programId,
+  });
+  const sessions = programDetail?.sessions ?? [];
+  const sessionIds = sessions.map((sess) => sess.programSessionId);
+
+  const { data: applications, isLoading: isAppLoading, isError: isAppError } = useQuery({
+    queryKey: ['programApplications', programId, '전체'],
+    queryFn: () => fetchAllPages((p) => fetchProgramApplications(programId, p)),
+    enabled: !!programId,
+  });
+  const approvedApplications = (applications ?? []).filter(
+    (a) => a.applicationStatus === 'APPROVED',
+  );
+
+  const { data: attendanceBySession, isLoading: isAttLoading, isError: isAttError } = useQuery({
+    queryKey: ['sessionAttendances', programId, sessionIds],
+    queryFn: () =>
+      Promise.all(sessionIds.map((sessionId) => fetchSessionAttendance(programId, sessionId))),
+    enabled: !!programId && sessionIds.length > 0,
+  });
+
+  // `applicationId-programSessionId` -> attendanceStatus. 응답에 없는 조합은 미기록.
+  const attendanceMap = new Map();
+  (attendanceBySession ?? []).forEach((records) => {
+    records.forEach((r) => {
+      attendanceMap.set(`${r.applicationId}-${r.programSessionId}`, r.attendanceStatus);
+    });
+  });
+
+  const recordMutation = useMutation({
+    mutationFn: ({ sessionId, applicationId, attendanceStatus, note }) =>
+      recordAttendance(programId, sessionId, applicationId, { attendanceStatus, note }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessionAttendances', programId] });
+      toast('출결이 수정되었습니다. 수정 이력이 기록됩니다.', 'success');
+      setEditTarget(null);
+      setEditReason('');
+    },
+    onError: (err) => toast(err.message ?? '출결 수정에 실패했습니다.', 'error'),
+  });
+
+  const handleAttChange = (applicationId, studentName, sessionId, roundLabel, currentStatus) => {
+    setEditTarget({
+      applicationId,
+      studentName,
+      sessionId,
+      roundLabel,
+      nextStatus: nextAttStatus(currentStatus),
+    });
     setEditReason('');
   };
 
   const confirmAttChange = () => {
+    if (recordMutation.isPending) return;
     if (!editReason.trim()) {
       toast('수정 사유를 입력해 주세요.', 'error');
       return;
     }
     if (!editTarget) return;
-    setStudents((prev) =>
-      prev.map((s) => {
-        if (s.studentId !== editTarget.sid) return s;
-        const att = [...s.att];
-        const cur = att[editTarget.round];
-        const idx = ATT_CYCLE.indexOf(cur);
-        att[editTarget.round] = ATT_CYCLE[(idx + 1) % 3];
-        return { ...s, att };
-      }),
-    );
-    toast('출결이 수정되었습니다. 수정 이력이 기록됩니다.', 'success');
-    setEditTarget(null);
-    setEditReason('');
+    recordMutation.mutate({
+      sessionId: editTarget.sessionId,
+      applicationId: editTarget.applicationId,
+      attendanceStatus: editTarget.nextStatus,
+      note: editReason.trim(),
+    });
   };
+
+  const isLoading = isDetailLoading || isAppLoading || isAttLoading;
+  const isError = isDetailError || isAppError || isAttError;
+  const colCount = sessions.length + 3;
+
+  if (isError) {
+    return (
+      <div className="bg-white rounded-[8px] border border-[#FEE2E2] px-4 py-12 text-center text-[13px] text-[#CF222E]">
+        출결 정보를 불러오지 못했습니다.
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -645,13 +594,12 @@ function AttendanceManage() {
                 {[
                   '학번',
                   '성명',
-                  '학과',
-                  ...Array.from({ length: TOTAL_ROUNDS }, (_, i) => `${i + 1}회차`),
+                  ...sessions.map((sess, i) => sess.sessionName || `${i + 1}회차`),
                   '출석률',
                 ].map((h, i) => (
                   <th
                     key={`${h}-${i}`}
-                    className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 3 ? 'text-center' : 'text-left'}`}
+                    className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 2 ? 'text-center' : 'text-left'}`}
                   >
                     {h}
                   </th>
@@ -659,43 +607,72 @@ function AttendanceManage() {
               </tr>
             </thead>
             <tbody>
-              {students.map((s) => {
-                const rate = attRate(s.att);
-                const fail = rate < 80;
-                return (
-                  <tr
-                    key={s.studentId}
-                    className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
-                      {s.studentId}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-[#1F2328]">{s.name}</td>
-                    <td className="px-4 py-3 text-[#656D76]">{s.dept}</td>
-                    {s.att.map((a, ri) => {
-                      const style = ATT_STYLE[a];
-                      return (
-                        <td key={ri} className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => handleAttChange(s.studentId, ri)}
-                            className="w-7 h-7 rounded-full text-[10px] font-black transition-all hover:scale-110 hover:shadow-md"
-                            style={{ background: style.bg, color: style.text }}
-                          >
-                            {style.label}
-                          </button>
-                        </td>
-                      );
-                    })}
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`text-[12px] font-black ${fail ? 'text-[#CF222E]' : 'text-[#059669]'}`}
-                      >
-                        {rate}%
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+              {isLoading ? (
+                <tr>
+                  <td colSpan={colCount} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
+                    불러오는 중...
+                  </td>
+                </tr>
+              ) : approvedApplications.length === 0 ? (
+                <tr>
+                  <td colSpan={colCount} className="px-4 py-12 text-center text-[13px] text-[#9AA0A6]">
+                    승인된 신청자가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                approvedApplications.map((a) => {
+                  const statuses = sessions.map(
+                    (sess) => attendanceMap.get(`${a.applicationId}-${sess.programSessionId}`) ?? null,
+                  );
+                  const rate = attRate(statuses);
+                  const hasUnrecorded = statuses.some((s) => s === null);
+                  const fail = !hasUnrecorded && rate < 80;
+                  return (
+                    <tr
+                      key={a.applicationId}
+                      className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
+                    >
+                      <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
+                        {a.studentNo}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-[#1F2328]">{a.studentName}</td>
+                      {sessions.map((sess, ri) => {
+                        const status = statuses[ri];
+                        const style = status ? ATT_STYLE[status] : UNRECORDED_STYLE;
+                        return (
+                          <td key={sess.programSessionId} className="px-4 py-3 text-center">
+                            <button
+                              onClick={() =>
+                                handleAttChange(
+                                  a.applicationId,
+                                  a.studentName,
+                                  sess.programSessionId,
+                                  ri + 1,
+                                  status,
+                                )
+                              }
+                              aria-label={`${a.studentName} ${ri + 1}회차 출결 상태: ${
+                                status === 'PRESENT' ? '출석' : status === 'ABSENT' ? '결석' : '미기록'
+                              }. 클릭하면 ${nextAttStatus(status) === 'PRESENT' ? '출석' : '결석'}으로 변경됩니다.`}
+                              className="w-7 h-7 rounded-full text-[10px] font-black transition-all hover:scale-110 hover:shadow-md"
+                              style={{ background: style.bg, color: style.text }}
+                            >
+                              {style.label}
+                            </button>
+                          </td>
+                        );
+                      })}
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`text-[12px] font-black ${fail ? 'text-[#CF222E]' : 'text-[#059669]'}`}
+                        >
+                          {rate}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -708,10 +685,18 @@ function AttendanceManage() {
         title="출결 수정"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditTarget(null)}>
+            <Button
+              variant="outline"
+              disabled={recordMutation.isPending}
+              onClick={() => setEditTarget(null)}
+            >
               취소
             </Button>
-            <Button style={{ background: '#374151' }} onClick={confirmAttChange}>
+            <Button
+              style={{ background: '#374151' }}
+              loading={recordMutation.isPending}
+              onClick={confirmAttChange}
+            >
               수정 확정
             </Button>
           </div>
@@ -720,10 +705,10 @@ function AttendanceManage() {
         <div className="flex flex-col gap-4">
           {editTarget && (
             <div className="p-3 rounded-[8px] bg-[#F3F4F6] border border-[#E5E7EB] text-[12px] text-[#374151]">
-              <span className="font-bold">
-                {students.find((s) => s.studentId === editTarget.sid)?.name}
-              </span>{' '}
-              {editTarget.round + 1}회차 출결을 변경합니다.
+              <span className="font-bold">{editTarget.studentName}</span>{' '}
+              {editTarget.roundLabel}회차 출결을{' '}
+              <span className="font-bold">{ATT_STYLE[editTarget.nextStatus].label}</span>(으)로
+              변경합니다.
             </div>
           )}
           <div>
@@ -735,7 +720,8 @@ function AttendanceManage() {
               value={editReason}
               onChange={(e) => setEditReason(e.target.value)}
               rows={3}
-              placeholder="수정 사유를 입력하세요. (필수)"
+              maxLength={500}
+              placeholder="수정 사유를 입력하세요. (필수, 최대 500자)"
               className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white resize-none focus:outline-none focus:border-[#374151]"
             />
           </div>
@@ -933,7 +919,7 @@ export default function ParticipationPage({ programId, programName, onBack }) {
       </div>
 
       {tab === 'review' && <ApplicationReview programId={programId} />}
-      {tab === 'attendance' && <AttendanceManage />}
+      {tab === 'attendance' && <AttendanceManage programId={programId} />}
       {tab === 'result' && <ResultJudge programId={programId} />}
     </div>
   );

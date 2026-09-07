@@ -184,10 +184,6 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
               {[
                 { label: '주관부서', value: p.operatingUnitCodeName || '-' },
                 { label: '프로그램유형', value: p.programTypeCodeName || '-' },
-                { label: '운영기간', value: period },
-                { label: '장소', value: location },
-                { label: '모집기간', value: recruitPeriod },
-                { label: '정원', value: `${p.capacity}명 (현재 ${applied}명 신청)` },
               ].map((row) => (
                 <div key={row.label} className="flex px-5 py-3">
                   <span className="w-24 flex-shrink-0 text-[13px] font-semibold text-[#656D76]">
@@ -209,6 +205,29 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                   </span>
                 </div>
               )}
+              {p.mileagePoints != null && (
+                <div className="flex px-5 py-3">
+                  <span className="w-24 flex-shrink-0 text-[13px] font-semibold text-[#656D76]">
+                    적립 마일리지
+                  </span>
+                  <span className="text-[13px] font-black text-[#D97706]">
+                    {p.mileagePoints}점
+                  </span>
+                </div>
+              )}
+              {[
+                { label: '모집기간', value: recruitPeriod },
+                { label: '운영기간', value: period },
+                { label: '장소', value: location },
+                { label: '정원', value: `${p.capacity}명 (현재 ${applied}명 신청)` },
+              ].map((row) => (
+                <div key={row.label} className="flex px-5 py-3">
+                  <span className="w-24 flex-shrink-0 text-[13px] font-semibold text-[#656D76]">
+                    {row.label}
+                  </span>
+                  <span className="text-[13px] text-[#1F2328]">{row.value}</span>
+                </div>
+              ))}
               {p.description && (
                 <div className="flex px-5 py-3">
                   <span className="w-24 flex-shrink-0 text-[13px] font-semibold text-[#656D76]">
@@ -244,16 +263,6 @@ export default function ProgramDetail({ programId, onBack, onApplySuccess }) {
                       ))}
                     </div>
                   )}
-                </div>
-              )}
-              {p.mileagePoints != null && (
-                <div className="flex px-5 py-3">
-                  <span className="w-24 flex-shrink-0 text-[13px] font-semibold text-[#656D76]">
-                    적립 마일리지
-                  </span>
-                  <span className="text-[13px] font-black text-[#D97706]">
-                    {p.mileagePoints}점
-                  </span>
                 </div>
               )}
               {p.fileName && (

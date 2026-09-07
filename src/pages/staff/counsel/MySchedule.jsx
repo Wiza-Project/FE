@@ -9,7 +9,11 @@ import {
 } from '@/api/counsel';
 import { ApiError } from '@/api/client';
 import { Button, Drawer, Modal, toast } from '@/components/common';
-import { COUNSELOR_SCHEDULE_STATUS, COUNSELOR_SCHEDULE_STATUS_LABEL } from '@/constants/domain';
+import {
+  COUNSELING_RESERVATION_ERROR_CODE,
+  COUNSELOR_SCHEDULE_STATUS,
+  COUNSELOR_SCHEDULE_STATUS_LABEL,
+} from '@/constants/domain';
 
 const ACCENT = '#1F2937';
 const DAYS = ['월', '화', '수', '목', '금'];
@@ -123,12 +127,18 @@ function buildDateTimeLocal(date, half) {
 function getErrorMessage(error, action) {
   if (!(error instanceof ApiError))
     return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
-  if (error.code === 'A004') return '이 일정에 접근할 권한이 없습니다.';
-  if (error.code === 'C002') return '요청한 일정을 찾을 수 없습니다. 목록을 새로고침해 주세요.';
-  if (error.code === 'S002')
-    return error.message || `일정 겹침, 예약 이력 또는 상태 때문에 ${action}할 수 없습니다.`;
-  if (error.code === 'C001') return error.message || '입력값을 다시 확인해 주세요.';
-  return error.message || `${action} 중 오류가 발생했습니다.`;
+  // 오류 코드는 문자열 리터럴 대신 도메인 상수로 비교한다. 계약이 바뀌면 상수 한 곳만
+  // 고치면 되고, 이 파일만 매핑을 놓치는 일을 막는다.
+  if (error.code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN)
+    return '이 일정에 접근할 권한이 없습니다.';
+  if (error.code === COUNSELING_RESERVATION_ERROR_CODE.RESOURCE_NOT_FOUND)
+    return '활성 상담 유형 또는 요청한 일정을 찾을 수 없습니다. 목록을 새로고침해 주세요.';
+  // 서버 내부 문구(error.message)를 그대로 노출하지 않고 코드별 고정 안전 문구만 보여준다.
+  if (error.code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE)
+    return `일정 겹침, 예약 이력 또는 상태 때문에 ${action}할 수 없습니다. 최신 상태를 확인해 주세요.`;
+  if (error.code === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT)
+    return '입력값을 다시 확인해 주세요.';
+  return `${action} 중 오류가 발생했습니다.`;
 }
 
 function emptyForm(date, start = 0, end = 2) {
