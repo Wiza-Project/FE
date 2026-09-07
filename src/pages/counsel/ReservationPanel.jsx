@@ -14,6 +14,7 @@ import {
   COUNSELING_RESERVATION_ERROR_CODE,
   COUNSELING_RESERVATION_STATUS,
   COUNSELING_RESERVATION_STATUS_LABEL,
+  COUNSELING_TYPE_CODE,
 } from '@/constants/domain';
 import { formatKstDateTime } from './myCounselingDate';
 
@@ -39,7 +40,7 @@ const getReservationListErrorMessage = (error) => {
   return '예약 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
 };
 
-const getReservationMutationErrorMessage = (error, action) => {
+const getReservationMutationErrorMessage = (error, action, isCareerType) => {
   const errorCode = error?.code;
 
   if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.RESERVATION_NOT_FOUND) {
@@ -63,7 +64,9 @@ const getReservationMutationErrorMessage = (error, action) => {
   }
 
   if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
-    return '선택한 일정을 사용할 수 없습니다. 다른 일정을 선택해 주세요.';
+    return isCareerType
+      ? '선택한 일정을 더 이상 사용할 수 없습니다. 지도교수 또는 상담센터에 문의하거나 다른 일정을 선택해 주세요.'
+      : '선택한 일정을 사용할 수 없습니다. 다른 일정을 선택해 주세요.';
   }
 
   if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
@@ -189,7 +192,13 @@ export default function ReservationPanel() {
     // 뒤로 가기로 돌아온 화면도 캐시만 보여 주지 않고 현재 서버 상태를 다시 읽는다.
     refetchOnMount: 'always',
   });
-  const { data: counselingTypes = [], isError: hasCounselingTypesError } = useQuery({
+  const {
+    data: counselingTypes = [],
+    isSuccess: isCounselingTypesSuccess,
+    isFetching: isCounselingTypesFetching,
+    isError: hasCounselingTypesError,
+    refetch: refetchCounselingTypes,
+  } = useQuery({
     queryKey: ['counselingTypes'],
     queryFn: fetchCounselingTypes,
     retry: false,
@@ -213,6 +222,22 @@ export default function ReservationPanel() {
     counselingTypes.forEach((type) => map.set(type.counselingTypeId, type.typeName));
     return map;
   }, [counselingTypes]);
+  // 변경 대상 예약이 진로상담(CS200)인지 판별하기 위한 typeCode 맵. 이미 조회 중인
+  // counselingTypes 응답에서 파생만 하고, 이 값을 인가나 목록 필터링에는 쓰지 않는다.
+  const typeCodeById = useMemo(() => {
+    const map = new Map();
+    counselingTypes.forEach((type) => map.set(type.counselingTypeId, type.typeCode));
+    return map;
+  }, [counselingTypes]);
+  // 상담 유형 조회가 "성공했고 지금 재조회 중이 아닐 때"만 준비 완료로 본다.
+  // isLoading 단독으로는 부족하다: 최초 실패 후 refetch 중이거나 백그라운드 재조회 중이면
+  // isLoading은 false여도 typeCodeById가 아직 확정 전이라 CS200 판별이 흔들린다.
+  // counselingTypes.length 같은 배열 길이로 준비 여부를 판단하지 않는다(빈 목록도 정상 응답일 수 있다).
+  const isCounselingTypesReady = isCounselingTypesSuccess && !isCounselingTypesFetching;
+  const isChangeModalCareerType =
+    changeModal != null &&
+    !hasCounselingTypesError &&
+    typeCodeById.get(changeModal.counselingTypeId) === COUNSELING_TYPE_CODE.CAREER;
   const alternativeSchedules = availableSchedules.filter(
     (schedule) => schedule.scheduleId !== changeModal?.counselingScheduleId,
   );
@@ -386,9 +411,15 @@ export default function ReservationPanel() {
         return;
       }
 
-      const message = getReservationMutationErrorMessage(error, 'change');
+      const message = getReservationMutationErrorMessage(error, 'change', isChangeModalCareerType);
 
       setChangeError(message);
+      // S002(SCHEDULE_NOT_AVAILABLE): 선택한 새 일정이 그 사이 사라졌다는 뜻이라, 낡은
+      // 선택값으로 재제출되지 않도록 비운다. 변경 가능 목록·예약 목록은 아래
+      // refreshReservationData가 무효화해 다시 조회한다.
+      if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
+        setChangeScheduleId('');
+      }
       await refreshReservationData();
       if (!isMountedRef.current) {
         return;
@@ -527,7 +558,15 @@ export default function ReservationPanel() {
 
     // stale 충돌 상태에서는 사용자가 "최신 예약 기준으로 다시 선택"을 눌러 기준을
     // 갱신하기 전까지 재제출을 막는다(자동 재시도 금지).
-    if (!changeModal || changeMutation.isPending || isScheduleConflict) {
+    // 상담 유형 조회가 준비되지 않았으면(조회 중이거나 실패) typeCodeById가 비거나 stale해
+    // CS200(진로상담) 여부를 잘못 판별한다 — 이 상태로 제출하면 S002 발생 시 일반 문구가 뜨고
+    // 유형 조회가 끝나도 갱신되지 않으므로 준비되기 전에는 제출 자체를 막는다.
+    if (
+      !changeModal ||
+      changeMutation.isPending ||
+      isScheduleConflict ||
+      !isCounselingTypesReady
+    ) {
       return;
     }
 
@@ -607,8 +646,22 @@ export default function ReservationPanel() {
       </div>
 
       {hasCounselingTypesError && !isReservationsLoading && !reservationsError && (
-        <p className="rounded-[6px] border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2 text-[12px] text-[#92400E]" role="status">
-          상담 유형명을 불러오지 못해 유형 ID로 표시합니다.
+        <p
+          className="flex flex-wrap items-center gap-2 rounded-[6px] border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2 text-[12px] text-[#92400E]"
+          role="status"
+        >
+          <span>
+            상담 유형명을 불러오지 못해 유형 ID로 표시하며, 일정 변경 확정도 유형 조회가
+            성공할 때까지 막힙니다.
+          </span>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={isCounselingTypesFetching}
+            onClick={() => refetchCounselingTypes()}
+          >
+            다시 시도
+          </Button>
         </p>
       )}
 
@@ -861,7 +914,14 @@ export default function ReservationPanel() {
                 </Button>
               </span>
             ) : (
-              <Button size="sm" loading={changeMutation.isPending} onClick={handleChange}>
+              <Button
+                size="sm"
+                loading={changeMutation.isPending}
+                // 상담 유형 조회가 준비되지 않았으면(조회 중이거나 실패) CS200 판별이
+                // 부정확해 오류 문구가 어긋날 수 있으므로(handleChange 가드와 동일한 이유) 확정을 막는다.
+                disabled={!isCounselingTypesReady}
+                onClick={handleChange}
+              >
                 변경 확정
               </Button>
             )}
@@ -901,7 +961,9 @@ export default function ReservationPanel() {
               )}
               {!isAvailableSchedulesLoading && !availableSchedulesError && alternativeSchedules.length === 0 && (
                 <p className="rounded-[6px] bg-[#F6F8FA] px-3 py-4 text-center text-[12px] text-[#9AA0A6]">
-                  변경 가능한 다른 일정이 없습니다.
+                  {isChangeModalCareerType
+                    ? '변경 가능한 다른 진로상담 일정이 없습니다. 지도교수 또는 상담센터에 문의해 주세요.'
+                    : '변경 가능한 다른 일정이 없습니다.'}
                 </p>
               )}
               {!isAvailableSchedulesLoading && !availableSchedulesError && alternativeSchedules.length > 0 && (
