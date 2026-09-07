@@ -129,6 +129,7 @@ export const APPROVAL_STATUS_LABEL = {
  */
 export const COUNSELING_TYPE_CODE = {
   CAREER: 'CS200',
+  PSYCHOLOGICAL: 'CS300',
 };
 
 /** 학생 상담 예약의 서버 상태와 화면 표시명. */
@@ -468,6 +469,40 @@ export const STRESS_TEST_ERROR_CODE = {
   NOT_AVAILABLE: 'S014',
   /** 동일 정책에 동시에 동의 요청이 들어와 충돌한 경우. 제출 직전 동의 재검증 흐름에서 발생할 수 있다. */
   CONSENT_CONFLICT: 'U012',
+};
+
+/**
+ * 스트레스 결과 기반 상담 제안 상태 — CounselingProposal.responseStatus.
+ * 응답 기한이 지나면 저장 상태와 무관하게 서버가 EXPIRED로 표시하므로, 프론트에서
+ * 남은 시간을 계산해 이 상태를 새로 판정하지 않는다.
+ */
+export const COUNSELING_PROPOSAL_STATUS = {
+  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  EXPIRED: 'EXPIRED',
+};
+
+export const COUNSELING_PROPOSAL_STATUS_LABEL = {
+  [COUNSELING_PROPOSAL_STATUS.PENDING]: '응답 대기',
+  [COUNSELING_PROPOSAL_STATUS.ACCEPTED]: '수락',
+  [COUNSELING_PROPOSAL_STATUS.REJECTED]: '거절',
+  [COUNSELING_PROPOSAL_STATUS.EXPIRED]: '응답 만료',
+};
+
+/** 상담 제안 후보·생성·목록·수락·거절 API가 반환하는 업무 오류 코드. */
+export const COUNSELING_PROPOSAL_ERROR_CODE = {
+  INVALID_INPUT: 'C001',
+  /** 상담사의 ST200 only 아님, 학생 권한 없음, 수락 동의가 없거나 다른 학생 소유·철회·만료 */
+  FORBIDDEN: 'A004',
+  /** 생성 결과가 없거나, 최신이 아니거나, STRESS가 아니거나, 17점 미만이거나, 이미 제안됨 */
+  RESULT_NOT_ELIGIBLE: 'S015',
+  /** 학생 응답 대상 제안이 없거나 로그인 학생 소유가 아님(소유권 세부 사유는 비공개) */
+  PROPOSAL_NOT_FOUND: 'S016',
+  /** 제안이 PENDING이 아니거나 응답 기한이 지남 */
+  PROPOSAL_NOT_RESPONDABLE: 'S017',
+  /** 수락 일정이 CS300 + DIRECT가 아니거나 닫힘·마감·정원·시간 중복 등으로 예약 불가 */
+  SCHEDULE_NOT_AVAILABLE: 'S002',
 };
 
 /**
