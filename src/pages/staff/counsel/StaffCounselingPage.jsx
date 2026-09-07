@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import ReservationManage from './ReservationManage';
 import SessionRecord from './SessionRecord';
 import SessionResult from './SessionResult';
 import MySchedule from './MySchedule';
+import CounselingProposalManage from './CounselingProposalManage';
 import { fetchPendingCounselorReservations, pendingReservationsQueryKey } from '@/api/counsel';
 import { useAuthStore } from '@/stores/authStore';
+import { USER_ROLE } from '@/constants/domain';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { key: 'schedule', label: '내 일정', icon: '📅', desc: '가능 시간대 관리' },
   {
     key: 'reservation',
@@ -22,6 +24,18 @@ const NAV_ITEMS = [
   { key: 'result', label: '상담 결과', icon: '✅', desc: '결과 저장·공개·완료' },
 ];
 
+// 상담 제안(스트레스 결과 기반)은 ST200 단독일 때만 노출한다. ST300 단독·겸임에는 이 탭 자체를
+// 만들지 않는다 — 서버도 같은 조건으로 403(A004)을 반환하므로, 탭을 보여준 뒤 API에서만
+// 막으면 사용자가 들어간 뒤에야 뒤늦게 오류를 보게 된다.
+const PROPOSAL_NAV_ITEM = {
+  key: 'proposal',
+  label: '상담 제안',
+  icon: '💬',
+  desc: '스트레스 결과 기반 제안',
+};
+
+const COUNSELOR_NAV_ITEMS = [...BASE_NAV_ITEMS, PROPOSAL_NAV_ITEM];
+
 /**
  * 상담 운영 화면 허브입니다. 일정·예약 관리·상담 기록·상담 결과를
  * 로컬 상태로 전환합니다. 이 화면에는 라우트에서 이미 ST200 단독 또는 ST300 단독인
@@ -33,9 +47,22 @@ export default function StaffCounselingPage() {
   // 소속 표기는 하드코딩 대신 로그인 사용자 정보를 쓴다. departmentName은 nullable이라
   // 없으면 이름만 노출한다(StaffDashboard.jsx의 subtitle 표현식과 동일한 규칙).
   const user = useAuthStore((state) => state.user);
-  const [nav, setNav] = useState(NAV_ITEMS[0].key);
-  const current = NAV_ITEMS.find((item) => item.key === nav) ?? NAV_ITEMS[0];
+  // roleCodes에 ST200은 있고 ST300은 없는 경우만 "ST200 단독"이다. 겸임·ST300 단독은
+  // 제안 탭을 아예 만들지 않는다(서버도 같은 배타 조건으로 403 처리).
+  const roleCodes = user?.roleCodes ?? [];
+  const isCounselorOnly =
+    roleCodes.includes(USER_ROLE.COUNSELOR) && !roleCodes.includes(USER_ROLE.PROFESSOR);
+  const navItems = isCounselorOnly ? COUNSELOR_NAV_ITEMS : BASE_NAV_ITEMS;
+  const [nav, setNav] = useState(navItems[0].key);
+  // 역할이 바뀌어(드물지만) 현재 선택된 탭이 더 이상 유효하지 않으면 첫 허용 항목으로 보정한다.
+  const current = navItems.find((item) => item.key === nav) ?? navItems[0];
   const selectedNav = current.key;
+
+  // 제안 후보 조회·생성이 A004를 받으면, 허용된 첫 상담 탭(내 일정)으로 이동시킨다.
+  // 탭이 바뀌면 CounselingProposalManage가 언마운트되며 후보 캐시·모달도 함께 정리된다.
+  const handleProposalAccessDenied = useCallback(() => {
+    setNav(navItems[0].key);
+  }, [navItems]);
 
   // ReservationManage의 첫 페이지 조회와 같은 queryKey를 써서 캐시를 공유하므로
   // 예약 관리 탭을 열어도 중복 요청이 발생하지 않는다.
@@ -46,9 +73,9 @@ export default function StaffCounselingPage() {
   const pendingCount = pendingPage?.totalElements ?? 0;
 
   return (
-    <div className="flex gap-0 min-h-[calc(100vh-120px)]">
+    <div className="flex flex-col md:flex-row gap-4 md:gap-0 min-h-[calc(100vh-120px)]">
       {/* Sidebar */}
-      <aside className="w-52 shrink-0 mr-5">
+      <aside className="w-full min-w-0 md:w-52 md:shrink-0 md:mr-5">
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-3">
           <div className="flex items-center gap-2 mb-1">
             <div
@@ -59,22 +86,23 @@ export default function StaffCounselingPage() {
             </div>
             <span className="text-[12px] font-black text-[#1F2328]">상담 운영</span>
           </div>
-          <p className="text-[10px] text-[#9AA0A6] leading-relaxed">
+          <p className="text-[10px] text-[#6B7280] leading-relaxed">
             {`${user?.name ?? ''}${user?.departmentName ? ` · ${user.departmentName}` : ''}`}
           </p>
         </div>
 
-        <nav className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden">
-          {NAV_ITEMS.map((item, i) => {
-            const active = nav === item.key;
+        <nav className="max-w-full min-w-0 overflow-hidden rounded-[8px] border border-[#E5E7EB] bg-white">
+          {navItems.map((item, i) => {
+            // 활성 표시는 낡을 수 있는 원본 nav가 아니라 실제 선택된 selectedNav를 기준으로 한다.
+            const active = selectedNav === item.key;
             const badge = item.key === 'reservation' && pendingCount > 0 ? pendingCount : null;
             return (
               <button
                 key={item.key}
                 onClick={() => setNav(item.key)}
-                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors ${i > 0 ? 'border-t border-[#F3F4F6]' : ''} ${active ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'}`}
+                className={`flex min-h-[44px] w-full min-w-0 items-start gap-3 px-4 py-3.5 text-left transition-colors ${i > 0 ? 'border-t border-[#F3F4F6]' : ''} ${active ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'}`}
               >
-                <span className={`text-[14px] mt-0.5 shrink-0 ${active ? '' : 'opacity-50'}`}>
+                <span className={`text-[14px] mt-0.5 shrink-0 ${active ? '' : 'opacity-60'}`}>
                   {item.icon}
                 </span>
                 <div className="flex-1 min-w-0">
@@ -94,7 +122,9 @@ export default function StaffCounselingPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-[10px] text-[#9AA0A6] leading-snug mt-0.5">{item.desc}</p>
+                  <p className="mt-0.5 break-words text-[10px] leading-snug text-[#6B7280]">
+                    {item.desc}
+                  </p>
                 </div>
                 {active && (
                   <div
@@ -119,7 +149,7 @@ export default function StaffCounselingPage() {
       {/* Content */}
       <main className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-[11px] text-[#9AA0A6]">상담 운영</span>
+          <span className="text-[11px] text-[#6B7280]">상담 운영</span>
           <span className="text-[11px] text-[#D1D5DB]">/</span>
           <span className="text-[11px] font-bold" style={{ color: ACCENT }}>
             {current.label}
@@ -130,6 +160,9 @@ export default function StaffCounselingPage() {
         {selectedNav === 'reservation' && <ReservationManage />}
         {selectedNav === 'record' && <SessionRecord />}
         {selectedNav === 'result' && <SessionResult />}
+        {selectedNav === 'proposal' && (
+          <CounselingProposalManage onAccessDenied={handleProposalAccessDenied} />
+        )}
       </main>
     </div>
   );
