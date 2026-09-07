@@ -39,8 +39,8 @@ export default function RoundPicker({ rounds, isLoading, isError, onRetry, onPic
   if (!rounds || rounds.length === 0) {
     return (
       <EmptyState
-        message="진행 중인 진단이 없습니다."
-        sub="응시 기간이 시작되면 이곳에 표시됩니다."
+        message="현재 응시 가능한 진단이 없습니다."
+        sub="응시 기간이 아니거나 응시 대상이 아닐 수 있습니다. 핵심역량 진단은 재학생만 응시할 수 있습니다."
       />
     );
   }

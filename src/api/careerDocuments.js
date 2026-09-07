@@ -464,3 +464,31 @@ export const resyncResumeCompetency = async () => {
   const { data } = await apiClient.post('/students/me/resume/competency');
   return data;
 };
+
+// ─── 비교과 활동 이력 연동 (Resume Extracurricular Activities) ─────────────────
+
+/**
+ * @typedef {Object} ResumeExtracurricularActivity
+ * @property {number} applicationId
+ * @property {number} programId
+ * @property {string} programName 프로그램명
+ * @property {string} programTypeCode
+ * @property {string} programTypeName 프로그램 유형
+ * @property {number} competencyId
+ * @property {string} competencyName 연계 핵심역량
+ * @property {string} operationStartedAt ISO 8601 — 운영 기간 시작
+ * @property {string} operationEndedAt ISO 8601 — 운영 기간 종료(=화면의 "이수일")
+ * @property {string} operatingDepartmentName 운영부서
+ */
+
+/**
+ * 이력서 화면의 "비교과 활동 이력" 카드가 쓰는 자동 연동 조회.
+ * GET /api/students/me/resume/extracurricular-activities
+ * 서버가 표시할 순서로 이미 정렬해 내려준다는 전제 — 프론트에서 별도로 재정렬하지 않고
+ * 응답 배열 순서 그대로 렌더링한다.
+ * @returns {Promise<ResumeExtracurricularActivity[]>}
+ */
+export const fetchResumeExtracurricularActivities = async () => {
+  const { data } = await apiClient.get('/students/me/resume/extracurricular-activities');
+  return data;
+};

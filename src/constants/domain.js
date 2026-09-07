@@ -64,6 +64,22 @@ export const USER_ROLE_LABEL = {
   AD100: '관리자',
 };
 
+/**
+ * 상담 운영 화면(교직원 포털의 '상담 운영' 메뉴·라우트) 진입 가능 여부를 판정하는 순수 함수.
+ * ST200(카운셀러)과 ST300(지도교수)은 각각 단독으로 상담 운영에 들어갈 수 있지만, 두 역할을
+ * 동시에 겸임하는 계정은 정상 조합이 아니다(11-3에서 폐기됨). 서버도 이 겸임 조합을 403(A004)으로
+ * 막기 때문에, 화면이 같은 배타 조건 없이 메뉴·라우트를 열어두면 사용자가 들어간 뒤에야
+ * 뒤늦게 오류를 보게 된다. 그래서 화면 판정도 서버와 같은 "정확히 하나만" 규칙을 따른다.
+ * @param {string[] | null | undefined} roleCodes
+ * @returns {boolean}
+ */
+export const canAccessCounselOperation = (roleCodes) => {
+  const codes = roleCodes ?? [];
+  const hasCounselor = codes.includes(USER_ROLE.COUNSELOR);
+  const hasProfessor = codes.includes(USER_ROLE.PROFESSOR);
+  return hasCounselor !== hasProfessor;
+};
+
 /** 상담사 본인 일정의 서버 상태. */
 export const COUNSELOR_SCHEDULE_STATUS = {
   OPEN: 'OPEN',
@@ -103,6 +119,16 @@ export const APPROVAL_STATUS_LABEL = {
   APPROVED: '승인',
   REJECTED: '반려',
   CANCELED: '취소',
+};
+
+/**
+ * 상담 유형 코드 중 화면 안내 문구 분기에 필요한 값만 상수로 둔다.
+ * 인가나 목록 필터링에는 쓰지 않는다(그 범위는 항상 서버가 반환한 목록을 그대로 사용한다) —
+ * CS200(진로상담)은 지도교수(ST300)가 여는 일정이라, 일정이 비었을 때 "지도교수 또는
+ * 상담센터에 문의"처럼 다른 유형과 다른 안내를 보여줘야 해서 구분이 필요하다.
+ */
+export const COUNSELING_TYPE_CODE = {
+  CAREER: 'CS200',
 };
 
 /** 학생 상담 예약의 서버 상태와 화면 표시명. */
@@ -246,6 +272,27 @@ export const ASSESSMENT_ATTEMPT_STATUS = {
   IN_PROGRESS: 'IN_PROGRESS',
   SUBMITTED: 'SUBMITTED',
   SCORED: 'SCORED',
+};
+
+/**
+ * 핵심역량 진단(응시·결과·비교·추천) API가 반환하는 업무 오류 코드.
+ * 백엔드 global/error/ErrorCode.java Q### 기준. 화면 분기·retry 예측에 리터럴 대신 이 상수를 쓴다.
+ */
+export const ASSESSMENT_ERROR_CODE = {
+  /** 진단검사 기간이 아닙니다. */
+  PERIOD_CLOSED: 'Q003',
+  /** 응답하지 않은 문항이 있습니다. (data: 미응답 questionId 배열) */
+  INCOMPLETE_ANSWER: 'Q005',
+  /** 재학생만 진단검사에 응시할 수 있습니다. */
+  NOT_ENROLLED_STUDENT: 'Q013',
+  /** 응시 정보를 찾을 수 없습니다. (없거나 본인 소유 아님 — 둘을 구분하지 않음) */
+  ATTEMPT_NOT_FOUND: 'Q014',
+  /** 아직 채점되지 않은 진단입니다. */
+  RESULT_NOT_AVAILABLE: 'Q018',
+  /** 비교할 두 응시는 서로 달라야 합니다. */
+  COMPARISON_SAME_ATTEMPT: 'Q022',
+  /** 사전·사후 비교는 같은 학년도의 사전·사후 한 쌍이어야 합니다. */
+  COMPARISON_NOT_PRE_POST_PAIR: 'Q023',
 };
 
 /**
