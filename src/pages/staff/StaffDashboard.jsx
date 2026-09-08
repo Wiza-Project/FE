@@ -13,15 +13,6 @@ import { PageHeader, Tabs, Button, ProgressBar, EmptyState } from '@/components/
 const ACCENT = '#374151';
 
 /**
- * 교직원용 외부활동 마일리지 증빙 심사 목록 조회. GET /api/staff/mileage/claims
- * status를 생략하면 서버가 심사 대기(REQUESTED) 건만 최신순으로 내려준다.
- */
-const fetchMileageClaimsForReview = async (params) => {
-  const { data } = await apiClient.get('/staff/mileage/claims', { params });
-  return data;
-};
-
-/**
  * 교직원용 채용공고 전체/검수 목록 조회. GET /api/staff/career/job-postings
  */
 const fetchStaffJobPostings = async (params) => {
@@ -70,7 +61,6 @@ function RetryButton({ onClick, color = ACCENT, label = '다시 시도' }) {
 // ── 업무유형별 색상(그레이스케일 명도 단계) ──────────────────────────────────
 const TYPE_COLORS = {
   비교과신청: '#1F2937',
-  마일리지증빙: '#4B5563',
   상담예약: '#6B7280',
   구인신청: '#9CA3AF',
 };
@@ -85,17 +75,6 @@ function toProgramApplicationRow(app, program) {
     target: `${app.studentName ?? '-'} (${app.studentNo ?? '-'})`,
     targetType: '학생',
     content: `${program.programName} 신청${app.waitlistOrder != null ? ` · 대기 ${app.waitlistOrder}번` : ''}`,
-  };
-}
-
-function toMileageClaimRow(claim) {
-  return {
-    id: `mileage-${claim.externalClaimId}`,
-    type: '마일리지증빙',
-    receivedAt: claim.applicationDate,
-    target: `${claim.studentName ?? '-'} (${claim.studentNo ?? '-'})`,
-    targetType: '학생',
-    content: `${claim.activityTypeName ?? ''} · ${claim.activityName ?? ''} (${claim.requestedPoints ?? 0}점)`,
   };
 }
 
@@ -174,7 +153,6 @@ function WorkRow({ item, onProcess }) {
  * 보여준다
  * 부서/역할 → 표시 영역 매핑:
  *   D200(비교과운영부서) — 비교과 신청 심사, 담당 프로그램 현황
- *   D100(학생역량센터)   — 마일리지 증빙 심사
  *   D400(취창업지원과)   — 구인 신청 검수
  *   ST200 단독 또는 ST300 단독 — 오늘의 본인 상담, 본인 상담 예약 승인·일정
  *   (ST200+ST300 겸임은 정상 조합이 아니라 숨김 — canAccessCounselOperation 참고)
@@ -190,7 +168,6 @@ export default function StaffDashboard() {
   const roleCodes = user?.roleCodes ?? [];
 
   const canProgramReview = department === DEPARTMENT.NON_SUBJECT_OPERATION; // D200
-  const canMileageReview = department === DEPARTMENT.STUDENT_COMPETENCY_CENTER; // D100
   const canCareerReview = department === DEPARTMENT.CAREER_SUPPORT_OFFICE; // D400
   // ST200(카운셀러) 단독 또는 ST300(지도교수) 단독일 때만 상담 위젯을 보여준다.
   // 두 역할을 함께 가진 잘못된 겸임은 서버가 403으로 막으므로 위젯도 같은 조건으로 숨긴다.
@@ -236,15 +213,6 @@ export default function StaffDashboard() {
     programsQuery.refetch();
     pendingByProgramQueries.forEach((q) => q.refetch());
   };
-
-  // ── D100: 마일리지 증빙 심사 ─────────────────────────────────────────────
-  const mileageClaimsQuery = useQuery({
-    queryKey: ['staffDashboardMileageClaims'],
-    queryFn: () => fetchMileageClaimsForReview({ size: 30 }),
-    enabled: canMileageReview,
-  });
-  const mileageClaimRows = (mileageClaimsQuery.data?.content ?? []).map(toMileageClaimRow);
-  const mileageClaimsCount = mileageClaimsQuery.data?.totalElements ?? 0;
 
   // ── ST200 단독 또는 ST300 단독: 상담 예약 승인 + 본인 일정 ──────────────────
   const pendingReservationsQuery = useQuery({
@@ -292,17 +260,6 @@ export default function StaffDashboard() {
       onRetry: retryProgramApplications,
       onProcess: () => navigate('/staff/programs'),
     },
-    canMileageReview && {
-      key: '마일리지증빙',
-      label: '마일리지 증빙 심사',
-      count: mileageClaimsCount,
-      loading: mileageClaimsQuery.isLoading,
-      error: mileageClaimsQuery.isError,
-      errorObj: mileageClaimsQuery.error,
-      rows: mileageClaimRows,
-      onRetry: () => mileageClaimsQuery.refetch(),
-      onProcess: () => navigate('/staff/mileage'),
-    },
     canCounsel && {
       key: '상담예약',
       label: '상담 예약 승인',
@@ -333,7 +290,7 @@ export default function StaffDashboard() {
   const totalPending = workTabs.reduce((sum, t) => sum + (t.count || 0), 0);
   const pendingCountsReady = workTabs.length > 0 && workTabs.every((t) => !t.loading && !t.error);
 
-  const noWorkPermission = !canProgramReview && !canMileageReview && !canCounsel && !canCareerReview;
+  const noWorkPermission = !canProgramReview && !canCounsel && !canCareerReview;
 
   const hasLeftColumn = workTabs.length > 0 || canProgramReview;
   const hasRightExtras = canCounsel || canProgramReview;
