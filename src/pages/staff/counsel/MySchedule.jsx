@@ -330,7 +330,6 @@ function ScheduleForm({ form, setForm, formError, types, typesLoading, typesErro
         />
         <p className="mt-1 text-right text-[10px] text-[#9AA0A6]">{form.location.length}/300</p>
       </div>
-      <UnsupportedControls />
       {formError && (
         <p
           className="rounded-[6px] border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[11px] font-semibold text-[#CF222E]"
@@ -339,38 +338,6 @@ function ScheduleForm({ form, setForm, formError, types, typesLoading, typesErro
           ⚠ {formError}
         </p>
       )}
-    </div>
-  );
-}
-
-function UnsupportedControls() {
-  const notify = () =>
-    toast('백엔드 연동 준비 중인 기능입니다. 현재 일정에는 저장되지 않습니다.', 'info');
-  return (
-    <div className="flex flex-col gap-4 border-t border-[#E5E7EB] pt-4">
-      <p className="text-[11px] font-semibold text-[#656D76]">연동 준비 중 (현재 저장되지 않음)</p>
-      <div>
-        <span className="mb-1.5 block text-[11px] font-semibold text-[#656D76]">상담 방식</span>
-        <div className="flex gap-2">
-          {['대면', '온라인'].map((method) => (
-            <button
-              key={method}
-              type="button"
-              onClick={notify}
-              className="h-9 flex-1 rounded-[6px] border border-[#E5E7EB] bg-[#F9FAFB] text-[12px] text-[#9AA0A6]"
-            >
-              {method}
-            </button>
-          ))}
-        </div>
-      </div>
-      <label className="flex items-center gap-2 text-[12px] font-semibold text-[#9AA0A6]">
-        <input type="checkbox" disabled /> 휴무 처리{' '}
-        <span className="text-[10px] font-normal">(예약 불가 표시)</span>
-      </label>
-      <label className="flex items-center gap-2 text-[12px] font-semibold text-[#9AA0A6]">
-        <input type="checkbox" disabled /> 반복 등록
-      </label>
     </div>
   );
 }
@@ -837,20 +804,6 @@ export default function MySchedule() {
               ? '이 일정에는 예약 이력이 있어 수정할 수 없습니다. 일정 마감만 가능합니다.'
               : '마감된 일정은 수정하거나 재오픈할 수 없습니다.'}
           </p>
-          <div>
-            <label className="mb-1.5 block text-[11px] font-semibold text-[#656D76]">
-              대체 일정 선택
-            </label>
-            <select
-              disabled
-              className="h-9 w-full rounded-[6px] border border-[#E5E7EB] bg-[#F9FAFB] px-2 text-[12px] text-[#9AA0A6]"
-            >
-              <option>— 백엔드 연동 준비 중 —</option>
-            </select>
-            <p className="mt-1 text-[11px] text-[#9AA0A6]">
-              대체 일정 안내와 알림 발송은 현재 일정 상태를 변경하지 않습니다.
-            </p>
-          </div>
         </div>
       </Modal>
       <Modal
@@ -889,18 +842,6 @@ export default function MySchedule() {
             {actionError}
           </p>
         )}
-        <div className="mt-4 border-t border-[#E5E7EB] pt-3">
-          <p className="text-[11px] text-[#656D76]">대체 일정 선택 및 알림 발송</p>
-          <button
-            type="button"
-            className="mt-2 h-8 rounded-[6px] border border-[#E5E7EB] px-3 text-[11px] text-[#9AA0A6]"
-            onClick={() =>
-              toast('백엔드 연동 준비 중인 기능입니다. 현재 일정은 변경되지 않습니다.', 'info')
-            }
-          >
-            대체 일정 선택
-          </button>
-        </div>
       </Modal>
     </div>
   );
