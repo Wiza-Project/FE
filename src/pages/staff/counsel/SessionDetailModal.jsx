@@ -425,6 +425,7 @@ export default function SessionDetailModal({ sessionId, onClose }) {
             <input
               id="followUpStart"
               type="datetime-local"
+              step="1800"
               value={followUpStart}
               onChange={(e) => setFollowUpStart(e.target.value)}
               disabled={followUpMutation.isPending}
@@ -441,6 +442,7 @@ export default function SessionDetailModal({ sessionId, onClose }) {
             <input
               id="followUpEnd"
               type="datetime-local"
+              step="1800"
               value={followUpEnd}
               onChange={(e) => setFollowUpEnd(e.target.value)}
               disabled={followUpMutation.isPending}
