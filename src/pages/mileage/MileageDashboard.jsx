@@ -13,6 +13,7 @@ const ACCENT = '#D97706';
 const PAGE_SIZE = 10;
 const SOURCE_LABELS = {
   EXTRACURRICULAR_PROGRAM: '비교과',
+  COMPETENCY_DIAGNOSIS: '역량진단',
   OTHER: '기타',
 };
 const TRANSACTION_TYPE_LABELS = {
