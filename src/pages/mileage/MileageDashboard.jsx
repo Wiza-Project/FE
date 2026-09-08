@@ -79,7 +79,7 @@ function TrendChart({ data = [] }) {
   }
 
   const rawMax = Math.max(0, ...chartData.map((d) => Number(d.value) || 0));
-  const max = rawMax > 0 ? rawMax : 50;
+  const max = Math.max(rawMax, 50);
   const pointDenominator = Math.max(chartData.length - 1, 1);
   const isSinglePoint = chartData.length === 1;
   const pts = chartData.map((d, i) => ({
@@ -152,8 +152,8 @@ function TrendChart({ data = [] }) {
             style={{ ...toPct(p.x, p.y), background: ACCENT }}
           />
           <span
-            className="absolute -translate-x-full -translate-y-1/2 text-[13px] font-bold"
-            style={{ ...toPct(p.x - 8, p.y), color: ACCENT }}
+            className="absolute -translate-x-1/2 -translate-y-full text-[13px] font-bold"
+            style={{ ...toPct(p.x, p.y - 10), color: ACCENT }}
           >
             {p.d.value}
           </span>
