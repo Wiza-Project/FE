@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { fetchMyAcademicRecord } from '@/api/students';
-import { fetchMileageDashboard, fetchMileageGrade } from '@/api/mileage';
+import { fetchMileageDashboard, fetchMileageGrade, fetchCurrentMileagePeriod } from '@/api/mileage';
 import {
   fetchAssessmentHistory,
   fetchAssessmentResult,
@@ -13,6 +13,7 @@ import { fetchCounselingReservations, fetchCounselingTypes } from '@/api/counsel
 import { fetchBoardPosts } from '@/api/boards';
 import { COUNSELING_RESERVATION_STATUS_LABEL } from '@/constants/domain';
 import { formatDate } from '@/utils/date';
+import { formatSemester } from '@/utils/academicPeriod';
 import {
   StatTile,
   PageHeader,
@@ -32,10 +33,6 @@ const NAV_PATH = {
   career: '/career',
   notice: '/notice',
 };
-
-// 마일리지 현황 조회 기준 학기. "현재 학기 자동 판별" API가 아직 없어 마일리지 화면
-// (src/pages/mileage/MileageDashboard.jsx)과 동일한 값을 그대로 사용한다.
-const MILEAGE_PERIOD = { academicYear: 2026, semesterCode: '1' };
 
 // 대시보드 요약 카드용으로 넉넉히 끌어오는 신청 내역 건수. 승인/진행중 집계용 API가
 // 따로 없어 이 범위 안에서 근사치를 낸다 (src/pages/program/MyApplications.jsx와 동일한 한계).
@@ -114,14 +111,17 @@ function StatTileError({ label, message, onRetry }) {
   );
 }
 
-function MileageStatTile({ dashboardQuery, gradeQuery }) {
-  if (dashboardQuery.isLoading) return <StatTileSkeleton />;
-  if (dashboardQuery.isError) {
+function MileageStatTile({ dashboardQuery, gradeQuery, periodQuery }) {
+  if (periodQuery.isLoading || dashboardQuery.isLoading) return <StatTileSkeleton />;
+  if (periodQuery.isError || dashboardQuery.isError) {
     return (
       <StatTileError
         label="나의 마일리지"
-        message={getErrorMessage(dashboardQuery.error, '마일리지 정보를 불러오지 못했습니다.')}
-        onRetry={() => dashboardQuery.refetch()}
+        message={getErrorMessage(
+          periodQuery.error ?? dashboardQuery.error,
+          '마일리지 정보를 불러오지 못했습니다.',
+        )}
+        onRetry={() => (periodQuery.isError ? periodQuery.refetch() : dashboardQuery.refetch())}
       />
     );
   }
@@ -757,13 +757,21 @@ export default function MyPage() {
     queryFn: fetchMyAcademicRecord,
   });
 
+  const periodQuery = useQuery({
+    queryKey: ['currentMileagePeriod'],
+    queryFn: fetchCurrentMileagePeriod,
+  });
+  const currentPeriod = periodQuery.data;
+
   const mileageQuery = useQuery({
-    queryKey: ['dashboardMileageSummary', MILEAGE_PERIOD],
-    queryFn: () => fetchMileageDashboard(MILEAGE_PERIOD),
+    queryKey: ['dashboardMileageSummary', currentPeriod],
+    queryFn: () => fetchMileageDashboard({ semesterCode: currentPeriod.semesterCode }),
+    enabled: !!currentPeriod,
   });
   const mileageGradeQuery = useQuery({
-    queryKey: ['dashboardMileageGrade', MILEAGE_PERIOD],
-    queryFn: () => fetchMileageGrade(MILEAGE_PERIOD),
+    queryKey: ['dashboardMileageGrade', currentPeriod],
+    queryFn: () => fetchMileageGrade({ semesterCode: currentPeriod.semesterCode }),
+    enabled: !!currentPeriod,
   });
 
   const historyQuery = useQuery({
@@ -867,14 +875,18 @@ export default function MyPage() {
         </div>
         {period && (
           <span className="h-9 px-3 inline-flex items-center text-[13px] font-semibold text-[#1F2328] bg-white border border-[#E5E7EB] rounded-[6px]">
-            {period.academicYear}학년도 {period.semesterCode}학기
+            {formatSemester(period.semesterCode)}
           </span>
         )}
       </div>
 
       {/* Stat tiles */}
       <div className="grid grid-cols-4 gap-4 mb-6 max-[900px]:grid-cols-2">
-        <MileageStatTile dashboardQuery={mileageQuery} gradeQuery={mileageGradeQuery} />
+        <MileageStatTile
+          dashboardQuery={mileageQuery}
+          gradeQuery={mileageGradeQuery}
+          periodQuery={periodQuery}
+        />
         <CompetencyStatTile
           historyQuery={historyQuery}
           resultQuery={resultQuery}

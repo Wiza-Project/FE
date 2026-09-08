@@ -163,7 +163,7 @@ const NAV_STAFF = [
   { key: 'competency', label: '핵심역량 관리', icon: Icon.Star, path: '/staff/competency' },
   { key: 'counseling', label: '상담 운영', icon: Icon.Chat, path: '/staff/counsel' },
   { key: 'records', label: '학적 조회', icon: Icon.User, path: '/staff/students' },
-  { key: 'mileage', label: '마일리지 심사', icon: Icon.Coin, path: '/staff/mileage' },
+  { key: 'mileage', label: '마일리지 관리', icon: Icon.Coin, path: '/staff/mileage' },
   { key: 'career', label: '취업·창업 운영', icon: Icon.Briefcase, path: '/staff/career' },
   {
     key: 'statistics',
