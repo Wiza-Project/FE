@@ -598,7 +598,12 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
               약관 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
             </p>
           )}
-          {!consent.isLoading && !consent.isError && (
+          {!consent.isLoading && !consent.isError && consent.isUnavailable && (
+            <p className="text-[12px] text-[#CF222E]">
+              약관 항목 설정에 문제가 있어 신청을 진행할 수 없습니다. 학생역량센터에 문의해 주세요.
+            </p>
+          )}
+          {!consent.isLoading && !consent.isError && !consent.isUnavailable && (
             <div className="flex flex-col gap-2">
               {consent.requiredPolicies.map((policy) => {
                 const agreed = consent.isPolicyAgreed(policy.consentPolicyId);
@@ -693,7 +698,12 @@ export default function MyApplications({ onBack, onActivity, onSurvey }) {
               약관 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
             </p>
           )}
-          {!consent.isLoading && !consent.isError && (
+          {!consent.isLoading && !consent.isError && consent.isUnavailable && (
+            <p className="text-[12px] text-[#CF222E]">
+              약관 항목 설정에 문제가 있어 신청을 진행할 수 없습니다. 학생역량센터에 문의해 주세요.
+            </p>
+          )}
+          {!consent.isLoading && !consent.isError && !consent.isUnavailable && (
             <div className="flex flex-col gap-2">
               {consent.requiredPolicies.map((policy) => {
                 const agreed = consent.isPolicyAgreed(policy.consentPolicyId);

@@ -43,11 +43,18 @@ export function useProgramConsent() {
 
   const [checkedIds, setCheckedIds] = useState(() => new Set());
 
+  // 정책·이력 조회가 모두 끝났고 에러도 없는데 필수 정책이 0건이면 백엔드 정책 미설정(설정 오류)이다.
+  // 이 경우 requiredPolicies.every(...) 가 공집합이라 true 가 되어버리므로, 신청을 막기 위해 별도로 가른다.
+  const isReady =
+    !isPoliciesLoading && !isConsentsLoading && !isPoliciesError && !isConsentsError;
+  const isUnavailable = isReady && requiredPolicies.length === 0;
+
   const isPolicyAgreed = (consentPolicyId) => agreedPolicyIds.has(consentPolicyId);
   const allAgreed = requiredPolicies.every((p) => isPolicyAgreed(p.consentPolicyId));
   const canProceed =
     !isPoliciesError &&
     !isConsentsError &&
+    requiredPolicies.length > 0 &&
     requiredPolicies.every((p) => isPolicyAgreed(p.consentPolicyId) || checkedIds.has(p.consentPolicyId));
 
   const toggleChecked = (consentPolicyId, checked) => {
@@ -85,6 +92,7 @@ export function useProgramConsent() {
     toggleChecked,
     resetChecked,
     canProceed,
+    isUnavailable,
     isAgreeing: agreeMutation.isPending,
     ensureAllAgreed,
   };
