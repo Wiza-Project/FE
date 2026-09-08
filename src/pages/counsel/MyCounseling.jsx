@@ -35,7 +35,12 @@ export default function MyCounseling({ onApply, onBack }) {
         accentColor={ACCENT}
         actions={
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={onBack}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-[40px]"
+              onClick={onBack}
+            >
               ← 뒤로
             </Button>
             <Button
