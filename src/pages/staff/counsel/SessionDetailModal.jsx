@@ -14,6 +14,7 @@ import {
   COUNSELING_SESSION_ATTENDANCE_STATUS,
   COUNSELING_SESSION_ATTENDANCE_STATUS_LABEL,
   COUNSELING_SESSION_ERROR_CODE,
+  COUNSELING_SESSION_STATUS,
   COUNSELING_SESSION_STATUS_LABEL,
 } from '@/constants/domain';
 import { formatKstDateTime } from './staffCounselingDate';
@@ -46,6 +47,22 @@ function localInputToInstant(localValue) {
   const date = new Date(localValue);
   if (Number.isNaN(date.getTime())) return undefined;
   return date.toISOString();
+}
+
+function getActionAvailabilityMessage(detail) {
+  if (!detail.assignmentActive) {
+    return '종료된 배정의 회기는 조회만 가능하며 후속 회기 생성·출결 완료·회기 취소를 할 수 없습니다.';
+  }
+  if (detail.sessionStatus === COUNSELING_SESSION_STATUS.CANCELED) {
+    return '취소된 회기는 다시 처리할 수 없습니다.';
+  }
+  if (detail.sessionStatus === COUNSELING_SESSION_STATUS.COMPLETED) {
+    return '이미 출결 완료된 회기입니다. 활성 배정이면 후속 회기는 계속 생성할 수 있습니다.';
+  }
+  if (!detail.canComplete) {
+    return `출결 완료는 회기 종료 시각(${formatKstDateTime(detail.endsAt)}) 이후에 가능합니다.`;
+  }
+  return '현재 회기의 출결을 완료하거나 활성 배정에 후속 회기를 생성할 수 있습니다.';
 }
 
 /**
@@ -287,14 +304,6 @@ export default function SessionDetailModal({ sessionId, onClose }) {
     }
     if (new Date(startsAt) >= new Date(endsAt)) {
       setFormError('종료 시각은 시작 시각보다 이후여야 합니다.');
-      return;
-    }
-    // 서버 계약(startsAt <= now)과 동일한 조건을 미리 걸러 불필요한 요청과 INVALID_STATE
-    // 왕복을 줄인다. 후속 회기는 미래 예약이 아니라 지난 상담의 사후 등록만 허용한다.
-    if (new Date(startsAt) > new Date()) {
-      setFormError(
-        '시작 시각은 현재 이전이어야 합니다. 후속 회기는 지난 상담의 사후 등록만 가능합니다.',
-      );
       return;
     }
     setFormError('');
@@ -611,8 +620,8 @@ export default function SessionDetailModal({ sessionId, onClose }) {
               회기 취소
             </Button>
           </div>
-          <p className="text-[10px] text-[#9AA0A6]">
-            버튼은 서버가 판단한 처리 가능 여부에 따라 활성화됩니다.
+          <p aria-live="polite" className="text-[10px] text-[#9AA0A6]">
+            {getActionAvailabilityMessage(detail)}
           </p>
 
           <div className="p-3 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[11px] text-[#92400E]">
