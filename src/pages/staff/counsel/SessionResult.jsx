@@ -10,7 +10,7 @@ import {
   COUNSELING_SESSION_STATUS,
   COUNSELING_SESSION_STATUS_LABEL,
 } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 import PublicResultEditorModal from './PublicResultEditorModal';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)

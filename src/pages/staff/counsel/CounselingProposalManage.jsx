@@ -7,7 +7,7 @@ import {
   fetchEligibleCounselingProposalResults,
 } from '@/api/counsel';
 import { COUNSELING_PROPOSAL_ERROR_CODE } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 import CounselingProposalCreateDialog from './CounselingProposalCreateDialog';
 
 const ACCENT = '#1F2937';

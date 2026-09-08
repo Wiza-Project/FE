@@ -21,7 +21,7 @@ import {
   COUNSELING_PROPOSAL_STATUS_LABEL,
 } from '@/constants/domain';
 import CounselingProposalAcceptDialog from './CounselingProposalAcceptDialog';
-import { formatKstDateTime } from './myCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 const ACCENT = '#0E7490';
 const PAGE_SIZE = 20;

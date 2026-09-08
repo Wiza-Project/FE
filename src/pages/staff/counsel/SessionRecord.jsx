@@ -10,7 +10,7 @@ import {
   COUNSELING_SESSION_STATUS,
   COUNSELING_SESSION_STATUS_LABEL,
 } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 import SessionDetailModal from './SessionDetailModal';
 import {
   ATTENDANCE_BADGE_VARIANT,
