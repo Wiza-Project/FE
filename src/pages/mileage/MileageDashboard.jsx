@@ -69,7 +69,7 @@ function TrendChart({ data = [] }) {
   const pointDenominator = Math.max(chartData.length - 1, 1);
   const isSinglePoint = chartData.length === 1;
   const pts = chartData.map((d, i) => ({
-    x: isSinglePoint ? PAD.l + 24 : PAD.l + (i / pointDenominator) * cW,
+    x: isSinglePoint ? PAD.l + cW / 2 : PAD.l + (i / pointDenominator) * cW,
     y: PAD.t + cH - (d.value / max) * cH * 0.88,
     d,
   }));
