@@ -5,7 +5,7 @@ import { useCommonCode } from '@/hooks/useCommonCode';
 
 const A = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
-// ─── shared helpers ────────────────────────────────────────────────────────────
+// ─── helpers ───────────────────────────────────────────────────────────────────
 
 const getSemesterLabel = (semesterCodes, code, { allLabel, emptyLabel } = {}) => {
   if (!code) return emptyLabel !== undefined ? emptyLabel : code;
@@ -172,7 +172,7 @@ const validatePolicyForm = (form, activityType, { requireActivityType = false } 
 
 const DEFAULT_POLICY_QUERY = { semesterCode: '', policyStatus: '' };
 
-function TabPolicySettings() {
+function PolicySettings() {
   const [policies, setPolicies] = useState([]);
   const [activityTypes, setActivityTypes] = useState([]);
   const [pForm, setPForm] = useState(DEFAULT_POLICY_FORM);
@@ -608,16 +608,14 @@ function TabPolicySettings() {
 export default function StaffMileagePage() {
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[20px] font-black text-[#1F2328]">마일리지 관리</h1>
-          <p className="text-[12px] text-[#9AA0A6] mt-0.5">
-            마일리지 적립 기준 설정
-          </p>
-        </div>
+      <div>
+        <h1 className="text-[20px] font-black text-[#1F2328]">마일리지 관리</h1>
+        <p className="text-[12px] text-[#9AA0A6] mt-0.5">
+          마일리지 적립 기준 설정
+        </p>
       </div>
 
-      <TabPolicySettings />
+      <PolicySettings />
     </div>
   );
 }
