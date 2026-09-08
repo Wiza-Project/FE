@@ -9,8 +9,6 @@ import { apiClient } from './client';
  *   summary: {cumulativePoints: number, currentSemesterPoints: number},
  *   competencyBreakdown: Array<{competencyName: string, points: number}>,
  *   semesterTrend: Array<{semesterCode: string, points: number}>,
- *   benefitProgress: Array<{benefitPolicyId: number, benefitName: string, targetPoints: number,
- *     benefitAmount: number|null, shortagePoints: number, canApply: boolean, progressStatus: string}>,
  * }>}
  */
 export const fetchMileageDashboard = async (params) => {
@@ -40,37 +38,6 @@ export const fetchMileageGrade = async (params) => {
  */
 export const fetchCurrentMileagePeriod = async () => {
   const { data } = await apiClient.get('/students/mileage/current-period');
-  return data;
-};
-
-/**
- * 외부활동 증빙 파일 업로드. 신청 제출 전 먼저 호출해 fileGroupId를 발급받는다.
- * @param {File} file PDF 1개
- * @returns {Promise<{fileGroupId: number, fileName: string}>}
- */
-export const uploadExternalActivityFile = async (file) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  const { data } = await apiClient.post('/students/mileage/external-activities/files', formData, {
-    headers: { 'Content-Type': undefined },
-  });
-  return data;
-};
-
-/**
- * 외부활동·자격증 증빙 신청 제출
- * @param {Object} payload
- * @param {number} payload.activityTypeId
- * @param {number} [payload.mileagePolicyId] 학생이 화면에서 선택한 정책. 같은 활동유형에 학기별 정책이 여러 개일 때 서버가 그대로 적용한다.
- * @param {string} payload.activityName
- * @param {string} payload.activityDate yyyy-MM-dd
- * @param {number} payload.requestedPoints
- * @param {Object} [payload.detailData]
- * @param {number} payload.fileGroupId
- * @returns {Promise<{externalClaimId: number, claimStatus: string}>}
- */
-export const submitExternalActivityClaim = async (payload) => {
-  const { data } = await apiClient.post('/students/mileage/external-activities/applications', payload);
   return data;
 };
 

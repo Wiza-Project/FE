@@ -6,8 +6,6 @@ import {
   fetchMileageGrade,
 } from '@/api/mileage';
 import { useCommonCode } from '@/hooks/useCommonCode';
-import ScholarshipTab from './ScholarshipTab';
-import ExternalActivity from './ExternalActivity';
 import { PageHeader, StatTile, Button, BarChart, Pagination, Drawer } from '@/components/common';
 
 const ACCENT = '#D97706';
@@ -15,7 +13,6 @@ const ACCENT = '#D97706';
 const PAGE_SIZE = 10;
 const SOURCE_LABELS = {
   EXTRACURRICULAR_PROGRAM: '비교과',
-  EXTERNAL_ACTIVITY: '외부활동',
   OTHER: '기타',
 };
 const TRANSACTION_TYPE_LABELS = {
@@ -366,8 +363,6 @@ export default function MileageDashboard() {
         {[
           ['dashboard', '마일리지 현황'],
           ['ledger', '적립 원장'],
-          ['scholarship', '장학금 신청'],
-          ['external', '외부활동 등록'],
         ].map(([k, l]) => (
           <button
             key={k}
@@ -587,12 +582,6 @@ export default function MileageDashboard() {
         </div>
       )}
 
-      {tab === 'scholarship' && (
-        <ScholarshipTab currentPoints={hasDashboardData ? currentScore : null} />
-      )}
-
-      {tab === 'external' && <ExternalActivity embedded onBack={() => setTab('dashboard')} />}
-
       <Drawer
         open={selectedTransactionId != null}
         onClose={closeTransactionDetail}
@@ -721,39 +710,6 @@ export default function MileageDashboard() {
               </section>
             )}
 
-            {transactionDetail.externalActivity && (
-              <section>
-                <h3 className="mb-2 text-[13px] font-bold text-[#1F2328]">외부활동 출처</h3>
-                <div className="flex flex-col gap-2 rounded-[8px] border border-[#E5E7EB] p-4 text-[12px]">
-                  <div className="flex justify-between gap-3">
-                    <span className="text-[#9AA0A6]">활동명</span>
-                    <span className="text-right font-semibold text-[#1F2328]">
-                      {transactionDetail.externalActivity.activityName ?? '-'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <span className="text-[#9AA0A6]">활동일</span>
-                    <span className="text-[#1F2328]">
-                      {formatDate(transactionDetail.externalActivity.activityDate)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <span className="text-[#9AA0A6]">신청 상태</span>
-                    <span className="font-semibold text-[#1F2328]">
-                      {transactionDetail.externalActivity.claimStatus ?? '-'}
-                    </span>
-                  </div>
-                  {transactionDetail.externalActivity.reviewReason && (
-                    <div className="flex justify-between gap-3">
-                      <span className="text-[#9AA0A6]">심사 의견</span>
-                      <span className="text-right text-[#1F2328]">
-                        {transactionDetail.externalActivity.reviewReason}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
           </div>
         )}
       </Drawer>
