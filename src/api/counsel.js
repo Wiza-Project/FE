@@ -211,8 +211,8 @@ export const fetchCounselorSchedules = async () => {
  * @returns {Promise<CounselorStudentLookup>}
  */
 export const fetchCounselorStudentByUniversityNo = async (universityNo) => {
-  const { data } = await apiClient.get('/counselors/students/lookup', {
-    params: { universityNo: universityNo.trim() },
+  const { data } = await apiClient.post('/counselors/students/lookup', {
+    universityNo: universityNo.trim(),
   });
   return data;
 };
