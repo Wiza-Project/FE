@@ -295,6 +295,7 @@ function TabPolicySettings() {
   const [activityTypesError, setActivityTypesError] = useState('');
   const [actionId, setActionId] = useState(null);
   const policyRequestIdRef = useRef(0);
+  const detailRequestIdRef = useRef(0);
 
   const updateCreateField = (field, value) => {
     setPForm((current) => ({ ...current, [field]: value }));
@@ -380,17 +381,22 @@ function TabPolicySettings() {
       return;
     }
 
+    const requestId = ++detailRequestIdRef.current;
     setEditId(policyId);
     setEditForm(null);
     setDetailLoading(true);
     try {
       const { data } = await apiClient.get(`/staff/mileage/policies/${policyId}`);
+      if (requestId !== detailRequestIdRef.current) return;
       setEditForm(toPolicyForm(data));
     } catch (error) {
+      if (requestId !== detailRequestIdRef.current) return;
       toast(error.message, 'error');
       setEditId(null);
     } finally {
-      setDetailLoading(false);
+      if (requestId === detailRequestIdRef.current) {
+        setDetailLoading(false);
+      }
     }
   };
 

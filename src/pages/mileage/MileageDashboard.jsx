@@ -186,7 +186,11 @@ export default function MileageDashboard() {
 
     return fetchCurrentMileagePeriod()
       .then((data) => {
-        setPeriod(data);
+        setPeriod(data ?? null);
+        if (data == null) {
+          setDashboardLoading(false);
+          setGradeLoading(false);
+        }
       })
       .catch((error) => {
         setDashboardError(error.message);
