@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/api/client';
 import { Button, Modal, Drawer, Pagination, StatTile, toast } from '@/components/common';
 import { useCommonCode } from '@/hooks/useCommonCode';
+import { useAuthStore } from '@/stores/authStore';
 import StaffScholarshipTab from './StaffScholarshipTab';
 
 const A = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
@@ -692,7 +693,7 @@ function TabPolicySettings() {
 // ─── Tab ② 심사 접수함 ─────────────────────────────────────────────────────────
 
 function TabReviewInbox() {
-  const { data: semesterCodes = [], isLoading: semesterCodesLoading } = useCommonCode('SEMESTER');
+  const { user } = useAuthStore();
   const [reviews, setReviews] = useState([]);
   const [claimPage, setClaimPage] = useState(EMPTY_CLAIM_PAGE);
   const [draftFilters, setDraftFilters] = useState({ status: 'REQUESTED', keyword: '' });
@@ -818,7 +819,7 @@ function TabReviewInbox() {
     try {
       if (decision === 'APPROVE') {
         await apiClient.post(`/staff/mileage/claims/${drawerItem.id}/approve`);
-        toast('승인 완료. 마일리지 EARN 거래가 생성되었습니다.', 'success');
+        toast('승인 완료', 'success');
       } else {
         await apiClient.post(`/staff/mileage/claims/${drawerItem.id}/reject`, { reason });
         toast('반려 처리되었습니다.', 'info');
@@ -1146,9 +1147,6 @@ function TabReviewInbox() {
                     <>
                       <div className="font-semibold text-[#656D76]">증빙 파일이 등록되어 있습니다.</div>
                       <div className="text-[10px] mt-0.5">파일 그룹 ID: {drawerDetail.fileGroupId}</div>
-                      <div className="text-[10px] mt-1 text-[#D1D5DB]">
-                        파일 미리보기·다운로드는 파일 조회 API 연결 후 제공됩니다.
-                      </div>
                     </>
                   ) : (
                     <div>등록된 증빙 파일이 없습니다.</div>
@@ -1166,9 +1164,6 @@ function TabReviewInbox() {
                   bg={drawerDetail?.fileGroupId != null ? '#D1FAE5' : '#FEE2E2'}
                   text={drawerDetail?.fileGroupId != null ? '#059669' : '#CF222E'}
                 />
-                <span className="text-[10px] text-[#656D76]">
-                  승인 시 서버에서 증빙·활성 정책·기간·중복 적립 여부를 다시 확인합니다.
-                </span>
               </div>
             </div>
 
@@ -1252,7 +1247,7 @@ function TabReviewInbox() {
                 </div>
                 <div className="p-4 grid grid-cols-2 gap-3">
                   {[
-                    { l: '처리유형', v: 'EARN' },
+                    { l: '처리유형', v: '적립' },
                     {
                       l: '적립 점수',
                       v: detailPolicy?.points != null
@@ -1260,33 +1255,16 @@ function TabReviewInbox() {
                         : '승인 시 서버 정책으로 계산',
                     },
                     {
-                      l: '적용 정책',
-                      v: !detailPolicy
-                        ? '-'
-                        : semesterCodesLoading
-                          ? '불러오는 중...'
-                          : formatPeriod(semesterCodes, detailPolicy.semesterCode) + ' / v' +
-                            String(detailPolicy.versionNo ?? '-'),
-                    },
-                    {
                       l: '연계 활동',
                       v: detailActivity?.activityTypeName ?? drawerItem.type,
                     },
-                    { l: '처리자', v: '현재 로그인한 교직원' },
-                    { l: '처리 일시', v: '승인 시 서버 기록' },
+                    { l: '처리자', v: user?.name ?? '-' },
                   ].map((f) => (
                     <div key={f.l}>
                       <p className="text-[10px] text-[#9AA0A6]">{f.l}</p>
                       <p className="text-[12px] font-black text-[#1F2328]">{f.v}</p>
                     </div>
                   ))}
-                </div>
-                <div
-                  className="px-4 pb-3 text-[10px] leading-relaxed bg-[#FFFBEB]"
-                  style={{ color: A }}
-                >
-                  ✓ 승인 즉시 원장에 EARN 거래가 생성됩니다. 동일 원천의 중복 적립은 시스템이
-                  차단합니다.
                 </div>
               </div>
             )}
