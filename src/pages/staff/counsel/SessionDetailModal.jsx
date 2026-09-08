@@ -49,6 +49,13 @@ function localInputToInstant(localValue) {
   return date.toISOString();
 }
 
+// datetime-local의 step="1800"(30분)은 브라우저 네이티브 스피너 조작에만 적용되고 직접
+// 타이핑한 값은 막지 못하므로, 제출 시점에 분 단위(0 또는 30)를 다시 검증한다.
+function isOnHalfHourBoundary(localValue) {
+  const date = new Date(localValue);
+  return !Number.isNaN(date.getTime()) && date.getMinutes() % 30 === 0;
+}
+
 function getActionAvailabilityMessage(detail) {
   if (!detail.assignmentActive) {
     return '종료된 배정의 회기는 조회만 가능하며 후속 회기 생성·출결 완료·회기 취소를 할 수 없습니다.';
@@ -302,6 +309,10 @@ export default function SessionDetailModal({ sessionId, onClose }) {
       setFormError('시작·종료 시각을 모두 입력해 주세요.');
       return;
     }
+    if (!isOnHalfHourBoundary(followUpStart) || !isOnHalfHourBoundary(followUpEnd)) {
+      setFormError('시작·종료 시각의 분은 0분 또는 30분 단위로 입력해 주세요.');
+      return;
+    }
     if (new Date(startsAt) >= new Date(endsAt)) {
       setFormError('종료 시각은 시작 시각보다 이후여야 합니다.');
       return;
@@ -425,6 +436,7 @@ export default function SessionDetailModal({ sessionId, onClose }) {
             <input
               id="followUpStart"
               type="datetime-local"
+              step="1800"
               value={followUpStart}
               onChange={(e) => setFollowUpStart(e.target.value)}
               disabled={followUpMutation.isPending}
@@ -441,6 +453,7 @@ export default function SessionDetailModal({ sessionId, onClose }) {
             <input
               id="followUpEnd"
               type="datetime-local"
+              step="1800"
               value={followUpEnd}
               onChange={(e) => setFollowUpEnd(e.target.value)}
               disabled={followUpMutation.isPending}
