@@ -289,14 +289,6 @@ export default function SessionDetailModal({ sessionId, onClose }) {
       setFormError('종료 시각은 시작 시각보다 이후여야 합니다.');
       return;
     }
-    // 서버 계약(startsAt <= now)과 동일한 조건을 미리 걸러 불필요한 요청과 INVALID_STATE
-    // 왕복을 줄인다. 후속 회기는 미래 예약이 아니라 지난 상담의 사후 등록만 허용한다.
-    if (new Date(startsAt) > new Date()) {
-      setFormError(
-        '시작 시각은 현재 이전이어야 합니다. 후속 회기는 지난 상담의 사후 등록만 가능합니다.',
-      );
-      return;
-    }
     setFormError('');
     // sessionId는 서버로 보내지 않는 UI 전용 메타데이터다(대상 회기 판별용). mutationFn이
     // assignmentId·request만 destructuring해서 쓰기 때문에 실제 요청 바디에는 포함되지 않는다.
