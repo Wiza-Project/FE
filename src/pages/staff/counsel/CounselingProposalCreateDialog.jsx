@@ -4,7 +4,7 @@ import { Button, Modal, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
 import { createCounselingProposal } from '@/api/counsel';
 import { COUNSELING_PROPOSAL_ERROR_CODE } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 const ACCENT = '#1F2937';
 const MAX_CONTENT_LENGTH = 1000;

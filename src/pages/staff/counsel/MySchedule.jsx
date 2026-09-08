@@ -14,6 +14,7 @@ import {
   COUNSELOR_SCHEDULE_STATUS,
   COUNSELOR_SCHEDULE_STATUS_LABEL,
 } from '@/constants/domain';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 const ACCENT = '#1F2937';
 const DAYS = ['월', '화', '수', '목', '금'];
@@ -114,10 +115,6 @@ function getPreviousKstDate(value) {
 function getTodayKstDate() {
   const today = getKstCalendarDate();
   return `${today.getUTCFullYear()}-${pad(today.getUTCMonth() + 1)}-${pad(today.getUTCDate())}`;
-}
-
-function formatKstDateTime(instant) {
-  return instantToKstDateTimeLocal(instant).replace('T', ' ') || '-';
 }
 
 function buildDateTimeLocal(date, half) {

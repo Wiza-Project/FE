@@ -14,7 +14,7 @@ import {
   COUNSELING_RESERVATION_ERROR_CODE,
   COUNSELING_RESERVATION_STATUS_LABEL,
 } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 const PAGE_SIZE = 20;
