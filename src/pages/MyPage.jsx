@@ -13,7 +13,7 @@ import { fetchCounselingReservations, fetchCounselingTypes } from '@/api/counsel
 import { fetchBoardPosts } from '@/api/boards';
 import { COUNSELING_RESERVATION_STATUS_LABEL } from '@/constants/domain';
 import { formatDate } from '@/utils/date';
-import { formatSemester } from '@/utils/academicPeriod';
+import { useCommonCode } from '@/hooks/useCommonCode';
 import {
   StatTile,
   PageHeader,
@@ -752,6 +752,8 @@ export default function MyPage() {
   const navigate = useNavigate();
   const onNavigate = (key) => navigate(NAV_PATH[key] ?? '/my');
 
+  const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
+
   const profileQuery = useQuery({
     queryKey: ['dashboardProfile'],
     queryFn: fetchMyAcademicRecord,
@@ -875,7 +877,8 @@ export default function MyPage() {
         </div>
         {period && (
           <span className="h-9 px-3 inline-flex items-center text-[13px] font-semibold text-[#1F2328] bg-white border border-[#E5E7EB] rounded-[6px]">
-            {formatSemester(period.semesterCode)}
+            {semesterCodes.find((s) => s.code === period.semesterCode)?.codeName
+              ?? period.semesterCode}
           </span>
         )}
       </div>
