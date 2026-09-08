@@ -90,9 +90,17 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
     onSuccess: async () => {
       toast('취창업 맞춤 추천 서비스 동의가 완료되었습니다.', 'success');
       setNeedConsentModalOpen(false);
+
       // 동의 내역 캐시 무효화 -> 화면 즉시 isProfilingAgreed = true로 전환
+      // await queryClient.invalidateQueries({ queryKey: ['myConsentHistory'] });
+      // await queryClient.invalidateQueries({ queryKey: ['careerRecommendedJobs'] });
+      // 내 동의 내역 갱신
       await queryClient.invalidateQueries({ queryKey: ['myConsentHistory'] });
-      await queryClient.invalidateQueries({ queryKey: ['careerRecommendedJobs'] });
+      
+      // 희망조건 조회 갱신 및 추천 강제 리패치
+      await queryClient.invalidateQueries({ queryKey: ['careerJobPreference'] });
+      await queryClient.refetchQueries({ queryKey: ['careerRecommendedJobs'] });
+      
       if (!hasPreference) {
         setPreferenceModalOpen(true);
       }
@@ -149,17 +157,37 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
   // 희망조건 저장 뮤테이션
   const savePreferenceMutation = useMutation({
     mutationFn: (payload) => saveJobPreference(payload),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast('취업 희망조건이 저장되었습니다. AI 맞춤 추천 공고를 불러옵니다.', 'success');
       setPreferenceModalOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['careerJobPreference'] });
-      queryClient.invalidateQueries({ queryKey: ['careerRecommendedJobs'] });
+
+      // queryClient.invalidateQueries({ queryKey: ['careerJobPreference'] });
+      // queryClient.invalidateQueries({ queryKey: ['careerRecommendedJobs'] });
+
+      // 희망조건 캐시 갱신 완료를 확실히 기다린 후 추천 공고 즉시 강제 호출
+      await queryClient.invalidateQueries({ queryKey: ['careerJobPreference'] });
+      await queryClient.refetchQueries({ queryKey: ['careerRecommendedJobs'] });
+      
       setActiveTab('AI');
     },
     onError: (err) => {
       toast(err?.response?.data?.message || '희망조건 저장에 실패했습니다.', 'error');
     },
   });
+
+  // const handleSavePreferenceSubmit = (e) => {
+  //   e.preventDefault();
+  //   if (!formNcsId) {
+  //     toast('희망 직무(NCS)를 선택해주세요.', 'error');
+  //     return;
+  //   }
+  //   savePreferenceMutation.mutate({
+  //     ncsCodeId: Number(formNcsId),
+  //     preferredRegionCodeId: formRegionId ? Number(formRegionId) : null,
+  //     preferredEmploymentType: formEmpType || null,
+  //     minimumSalary: formMinSalary ? Number(formMinSalary) : null,
+  //   });
+  // };
 
   const handleSavePreferenceSubmit = (e) => {
     e.preventDefault();
@@ -168,7 +196,8 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
       return;
     }
     savePreferenceMutation.mutate({
-      ncsCodeId: Number(formNcsId),
+      ncsStandardId: Number(formNcsId), // 백엔드 DTO(requestDTO.getNcsStandardId()) 수신 필드
+      ncsCodeId: Number(formNcsId),     // 하위 호환 필드
       preferredRegionCodeId: formRegionId ? Number(formRegionId) : null,
       preferredEmploymentType: formEmpType || null,
       minimumSalary: formMinSalary ? Number(formMinSalary) : null,
@@ -176,22 +205,29 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
   };
 
   // AI 맞춤 추천 공고 조회 (희망조건이 등록되어 있을 때 실행)
-  // const { data: resData, isLoading } = useQuery({
-  //   queryKey: ['careerRecommendedJobs'],
-  //   queryFn: () => getRecommendedPostings(),
-  //   enabled: hasPreference,
-  // });
   const { data: resData, isLoading: isAiLoading } = useQuery({
     queryKey: ['careerRecommendedJobs'],
     queryFn: () => getRecommendedPostings(),
-    enabled: isProfilingAgreed && hasPreference,
+    enabled: Boolean(isProfilingAgreed && hasPreference),
   });
 
+  // 다중 래핑 대응 (백엔드 응답이 resData.data.data 또는 resData.data 어디에 있든 배열 추출)
+  const rawAiList = Array.isArray(resData?.data?.data)
+    ? resData.data.data
+    : Array.isArray(resData?.data)
+    ? resData.data
+    : Array.isArray(resData?.data?.content)
+    ? resData.data.content
+    : Array.isArray(resData)
+    ? resData
+    : [];
+
+  const recommendedJobs = rawAiList;
   // 응답 데이터 포맷 정규화
   // const rawList = resData?.data?.content || resData?.data || resData?.content || resData;
-  const rawAiList = resData?.data?.content || resData?.data || resData?.content || resData;
+  // const rawAiList = resData?.data?.content || resData?.data || resData?.content || resData;
   // const recommendedJobs = Array.isArray(rawList) ? rawList : [];
-  const recommendedJobs = Array.isArray(rawAiList) ? rawAiList : [];
+  // const recommendedJobs = Array.isArray(rawAiList) ? rawAiList : [];
   // 최신 공고 탭용 데이터: 추천 API 응답이 없으면 현재 전체 목록(jobList)을 fallback으로 사용
   // const displayLatestJobs = recommendedJobs.length > 0 ? recommendedJobs : (latestFallbackJobs || []);
 
