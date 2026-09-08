@@ -76,6 +76,12 @@ const getSemesterLabel = (semesterCodes, code, { allLabel, emptyLabel } = {}) =>
 const formatPeriod = (semesterCodes, code) =>
   getSemesterLabel(semesterCodes, code, { allLabel: '연간', emptyLabel: '연간' });
 
+const getScoreBasisLabel = (item, semesterCodes) => {
+  if (Number(item?.cumulativeYears ?? 0) > 1) return `최근 ${item.cumulativeYears}년 누적 기준`;
+  if (item?.semesterCode === 'ALL') return '연간 기준';
+  return `${formatPeriod(semesterCodes, item?.semesterCode)} 기준`;
+};
+
 const getDisabledReason = (item) => {
   if (item?.canApply) return null;
 
@@ -152,7 +158,7 @@ function CriteriaList({ criteriaData }) {
   );
 }
 
-function ScholarshipCard({ item, onSelect, disabledReason, semesterLabel }) {
+function ScholarshipCard({ item, onSelect, disabledReason, semesterLabel, basisLabel }) {
   const minimumPoints = Number(item.minimumPoints ?? 0);
   const currentPoints = Number(item.currentPoints ?? 0);
   const progress = minimumPoints > 0
@@ -191,7 +197,9 @@ function ScholarshipCard({ item, onSelect, disabledReason, semesterLabel }) {
 
       <div>
         <div className="mb-1.5 flex items-center justify-between text-[11px]">
-          <span className="text-[#656D76]">현재 {formatPoints(item.currentPoints)}</span>
+          <span className="text-[#656D76]">
+            {basisLabel} 현재 {formatPoints(item.currentPoints)}
+          </span>
           <span className={shortagePoints > 0 ? 'font-bold text-[#CF222E]' : 'font-bold text-[#047857]'}>
             {shortagePoints > 0 ? `${formatPoints(shortagePoints)} 부족` : '기준 달성'}
           </span>
@@ -421,6 +429,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
                     onSelect={setSelectedScholarship}
                     disabledReason={getDisabledReason(item)}
                     semesterLabel={formatPeriod(semesterCodes, item.semesterCode)}
+                    basisLabel={getScoreBasisLabel(item, semesterCodes)}
                 />
               ))}
             </div>
@@ -551,7 +560,7 @@ export default function ScholarshipTab({ currentPoints = null }) {
 
             <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-4">
               <div>
-                <p className="text-[#9AA0A6]">현재 점수</p>
+                <p className="text-[#9AA0A6]">현재 점수 ({getScoreBasisLabel(selectedScholarship, semesterCodes)})</p>
                 <p className="mt-1 font-bold text-[#1F2328]">{formatPoints(selectedScholarship.currentPoints)}</p>
               </div>
               <div>
