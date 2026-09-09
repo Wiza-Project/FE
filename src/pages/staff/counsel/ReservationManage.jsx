@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Modal, Pagination, StatusBadge, toast } from '@/components/common';
+import { Button, ConfirmDialog, Modal, Pagination, StatusBadge, toast } from '@/components/common';
 import { ApiError } from '@/api/client';
 import {
   approveCounselingReservation,
@@ -14,7 +14,7 @@ import {
   COUNSELING_RESERVATION_ERROR_CODE,
   COUNSELING_RESERVATION_STATUS_LABEL,
 } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 const PAGE_SIZE = 20;
@@ -49,6 +49,7 @@ export default function ReservationManage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [detailReservationId, setDetailReservationId] = useState(null);
+  const [approveTarget, setApproveTarget] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [decisionReason, setDecisionReason] = useState('');
   const [rejectError, setRejectError] = useState('');
@@ -153,6 +154,16 @@ export default function ReservationManage() {
   const handleApprove = (reservationId) => {
     setApprovingIds((prev) => new Set(prev).add(reservationId));
     approveMutation.mutate(reservationId);
+  };
+
+  // 확인 다이얼로그는 승인 확정 여부만 묻고 바로 닫는다. 진행 상태는 이미 있는 행 단위
+  // "승인 중…" 스피너(approvingIds)와 완료 토스트로 보여주므로 다이얼로그에 별도
+  // loading 상태를 두지 않는다. 여러 행을 동시에 승인할 수 있어(L55-56 주석 참고)
+  // 다이얼로그를 mutation.isPending에 묶으면 다른 행이 승인 중일 때도 로딩으로 보인다.
+  const confirmApprove = () => {
+    if (!approveTarget) return;
+    handleApprove(approveTarget.reservationId);
+    setApproveTarget(null);
   };
 
   const openReject = (reservation) => {
@@ -301,7 +312,7 @@ export default function ReservationManage() {
                             신청내용
                           </button>
                           <button
-                            onClick={() => handleApprove(r.reservationId)}
+                            onClick={() => setApproveTarget(r)}
                             disabled={isRowBusy}
                             className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0] disabled:opacity-50 transition-colors"
                           >
@@ -334,6 +345,20 @@ export default function ReservationManage() {
           onChange={(nextPage) => setPage(nextPage - 1)}
         />
       )}
+
+      {/* 승인 확인 */}
+      <ConfirmDialog
+        open={!!approveTarget}
+        title="예약 승인"
+        message={
+          approveTarget
+            ? `${approveTarget.studentId} 학생의 ${approveTarget.counselingTypeName} 예약(${formatKstDateTime(approveTarget.startsAt)} ~ ${formatKstDateTime(approveTarget.endsAt)})을 승인하시겠습니까? 담당 상담사로 배정됩니다.`
+            : ''
+        }
+        confirmLabel="승인"
+        onConfirm={confirmApprove}
+        onCancel={() => setApproveTarget(null)}
+      />
 
       {/* Reject modal */}
       <Modal

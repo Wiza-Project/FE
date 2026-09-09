@@ -959,6 +959,19 @@ function buildGroupCompare(groups) {
   };
 }
 
+/**
+ * 좁은 x축 슬롯에서 라벨이 서로 겹치지 않도록, 문맥상 자명한 "역량" 접미사를 떼고
+ * 그래도 길면 잘라서 말줄임표를 붙인다. 원본 전체 이름은 <title>로 hover 시 노출한다.
+ *
+ * @param {string} name 원본 역량명 (예: "자기관리 역량")
+ * @param {number} [max=6] 잘라내기 전 허용할 최대 글자 수
+ * @returns {string} 축약된 라벨 (예: "자기관리", "자원·정보·…")
+ */
+function shortCompetencyLabel(name, max = 6) {
+  const stripped = String(name ?? '').replace(/\s*역량$/, '');
+  return stripped.length > max ? `${stripped.slice(0, max)}…` : stripped;
+}
+
 // 역량(6) × 집단(N) 그룹 막대차트. 공용 BarChart는 단일 시리즈만 지원해 여기서만 인라인으로 그린다.
 // y축은 0~100 고정(GROUP_COMPARE_MAX_SCORE)이라 왼쪽 눈금 숫자로 절대 점수를 읽을 수 있다.
 function GroupCompareChart({ competencies, series, height = 200 }) {
@@ -1026,7 +1039,8 @@ function GroupCompareChart({ competencies, series, height = 200 }) {
               fill="#656D76"
               fontFamily="Pretendard, sans-serif"
             >
-              {c.name}
+              <title>{c.name}</title>
+              {shortCompetencyLabel(c.name)}
             </text>
           </g>
         );

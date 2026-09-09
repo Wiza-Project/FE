@@ -179,7 +179,7 @@ export default function CounselingPage() {
     );
   }
   if (view === 'my') {
-    return <MyCounseling onApply={() => openApply('my')} />;
+    return <MyCounseling onApply={() => openApply('my')} onBack={() => setView('home')} />;
   }
   if (view === 'stress') {
     return <StressTestView onBack={() => setView('home')} />;

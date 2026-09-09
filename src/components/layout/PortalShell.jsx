@@ -286,7 +286,7 @@ export default function PortalShell() {
   }, [semesterYear, visibleAcademicYears]);
   useEffect(() => {
     if (semesterCode || visibleSemesterCodes.length === 0) return;
-    const fallback = visibleSemesterCodes.find((s) => s.code === 'SPRING') ?? visibleSemesterCodes[0];
+    const fallback = visibleSemesterCodes.find((s) => s.code === 'FALL') ?? visibleSemesterCodes[0];
     setSemesterCode(fallback.code);
   }, [semesterCode, visibleSemesterCodes]);
 

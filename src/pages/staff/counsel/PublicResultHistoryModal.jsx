@@ -4,7 +4,7 @@ import { Modal } from '@/components/common';
 import { ApiError } from '@/api/client';
 import { counselorPublicResultHistoryQueryKey, getCounselorPublicResultHistory } from '@/api/counsel';
 import { COUNSELING_PUBLIC_RESULT_ERROR_CODE } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 import { getPublicResultErrorMessage } from './publicResultSupport';
 
 function handleHistoryModalKeyDown(event, modalElement, onClose) {

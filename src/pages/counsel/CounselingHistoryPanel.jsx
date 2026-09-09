@@ -9,7 +9,7 @@ import {
   studentCounselingResultsQueryKey,
 } from '@/api/counsel';
 import { COUNSELING_PUBLIC_RESULT_ERROR_CODE } from '@/constants/domain';
-import { formatKstDateTime } from './myCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 const ACCENT = '#0891B2';
 

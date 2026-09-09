@@ -15,8 +15,9 @@ const TABS = [
 /**
  * @param {Object} props
  * @param {() => void} props.onApply
+ * @param {() => void} props.onBack
  */
-export default function MyCounseling({ onApply }) {
+export default function MyCounseling({ onApply, onBack }) {
   const [tab, setTab] = useState('reservation');
   const reservationPanelRef = useRef(null);
 
@@ -33,14 +34,24 @@ export default function MyCounseling({ onApply }) {
         subtitle="예약 현황과 상담 이력을 확인하세요."
         accentColor={ACCENT}
         actions={
-          <Button
-            size="sm"
-            className="min-h-[40px]"
-            style={{ background: ACCENT }}
-            onClick={onApply}
-          >
-            + 상담 신청
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-[40px]"
+              onClick={onBack}
+            >
+              ← 뒤로
+            </Button>
+            <Button
+              size="sm"
+              className="min-h-[40px]"
+              style={{ background: ACCENT }}
+              onClick={onApply}
+            >
+              + 상담 신청
+            </Button>
+          </div>
         }
       />
 

@@ -15,7 +15,7 @@ import {
   COUNSELING_PUBLIC_RESULT_STATUS,
   COUNSELING_PUBLIC_RESULT_STATUS_LABEL,
 } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 import PublicResultCorrectionModal from './PublicResultCorrectionModal';
 import PublicResultHistoryModal from './PublicResultHistoryModal';
 import {
