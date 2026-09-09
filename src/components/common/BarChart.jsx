@@ -1,4 +1,17 @@
 /**
+ * 좁은 x축 슬롯에서 라벨이 서로 겹치지 않도록, 문맥상 자명한 "역량" 접미사를 떼고
+ * 그래도 길면 잘라서 말줄임표를 붙인다. 원본 전체 이름은 <title>로 hover 시 노출한다.
+ *
+ * @param {string} name 원본 역량명 (예: "자기관리 역량")
+ * @param {number} [max=6] 잘라내기 전 허용할 최대 글자 수
+ * @returns {string} 축약된 라벨 (예: "자기관리", "자원·정보·…")
+ */
+function shortCompetencyLabel(name, max = 6) {
+  const stripped = String(name ?? '').replace(/\s*역량$/, '');
+  return stripped.length > max ? `${stripped.slice(0, max)}…` : stripped;
+}
+
+/**
  * @param {Object} props
  * @param {{label: string, value: number}[]} props.data
  * @param {string} [props.color]
@@ -62,7 +75,8 @@ export function BarChart({ data, color = '#2563EB', height = 180, unit = '' }) {
               fill="#656D76"
               fontFamily="Pretendard, sans-serif"
             >
-              {d.label}
+              <title>{d.label}</title>
+              {shortCompetencyLabel(d.label)}
             </text>
           </g>
         );
