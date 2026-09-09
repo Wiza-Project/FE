@@ -435,9 +435,10 @@ const TABS = [
  * 비교과 프로그램 등록/수정 폼. ProgramRegisterRequestDTO/ProgramUpdateRequestDTO(백엔드)에
  * 맞춘 5개 탭으로 구성: 기본정보 / 모집·운영·정원 / 회차 관리 / 역량·정책 / 첨부.
  * 수정 모드는 GET /staff/programs/{id}로 상세를 받아와 프리필한 뒤 PUT으로 저장한다.
- * 회차(장소 포함)는 등록/수정 요청 바디의 `sessions` 배열로 함께 전송되며, 최소 1개가
- * 없거나 카드의 시작/종료일이 비어있으면 저장을 막고 토스트로 안내한다(백엔드는 회차가
- * 아예 없을 때 P022(PROGRAM_SESSION_REQUIRED)로 거부하며, 이 경우도 동일하게 토스트 처리).
+ * 회차(장소 포함)는 등록(POST) 요청 바디의 `sessions` 배열로만 전송된다 — 수정(PUT)의
+ * ProgramUpdateRequestDTO에는 `sessions` 필드가 없다(회차 정보는 별도 관리 대상). 다만 화면
+ * 자체의 최소 1개 카드 규칙은 등록/수정 모두에서 동일하게 검증해 저장을 막고 토스트로
+ * 안내한다(등록 시 백엔드는 회차가 아예 없으면 P022(PROGRAM_SESSION_REQUIRED)로 거부).
  *
  * @param {Object} props
  * @param {number} [props.programId] 편집 대상 ID. 있으면 수정 모드.
@@ -788,11 +789,12 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     // 해제하도록 요청한다. FileGroup은 여러 도메인이 공유하는 테이블이라 fileGroupId를 null로 보내는 방식은
     // 쓰지 않는다 — clearFileGroup은 연결 해제(unlink)일 뿐 FileGroup/StoredFile row 자체를 지우지 않는다.
     ...(isEdit
-      ? fileGroupId != null
-        ? { fileGroupId }
-        : existingFileRemoved
-          ? { clearFileGroup: true }
-          : {}
+      ? {
+          ...(fileGroupId != null ? { fileGroupId } : {}),
+          // 백엔드 ProgramUpdateRequestDTO의 clearFileGroup은 원시 boolean이라 키 자체가
+          // 없으면 역직렬화 단계에서 실패한다(FAIL_ON_NULL_FOR_PRIMITIVES) — 항상 명시적으로 보낸다.
+          clearFileGroup: fileGroupId == null && existingFileRemoved,
+        }
       : { fileGroupId }),
     operatingUnitCodeId: Number(operatingUnitCodeId),
     programTypeCodeId: Number(programTypeCodeId),
@@ -805,17 +807,23 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     operationEndsAt: toInstant(operEnd),
     capacity: Number(capacity),
     completionRate,
-    sessions: sessions.map((s, i) => {
-      const endsAtDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
-      return {
-        sessionNo: i + 1,
-        sessionName: s.sessionName.trim() || null,
-        startsAt: toInstant(s.startsAt, s.startsAtTime),
-        endsAt: toInstant(endsAtDate, s.endsAtTime),
-        locationType: s.locationType,
-        location: s.locationType === 'DIRECT_INPUT' ? s.location.trim() || null : null,
-      };
-    }),
+    // 회차 정보는 별도의 "회차 관리" API가 담당하며 수정(PUT) API의 요청 스키마는
+    // sessions 필드를 정의하지 않는다. 등록 모드에서만 sessions를 포함시킨다.
+    ...(isEdit
+      ? {}
+      : {
+          sessions: sessions.map((s, i) => {
+            const endsAtDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
+            return {
+              sessionNo: i + 1,
+              sessionName: s.sessionName.trim() || null,
+              startsAt: toInstant(s.startsAt, s.startsAtTime),
+              endsAt: toInstant(endsAtDate, s.endsAtTime),
+              locationType: s.locationType,
+              location: s.locationType === 'DIRECT_INPUT' ? s.location.trim() || null : null,
+            };
+          }),
+        }),
   });
 
   const handleRegister = () => {
