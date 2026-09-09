@@ -30,6 +30,28 @@ function calculateDDay(endDateStr) {
 
 function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
 // function AiRecommendationBanner({ onDetail }) {
+
+// 테스트용
+const storedUser = (() => {
+    try {
+      const raw = localStorage.getItem('user') || localStorage.getItem('auth') || localStorage.getItem('userInfo');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const isTestUser = 
+    storedUser?.userId === 238 ||
+    storedUser?.id === 238 ||
+    String(storedUser?.userNumber || storedUser?.loginId || '') === '20240034' ||
+    true;
+
+  const [formRecType, setFormRecType] = useState('RECOMMENDED');
+  const [formKeyword, setFormKeyword] = useState('백엔드');
+  
+
+
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('AI');
@@ -403,6 +425,37 @@ function AiRecommendationBanner({ onDetail, latestFallbackJobs }) {
               className="h-9 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669]"
             />
           </div>
+
+
+          {/* test 테스트용 테스트 계정 전용 시연 입력창 (일반 계정에는 미노출) */}
+          {isTestUser && (
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#F3F4F6]">
+              <div className="flex flex-col gap-1">
+                <label className="font-semibold text-[#656D76]">선호 채용 구분</label>
+                <select
+                  value={formRecType}
+                  onChange={(e) => setFormRecType(e.target.value)}
+                  className="h-9 px-2.5 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669]"
+                >
+                  <option value="GENERAL">일반 채용</option>
+                  <option value="RECOMMENDED">교내 추천 채용 (우대)</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-semibold text-[#656D76]">희망 직무 키워드</label>
+                <input
+                  type="text"
+                  value={formKeyword}
+                  onChange={(e) => setFormKeyword(e.target.value)}
+                  placeholder="예: 백엔드, 웹개발"
+                  className="h-9 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669]"
+                />
+              </div>
+            </div>
+          )}
+
+
         </form>
       </Modal>
 

@@ -154,15 +154,20 @@ export default function JobDetail({ jobId, onBack }) {
     );
   }
 
+  // 상단 컴포넌트 외부 또는 내부에 추가
+  const cleanTitle = (title) => (title ? title.replace(/\s*\(채용\s*No\.\d+\)/gi, '') : '');
+
   return (
     <div>
       <PageHeader
         breadcrumbs={[
           { label: '취업·창업' },
           { label: '채용공고', onClick: onBack },
-          { label: job.postingTitle },
+          // { label: job.postingTitle },
+          { label: cleanTitle(job.postingTitle) },
         ]}
-        title={job.postingTitle}
+        // title={job.postingTitle}
+        title={cleanTitle(job.postingTitle)}
         accentColor={ACCENT}
         actions={
           <Button size="sm" variant="outline" onClick={onBack}>
