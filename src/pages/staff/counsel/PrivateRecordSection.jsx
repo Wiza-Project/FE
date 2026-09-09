@@ -9,7 +9,7 @@ import {
   saveCounselingPrivateRecord,
 } from '@/api/counsel';
 import { COUNSELING_PRIVATE_RECORD_STATUS, COUNSELING_SESSION_ERROR_CODE } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 import {
   getPrivateRecordSeed,
   shouldApplyPrivateRecordMutationSuccess,

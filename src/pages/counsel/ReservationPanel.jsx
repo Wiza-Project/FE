@@ -16,7 +16,7 @@ import {
   COUNSELING_RESERVATION_STATUS_LABEL,
   COUNSELING_TYPE_CODE,
 } from '@/constants/domain';
-import { formatKstDateTime } from './myCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 // ─── 예약 현황 ───────────────────────────────────────────────────────────────
 
@@ -729,7 +729,6 @@ export default function ReservationPanel() {
                     </td>
                     <td className="px-3 py-3 text-center text-[#656D76] whitespace-nowrap">
                       {/* 상담 시각은 nullable이다. counselingScheduleId가 없는 레거시 예약에선 startsAt도 null이라 '미배정'으로 표시한다. */}
-                      {/* new Date(null)은 Invalid가 아니라 1970년으로 찍히므로, null을 formatKstDateTime에 넘기기 전에 반드시 먼저 거른다. */}
                       {reservation.startsAt ? formatKstDateTime(reservation.startsAt) : '미배정'}
                     </td>
                     <td className="px-3 py-3 text-center text-[#656D76] whitespace-nowrap">

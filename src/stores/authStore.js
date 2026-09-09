@@ -57,6 +57,12 @@ export const useAuthStore = create((set, get) => ({
 
   finishBootstrap: () => set({ isBootstrapping: false }),
 
+  // 사용자 약관 동의
+  markCommonConsentCompleted: () =>
+    set((state) =>
+      state.user ? { user: { ...state.user, commonConsentCompleted: true } } : state,
+    ),
+
   /** 현재 사용자가 주어진 유형 중 하나인가 */
   hasType: (...types) => {
     const user = get().user;

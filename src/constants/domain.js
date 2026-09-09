@@ -261,7 +261,7 @@ export const COUNSELING_SESSION_ERROR_CODE = {
   SESSION_NOT_FOUND: 'S007',
   /** 같은 상담사의 기존 일정·회기와 시간 중복 */
   TIME_CONFLICT: 'S002',
-  /** 종료된 배정, PLANNED가 아닌 회기의 완료·취소, 미래 후속 회기 생성 등 상태 위반 */
+  /** 종료된 배정, PLANNED가 아닌 회기의 완료·취소 등 상태 위반 */
   INVALID_STATE: 'S008',
   /** 비공개 기록 전용. 회기·출결·배정·기록 상태가 요청과 맞지 않음(최신 서버 상태 재조회 필요) */
   CONFLICT: 'S009',
@@ -524,4 +524,5 @@ export const COUNSELING_PROPOSAL_ERROR_CODE = {
  * @property {string|null} phone
  * @property {string|null} department
  * @property {string|null} departmentName
+ * @property {boolean} commonConsentCompleted 현재 유효한 COMMON 필수 약관 전부에 동의했는지
  */

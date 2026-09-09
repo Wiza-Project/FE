@@ -21,7 +21,7 @@ import {
   COUNSELING_PROPOSAL_STATUS_LABEL,
 } from '@/constants/domain';
 import CounselingProposalAcceptDialog from './CounselingProposalAcceptDialog';
-import { formatKstDateTime } from './myCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 const ACCENT = '#0E7490';
 const PAGE_SIZE = 20;
@@ -272,7 +272,7 @@ export default function CounselingProposalPanel({ onShowReservations }) {
                 <p className="[overflow-wrap:anywhere] whitespace-pre-wrap text-[13px] text-[#1F2328]">
                   {proposal.proposalContent}
                 </p>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#656D76]">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#656D76]">
                   <span>생성일 {formatKstDateTime(proposal.createdAt)}</span>
                   {proposal.responseDeadline && (
                     <span>응답 기한 {formatKstDateTime(proposal.responseDeadline)}</span>
@@ -284,7 +284,7 @@ export default function CounselingProposalPanel({ onShowReservations }) {
                     <button
                       type="button"
                       onClick={onShowReservations}
-                      className="inline-flex min-h-[40px] items-center font-semibold text-[#0E7490] underline underline-offset-2 hover:text-[#155E75] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0E7490]"
+                      className="inline-flex min-h-[40px] items-center whitespace-nowrap font-semibold text-[#0E7490] underline underline-offset-2 hover:text-[#155E75] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0E7490]"
                     >
                       예약 보기 (#{proposal.createdReservationId})
                     </button>

@@ -20,6 +20,8 @@ import { apiClient } from './client';
  *
  * 요청 바디 키는 universityNo 입니다 — 응답의 user.loginId 와 같은 값(학번/교번)을
  * 가리키지만 백엔드 LoginRequest 는 요청 필드명을 universityNo 로 고정해뒀습니다.
+ *
+ * 응답의 user.commonConsentCompleted 로 최초 로그인 동의 화면(/consent) 진입 여부를 분기합니다
  * @returns {Promise<LoginResult>}
  */
 export const login = async ({ loginId, password }) => {

@@ -15,7 +15,7 @@ import {
   COUNSELING_RESERVATION_ERROR_CODE,
   COUNSELING_TYPE_CODE,
 } from '@/constants/domain';
-import { formatKstDateTime } from './myCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 const ACCENT = '#0E7490';
 const CONSENT_POLICIES_QUERY_KEY = ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING];

@@ -9,7 +9,7 @@ import {
   fetchCounselorStudentByUniversityNo,
 } from '@/api/counsel';
 import { COUNSELING_RESERVATION_ERROR_CODE } from '@/constants/domain';
-import { formatKstDateTime } from './staffCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 // MySchedule.jsx와 정확히 같은 배열 형태를 써야 두 화면이 같은 캐시를 공유한다(키를 바꾸지 않는다).
 const SCHEDULE_QUERY_KEY = ['counselorSchedules'];

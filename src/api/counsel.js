@@ -457,7 +457,7 @@ export const fetchCounselingSessionDetail = async (sessionId) => {
 
 /**
  * @typedef {Object} CreateFollowUpSessionRequest
- * @property {string} startsAt UTC ISO-8601 Instant. assignment.assignedAt <= startsAt < endsAt, startsAt <= now
+ * @property {string} startsAt UTC ISO-8601 Instant. assignment.assignedAt <= startsAt < endsAt, 과거·미래 모두 허용
  * @property {string} endsAt UTC ISO-8601 Instant
  */
 

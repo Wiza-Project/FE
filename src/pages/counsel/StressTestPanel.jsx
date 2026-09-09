@@ -16,7 +16,7 @@ import {
   COUNSELING_RESERVATION_ERROR_CODE,
   STRESS_TEST_ERROR_CODE,
 } from '@/constants/domain';
-import { formatKstDateTime } from './myCounselingDate';
+import { formatKstDateTime } from '@/utils/counselingDate';
 
 const ACCENT = '#0891B2';
 
