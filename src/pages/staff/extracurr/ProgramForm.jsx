@@ -134,7 +134,7 @@ function IdSelect({ id, value, onChange, options, placeholder = '선택하세요
   );
 }
 
-function DateInput({ id, value, onChange, error, ariaLabel }) {
+function DateInput({ id, value, onChange, error, ariaLabel, disabled }) {
   return (
     <input
       id={id}
@@ -143,12 +143,13 @@ function DateInput({ id, value, onChange, error, ariaLabel }) {
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
       aria-invalid={!!error}
-      className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+      disabled={disabled}
+      className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors disabled:bg-[#F3F4F6] disabled:text-[#9AA0A6] disabled:cursor-not-allowed ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
 }
 
-function TimeInput({ id, value, onChange, error, ariaLabel }) {
+function TimeInput({ id, value, onChange, error, ariaLabel, disabled }) {
   return (
     <input
       id={id}
@@ -157,25 +158,27 @@ function TimeInput({ id, value, onChange, error, ariaLabel }) {
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
       aria-invalid={!!error}
-      className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+      disabled={disabled}
+      className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors disabled:bg-[#F3F4F6] disabled:text-[#9AA0A6] disabled:cursor-not-allowed ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
 }
 
 /** 2택 라디오 그룹. 옵션이 항상 2개뿐인 날짜/장소 입력 방식 선택에 사용한다. */
-function SessionRadioGroup({ name, options, value, onChange, ariaLabel }) {
+function SessionRadioGroup({ name, options, value, onChange, ariaLabel, disabled }) {
   return (
     <div role="radiogroup" aria-label={ariaLabel} className="flex items-center gap-4">
       {options.map((opt) => (
         <label
           key={opt.value}
-          className="flex items-center gap-1.5 text-[12px] text-[#1F2328] cursor-pointer"
+          className={`flex items-center gap-1.5 text-[12px] ${disabled ? 'text-[#9AA0A6] cursor-not-allowed' : 'text-[#1F2328] cursor-pointer'}`}
         >
           <input
             type="radio"
             name={name}
             checked={value === opt.value}
             onChange={() => onChange(opt.value)}
+            disabled={disabled}
             className="w-3.5 h-3.5 accent-[#374151]"
           />
           {opt.label}
@@ -199,6 +202,7 @@ function SessionRadioGroup({ name, options, value, onChange, ariaLabel }) {
  * @param {boolean} [props.startsAtTimeError]
  * @param {boolean} [props.endsAtTimeError]
  * @param {boolean} [props.locationError]
+ * @param {boolean} [props.readOnly] true면 모든 입력과 삭제 버튼을 비활성화한다(수정 모드 — 회차 변경사항이 저장되지 않으므로).
  */
 function SessionCard({
   index,
@@ -211,13 +215,14 @@ function SessionCard({
   startsAtTimeError,
   endsAtTimeError,
   locationError,
+  readOnly,
 }) {
   const isSingle = session.dateMode === 'SINGLE';
   return (
     <div className="border border-[#E5E7EB] rounded-[8px] p-4 bg-white">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[13px] font-bold text-[#1F2328]">{index + 1}회차</h3>
-        {removable && (
+        {removable && !readOnly && (
           <button
             type="button"
             onClick={onRemove}
@@ -235,6 +240,7 @@ function SessionCard({
             onChange={(v) => onChange({ sessionName: v })}
             placeholder="예) 1주차 오리엔테이션"
             maxLength={200}
+            disabled={readOnly}
           />
         </Field>
 
@@ -250,6 +256,7 @@ function SessionCard({
               { value: 'RANGE', label: '기간설정' },
               { value: 'SINGLE', label: '단일일자설정' },
             ]}
+            disabled={readOnly}
           />
         </Field>
 
@@ -262,12 +269,14 @@ function SessionCard({
                 onChange={(v) => onChange({ startsAt: v, endsAt: v })}
                 ariaLabel={`${index + 1}회차 날짜`}
                 error={startsAtError}
+                disabled={readOnly}
               />
               <TimeInput
                 value={session.startsAtTime}
                 onChange={(v) => onChange({ startsAtTime: v })}
                 ariaLabel={`${index + 1}회차 시작 시각`}
                 error={startsAtTimeError}
+                disabled={readOnly}
               />
               <span className="text-[12px] text-[#9AA0A6]">~</span>
               <TimeInput
@@ -275,6 +284,7 @@ function SessionCard({
                 onChange={(v) => onChange({ endsAtTime: v })}
                 ariaLabel={`${index + 1}회차 종료 시각`}
                 error={endsAtTimeError}
+                disabled={readOnly}
               />
             </div>
           </Field>
@@ -286,12 +296,14 @@ function SessionCard({
                 onChange={(v) => onChange({ startsAt: v })}
                 ariaLabel={`${index + 1}회차 시작일`}
                 error={startsAtError}
+                disabled={readOnly}
               />
               <TimeInput
                 value={session.startsAtTime}
                 onChange={(v) => onChange({ startsAtTime: v })}
                 ariaLabel={`${index + 1}회차 시작 시각`}
                 error={startsAtTimeError}
+                disabled={readOnly}
               />
               <span className="text-[12px] text-[#9AA0A6]">~</span>
               <DateInput
@@ -299,12 +311,14 @@ function SessionCard({
                 onChange={(v) => onChange({ endsAt: v })}
                 ariaLabel={`${index + 1}회차 종료일`}
                 error={endsAtError}
+                disabled={readOnly}
               />
               <TimeInput
                 value={session.endsAtTime}
                 onChange={(v) => onChange({ endsAtTime: v })}
                 ariaLabel={`${index + 1}회차 종료 시각`}
                 error={endsAtTimeError}
+                disabled={readOnly}
               />
             </div>
           </Field>
@@ -332,6 +346,7 @@ function SessionCard({
                   { value: 'DIRECT_INPUT', label: '직접입력' },
                   { value: 'SAME_AS_PREVIOUS', label: '전회차와 동일' },
                 ]}
+                disabled={readOnly}
               />
             </div>
           )}
@@ -342,7 +357,7 @@ function SessionCard({
             placeholder="예) 학생회관 3층 세미나실"
             maxLength={300}
             error={locationError}
-            disabled={session.locationType === 'SAME_AS_PREVIOUS'}
+            disabled={readOnly || session.locationType === 'SAME_AS_PREVIOUS'}
           />
         </Field>
       </div>
@@ -724,47 +739,50 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
       toast('모집·운영 기간과 정원을 확인해 주세요.', 'error');
       return false;
     }
-    if (sessions.length === 0) {
-      setActiveTab('sessions');
-      toast('최소 1회차는 입력해야합니다.', 'error');
-      return false;
-    }
-    const dateErrorSessions = [];
-    const timeErrorSessions = [];
-    sessions.forEach((s) => {
-      const endDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
-      if (!s.startsAt || !endDate || s.startsAt > endDate) {
-        dateErrorSessions.push(s);
-        return;
+    // 수정 모드에서는 회차 입력이 읽기 전용이라(회차 변경은 저장되지 않음) 회차 검증을 건너뛴다.
+    if (!isEdit) {
+      if (sessions.length === 0) {
+        setActiveTab('sessions');
+        toast('최소 1회차는 입력해야합니다.', 'error');
+        return false;
       }
-      if (s.startsAt === endDate) {
-        if (Boolean(s.startsAtTime) !== Boolean(s.endsAtTime)) {
-          timeErrorSessions.push(s);
-        } else if (s.startsAtTime && s.endsAtTime && s.startsAtTime >= s.endsAtTime) {
-          timeErrorSessions.push(s);
+      const dateErrorSessions = [];
+      const timeErrorSessions = [];
+      sessions.forEach((s) => {
+        const endDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
+        if (!s.startsAt || !endDate || s.startsAt > endDate) {
+          dateErrorSessions.push(s);
+          return;
         }
+        if (s.startsAt === endDate) {
+          if (Boolean(s.startsAtTime) !== Boolean(s.endsAtTime)) {
+            timeErrorSessions.push(s);
+          } else if (s.startsAtTime && s.endsAtTime && s.startsAtTime >= s.endsAtTime) {
+            timeErrorSessions.push(s);
+          }
+        }
+      });
+      if (dateErrorSessions.length > 0 || timeErrorSessions.length > 0) {
+        setSessionFieldErrors(new Set(dateErrorSessions.map((s) => s.localId)));
+        setSessionTimeErrors(new Set(timeErrorSessions.map((s) => s.localId)));
+        setActiveTab('sessions');
+        toast('모든 회차의 날짜(및 시각)를 확인해 주세요.', 'error');
+        return false;
       }
-    });
-    if (dateErrorSessions.length > 0 || timeErrorSessions.length > 0) {
-      setSessionFieldErrors(new Set(dateErrorSessions.map((s) => s.localId)));
-      setSessionTimeErrors(new Set(timeErrorSessions.map((s) => s.localId)));
-      setActiveTab('sessions');
-      toast('모든 회차의 날짜(및 시각)를 확인해 주세요.', 'error');
-      return false;
-    }
-    setSessionFieldErrors(new Set());
-    setSessionTimeErrors(new Set());
+      setSessionFieldErrors(new Set());
+      setSessionTimeErrors(new Set());
 
-    const missingLocationSessions = sessions.filter(
-      (s) => s.locationType === 'DIRECT_INPUT' && !s.location.trim(),
-    );
-    if (missingLocationSessions.length > 0) {
-      setSessionLocationErrors(new Set(missingLocationSessions.map((s) => s.localId)));
-      setActiveTab('sessions');
-      toast('모든 회차의 장소를 입력하거나 "전회차와 동일"을 선택해 주세요.', 'error');
-      return false;
+      const missingLocationSessions = sessions.filter(
+        (s) => s.locationType === 'DIRECT_INPUT' && !s.location.trim(),
+      );
+      if (missingLocationSessions.length > 0) {
+        setSessionLocationErrors(new Set(missingLocationSessions.map((s) => s.localId)));
+        setActiveTab('sessions');
+        toast('모든 회차의 장소를 입력하거나 "전회차와 동일"을 선택해 주세요.', 'error');
+        return false;
+      }
+      setSessionLocationErrors(new Set());
     }
-    setSessionLocationErrors(new Set());
 
     if (newErrors.competencyId) {
       setActiveTab('policy');
@@ -807,8 +825,9 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
     operationEndsAt: toInstant(operEnd),
     capacity: Number(capacity),
     completionRate,
-    // 회차 정보는 별도의 "회차 관리" API가 담당하며 수정(PUT) API의 요청 스키마는
-    // sessions 필드를 정의하지 않는다. 등록 모드에서만 sessions를 포함시킨다.
+    // ProgramUpdateRequestDTO에는 sessions 필드가 없어 수정 모드에서는 보낼 수 없다.
+    // 그래서 수정 모드의 회차 섹션은 읽기 전용으로 렌더링한다(SessionCard readOnly prop) —
+    // 회차 변경 기능이 아직 없으므로 payload에도 포함하지 않는다. 등록 모드에서만 sessions를 포함시킨다.
     ...(isEdit
       ? {}
       : {
@@ -1095,6 +1114,11 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           hidden={activeTab !== 'sessions'}
         >
           <div className="flex flex-col gap-4">
+            {isEdit && (
+              <p className="text-[12px] text-[#656D76]">
+                등록된 회차 정보는 수정할 수 없습니다.
+              </p>
+            )}
             {sessions.map((s, i) => (
               <SessionCard
                 key={s.localId}
@@ -1108,15 +1132,18 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
                 startsAtTimeError={sessionTimeErrors.has(s.localId)}
                 endsAtTimeError={sessionTimeErrors.has(s.localId)}
                 locationError={sessionLocationErrors.has(s.localId)}
+                readOnly={isEdit}
               />
             ))}
-            <button
-              type="button"
-              onClick={addSession}
-              className="h-9 px-4 self-start text-[12px] font-bold rounded-[6px] border border-dashed border-[#9AA0A6] text-[#656D76] hover:border-[#374151] hover:text-[#1F2328] transition-colors"
-            >
-              + 회차 추가
-            </button>
+            {!isEdit && (
+              <button
+                type="button"
+                onClick={addSession}
+                className="h-9 px-4 self-start text-[12px] font-bold rounded-[6px] border border-dashed border-[#9AA0A6] text-[#656D76] hover:border-[#374151] hover:text-[#1F2328] transition-colors"
+              >
+                + 회차 추가
+              </button>
+            )}
           </div>
         </Section>
 
