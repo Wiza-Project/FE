@@ -174,11 +174,12 @@ export const getMyJobApplications = (params) =>
 /**
  * @typedef {Object} JobPreference
  * @property {number} [studentUserId] 학생 식별자
- * @property {string} desiredIndustry 희망 업종
- * @property {string} desiredRole 희망 직무
- * @property {string} desiredRegion 희망 근무 지역
- * @property {number} [desiredSalary] 희망 연봉 (단위: 만원)
- * @property {string} [employmentType] 희망 고용형태
+ * @property {number} [ncsStandardId] 희망 직무 코드 ID
+ * @property {number} [preferredRegionCodeId] 희망 근무 지역 코드 ID
+ * @property {string} [preferredEmploymentType] 희망 고용형태 (정규직, 계약직 등)
+ * @property {number} [minimumSalary] 희망 최소 연봉 (단위: 만원)
+ * @property {('RECOMMENDED'|'GENERAL')} [preferredPostingType] 선호 채용 구분
+ * @property {string} [jobKeyword] 희망 직무 키워드
  * @property {string} [updatedAt] 최종 수정일시
  */
 

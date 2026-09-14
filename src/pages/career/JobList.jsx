@@ -167,11 +167,15 @@ const storedUser = (() => {
       setFormRegionId(preference.preferredRegionCodeId || '');
       setFormEmpType(preference.preferredEmploymentType || '정규직');
       setFormMinSalary(preference.minimumSalary ? String(preference.minimumSalary) : '');
+      setFormRecType(preference.preferredPostingType || 'RECOMMENDED');
+      setFormKeyword(preference.jobKeyword || '');
     } else {
       setFormNcsId('');
       setFormRegionId('');
       setFormEmpType('정규직');
       setFormMinSalary('');
+      setFormRecType('RECOMMENDED');
+      setFormKeyword('');
     }
     setPreferenceModalOpen(true);
   };
@@ -223,6 +227,8 @@ const storedUser = (() => {
       preferredRegionCodeId: formRegionId ? Number(formRegionId) : null,
       preferredEmploymentType: formEmpType || null,
       minimumSalary: formMinSalary ? Number(formMinSalary) : null,
+      preferredPostingType: formRecType || 'RECOMMENDED',
+      jobKeyword: formKeyword?.trim() || null,
     });
   };
 
