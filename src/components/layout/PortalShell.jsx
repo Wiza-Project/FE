@@ -582,7 +582,7 @@ export default function PortalShell() {
         </header>
 
         {/* Content area */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto relative">
           <div className="page-enter min-h-full p-6">
             <Outlet />
           </div>
