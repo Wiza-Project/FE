@@ -1,10 +1,19 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAssessmentResult } from '@/api/competency';
 import { ApiError } from '@/api/client';
 import { ASSESSMENT_ERROR_CODE } from '@/constants/domain';
 import { COMP_COLOR } from '@/data/competencyData';
 import { formatDateTime } from '@/utils/date';
-import { PageHeader, RadarChart, Button, EmptyState, SkeletonLoader, toast } from '@/components/common';
+import {
+  PageHeader,
+  RadarChart,
+  Button,
+  EmptyState,
+  SkeletonLoader,
+  toast,
+} from '@/components/common';
+import CompetencyAiAssistantPanel from './CompetencyAiAssistantPanel';
 
 const judgment = (score) => (score >= 75 ? '우수' : score >= 60 ? '보통' : '보완 필요');
 const JUDG_STYLE = {
@@ -21,6 +30,7 @@ const JUDG_STYLE = {
  * @param {() => void} props.onRecommend
  */
 export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecommend }) {
+  const [showAiAssistant, setShowAiAssistant] = useState(false);
   const {
     data: result,
     isPending,
@@ -33,7 +43,8 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
     enabled: !!attemptId,
     // Q018(미제출)은 재시도해도 같은 결과라 전역 retry:1을 그대로 태우면 스켈레톤만 더 오래 뜬다.
     retry: (failureCount, err) =>
-      !(err instanceof ApiError && err.code === ASSESSMENT_ERROR_CODE.RESULT_NOT_AVAILABLE) && failureCount < 1,
+      !(err instanceof ApiError && err.code === ASSESSMENT_ERROR_CODE.RESULT_NOT_AVAILABLE) &&
+      failureCount < 1,
   });
 
   if (!attemptId) {
@@ -52,7 +63,8 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
 
   if (isError) {
     // Q018(RESULT_NOT_AVAILABLE): 아직 제출 전이라 채점되지 않은 attempt
-    const notAvailable = error instanceof ApiError && error.code === ASSESSMENT_ERROR_CODE.RESULT_NOT_AVAILABLE;
+    const notAvailable =
+      error instanceof ApiError && error.code === ASSESSMENT_ERROR_CODE.RESULT_NOT_AVAILABLE;
     return (
       <EmptyState
         message={
@@ -62,7 +74,11 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
               ? error.message
               : '결과를 불러오지 못했습니다.'
         }
-        sub={notAvailable ? '진단을 제출하면 결과를 확인할 수 있습니다.' : '잠시 후 다시 시도해 주세요.'}
+        sub={
+          notAvailable
+            ? '진단을 제출하면 결과를 확인할 수 있습니다.'
+            : '잠시 후 다시 시도해 주세요.'
+        }
         action={
           notAvailable ? (
             onBack && (
@@ -103,7 +119,10 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
   const values = scores.map((s) => Number(s.convertedScore));
   const compareValues = values.map(() => Number(result.overallAverageScore));
 
-  const lowest = scores.reduce((min, s) => (s.convertedScore < min.convertedScore ? s : min), scores[0]);
+  const lowest = scores.reduce(
+    (min, s) => (s.convertedScore < min.convertedScore ? s : min),
+    scores[0],
+  );
 
   return (
     <div>
@@ -126,12 +145,30 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
             >
               결과 PDF 저장
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowAiAssistant((visible) => !visible)}
+            >
+              {showAiAssistant ? 'AI 분석 닫기' : 'AI 결과 분석'}
+            </Button>
             <Button size="sm" style={{ background: COMP_COLOR }} onClick={onCompare}>
               사전·사후 비교
             </Button>
           </>
         }
       />
+
+      {showAiAssistant && (
+        <CompetencyAiAssistantPanel
+          attemptId={attemptId}
+          onClose={() => setShowAiAssistant(false)}
+          onOpenRecommendations={() => {
+            setShowAiAssistant(false);
+            onRecommend();
+          }}
+        />
+      )}
 
       {/* 2-col grid */}
       <div className="grid grid-cols-2 gap-4 mb-4">
@@ -143,7 +180,13 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
           </div>
 
           <div className="flex justify-center">
-            <RadarChart labels={labels} values={values} compareValues={compareValues} color={COMP_COLOR} size={340} />
+            <RadarChart
+              labels={labels}
+              values={values}
+              compareValues={compareValues}
+              color={COMP_COLOR}
+              size={340}
+            />
           </div>
 
           {/* Legend */}
@@ -154,7 +197,15 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
             </div>
             <div className="flex items-center gap-2">
               <svg width="16" height="4" viewBox="0 0 16 4">
-                <line x1="0" y1="2" x2="16" y2="2" stroke="#9CA3AF" strokeWidth="1.5" strokeDasharray="4 3" />
+                <line
+                  x1="0"
+                  y1="2"
+                  x2="16"
+                  y2="2"
+                  stroke="#9CA3AF"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 3"
+                />
               </svg>
               <span className="text-[12px] text-[#656D76] font-semibold">나의 평균</span>
             </div>
@@ -163,7 +214,9 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
           {/* Summary */}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <div className="text-center p-3 bg-[#F5F3FF] rounded-[6px]">
-              <div className="text-[20px] font-black text-[#7C3AED]">{result.overallAverageScore}</div>
+              <div className="text-[20px] font-black text-[#7C3AED]">
+                {result.overallAverageScore}
+              </div>
               <div className="text-[11px] text-[#656D76] font-semibold mt-0.5">나의 평균</div>
             </div>
             <div className="text-center p-3 bg-[#EFF6FF] rounded-[6px]">
@@ -203,20 +256,33 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
                     >
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
-                          {isLowest && <span className="text-[10px] text-[#CF222E] font-black">▼</span>}
-                          <span className={`font-semibold ${isLowest ? 'text-[#CF222E]' : 'text-[#1F2328]'}`}>
+                          {isLowest && (
+                            <span className="text-[10px] text-[#CF222E] font-black">▼</span>
+                          )}
+                          <span
+                            className={`font-semibold ${isLowest ? 'text-[#CF222E]' : 'text-[#1F2328]'}`}
+                          >
                             {s.competencyName}
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-right font-black" style={{ color: isLowest ? '#CF222E' : '#7C3AED' }}>
+                      <td
+                        className="px-3 py-3 text-right font-black"
+                        style={{ color: isLowest ? '#CF222E' : '#7C3AED' }}
+                      >
                         {s.convertedScore}점
                       </td>
                       <td className="px-3 py-3 text-right text-[#656D76]">
-                        {result.percentileAvailable && s.percentile != null ? `상위 ${s.percentile}%` : '집계중'}
+                        {result.percentileAvailable && s.percentile != null
+                          ? `상위 ${s.percentile}%`
+                          : '집계중'}
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${JUDG_STYLE[jdg]}`}>{jdg}</span>
+                        <span
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${JUDG_STYLE[jdg]}`}
+                        >
+                          {jdg}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -259,9 +325,12 @@ export default function DiagnosisResult({ attemptId, onBack, onCompare, onRecomm
       {/* CTA */}
       <div className="bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] rounded-[10px] p-6 flex items-center justify-between">
         <div>
-          <div className="text-white font-bold text-[16px]">취약 역량 기반 추천 비교과 프로그램</div>
+          <div className="text-white font-bold text-[16px]">
+            취약 역량 기반 추천 비교과 프로그램
+          </div>
           <div className="text-[#C4B5FD] text-[13px] mt-1">
-            {lowest.competencyName} 역량({lowest.convertedScore}점) 향상을 위한 맞춤 프로그램을 확인하세요.
+            {lowest.competencyName} 역량({lowest.convertedScore}점) 향상을 위한 맞춤 프로그램을
+            확인하세요.
           </div>
         </div>
         <Button
