@@ -21,6 +21,8 @@ import {
 } from '@/api/careerDocuments';
 import { ApiError } from '@/api/client';
 import { formatDate } from '@/utils/date';
+import CareerAiAssistButton from '@/components/career/CareerAiAssistButton';
+import { CAREER_AI_TASK } from '@/api/careerAi';
 
 const ACCENT = '#059669';
 // 실제 Swagger 기준 첨부 가능 형식은 "이미지/PDF" (PortfolioController 설명).
@@ -105,6 +107,7 @@ function emptyForm() {
     skillInput: '',
     externalUrl: '',
     isPublic: false,
+    aiAssistanceUsed: false,
   };
 }
 
@@ -156,6 +159,7 @@ function PortfolioFormModal({ open, documentId, onClose, onSaved }) {
       skillInput: '',
       externalUrl: c.externalUrl ?? '',
       isPublic: !!doc.isPublic,
+      aiAssistanceUsed: !!doc.aiAssistanceUsed,
     });
     setLoadedId(doc.careerDocumentId);
   }, [open, isEdit, detailQuery.data, loadedId]);
@@ -218,13 +222,13 @@ function PortfolioFormModal({ open, documentId, onClose, onSaved }) {
             payload: {
               documentTitle: form.title.trim(),
               contentData: buildContentData(),
-              aiAssistanceUsed: false,
+              aiAssistanceUsed: form.aiAssistanceUsed,
             },
           })
         : await createMutation.mutateAsync({
             documentTitle: form.title.trim(),
             contentData: buildContentData(),
-            aiAssistanceUsed: false,
+            aiAssistanceUsed: form.aiAssistanceUsed,
           });
 
       // 첨부파일 업로드는 문서가 존재해야 호출할 수 있어, 본문 저장 뒤에 이어서 호출한다.
@@ -321,12 +325,28 @@ function PortfolioFormModal({ open, documentId, onClose, onSaved }) {
           </div>
 
           <div>
-            <label
-              htmlFor="portfolioDescription"
-              className="block text-[12px] font-semibold text-[#656D76] mb-1.5"
-            >
-              설명
-            </label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label
+                htmlFor="portfolioDescription"
+                className="block text-[12px] font-semibold text-[#656D76]"
+              >
+                설명
+              </label>
+              <CareerAiAssistButton
+                task={CAREER_AI_TASK.PROJECT_DESCRIPTION}
+                fieldLabel="포트폴리오 설명"
+                disabledReason={!form.title.trim() ? '제목을 먼저 입력해야 AI 초안을 만들 수 있어요.' : null}
+                context={JSON.stringify({
+                  title: form.title.trim(),
+                  description: form.description.trim(),
+                  skills: form.skills,
+                })}
+                applyFocusTargetId="portfolioDescription"
+                onApply={(content) =>
+                  setForm((f) => ({ ...f, description: content, aiAssistanceUsed: true }))
+                }
+              />
+            </div>
             <textarea
               id="portfolioDescription"
               value={form.description}
