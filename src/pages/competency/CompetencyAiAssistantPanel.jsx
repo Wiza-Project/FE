@@ -11,6 +11,12 @@ const formatDeadline = (iso) => {
 
 const formatRemaining = (value) => (value == null ? '잔여 정원 확인 필요' : `잔여 ${value}명`);
 
+const QUICK_QUESTIONS = [
+  '가장 낮은 역량부터 올리려면 뭘 해야 하나요?',
+  '지금 신청할 수 있는 프로그램이 있나요?',
+  '지난 진단이랑 비교해서 어떻게 달라졌나요?',
+];
+
 /**
  * 제출 완료된 핵심역량 진단 결과를 설명하고, 기존 추천 프로그램으로 연결하는 AI 패널.
  * 점수와 프로그램 후보는 서버가 확정한 값만 렌더링하며, AI는 설명 문장 생성에만 사용한다.
@@ -33,9 +39,8 @@ export default function CompetencyAiAssistantPanel({ attemptId, onClose, onOpenR
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const trimmedMessage = message.trim();
+  const sendMessage = async (text) => {
+    const trimmedMessage = text.trim();
     if (!trimmedMessage || isLoading) return;
 
     setMessages((previous) => [...previous, { role: 'user', content: trimmedMessage }]);
@@ -55,6 +60,13 @@ export default function CompetencyAiAssistantPanel({ attemptId, onClose, onOpenR
       setIsLoading(false);
     }
   };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    sendMessage(message);
+  };
+
+  const handleQuickQuestion = (question) => sendMessage(question);
 
   const focusCompetencies = analysis?.focusCompetencies ?? [];
   const programs = analysis?.programRecommendations ?? [];
@@ -104,6 +116,22 @@ export default function CompetencyAiAssistantPanel({ attemptId, onClose, onOpenR
               </div>
             )}
           </div>
+
+          {messages.length === 1 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {QUICK_QUESTIONS.map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => handleQuickQuestion(question)}
+                  className="rounded-full border border-[#C4B5FD] bg-white px-3 py-1 text-[11px] font-semibold text-[#7C3AED] hover:bg-[#F5F3FF] disabled:opacity-50"
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+          )}
 
           {errorMessage && (
             <p className="mt-2 text-[12px] text-[#CF222E]" role="alert">
