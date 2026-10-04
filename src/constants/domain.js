@@ -210,6 +210,18 @@ export const COUNSELING_RESERVATION_ERROR_CODE = {
   REQUIRED_CONSENT_NOT_AGREED: 'U009',
 };
 
+/**
+ * 상담 AI 도우미 chat 응답의 action — 백엔드 CounselingAiChatResponse.Action 기준(DB enum 아님).
+ * 서버가 검증한 뒤 정하며, 화면은 reply 문구가 아니라 이 값으로만 다음 행동을 분기한다.
+ */
+export const COUNSELING_AI_ACTION = {
+  INFORM: 'INFORM',
+  UPDATE_DRAFT: 'UPDATE_DRAFT',
+  ASK_CONFIRMATION: 'ASK_CONFIRMATION',
+  CONFIRM_RESERVATION: 'CONFIRM_RESERVATION',
+  OPEN_GENERAL_APPLICATION: 'OPEN_GENERAL_APPLICATION',
+};
+
 /** 상담 회기의 출석 상태 — CounselingSessionResponse.attendanceStatus. */
 export const COUNSELING_SESSION_ATTENDANCE_STATUS = {
   SCHEDULED: 'SCHEDULED',

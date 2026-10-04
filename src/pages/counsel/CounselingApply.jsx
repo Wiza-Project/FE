@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   PageHeader,
@@ -13,12 +13,14 @@ import {
   fetchAvailableSchedules,
   createCounselingReservation,
 } from '@/api/counsel';
-import { fetchConsentPolicies, fetchMyConsents, agreeToConsentPolicy } from '@/api/consent';
+import {
+  useCounselingConsent,
+  COUNSELING_CONSENT_POLICIES_QUERY_KEY,
+  MY_CONSENTS_QUERY_KEY,
+} from '@/hooks/useCounselingConsent';
 import {
   APPLICATION_ROUTE,
   APPLICATION_ROUTE_LABEL,
-  CONSENT_MODULE_CODE,
-  CONSENT_TYPE,
   COUNSELING_RESERVATION_ERROR_CODE,
   COUNSELING_RESERVATION_STATUS_LABEL,
   COUNSELING_TYPE_CODE,
@@ -42,14 +44,6 @@ const getSubmitErrorMessage = (error, isCareerType) => {
   // 전용 안내문을 보여주므로 여기서는 처리하지 않는다.
   return '상담 신청에 실패했습니다. 잠시 후 다시 시도해 주세요.';
 };
-
-const isValidActiveConsent = (consent, consentPolicyId) =>
-  Number.isInteger(consentPolicyId) &&
-  consentPolicyId > 0 &&
-  consent?.consentPolicyId === consentPolicyId &&
-  consent.withdrawnAt === null &&
-  Number.isInteger(consent.userConsentId) &&
-  consent.userConsentId > 0;
 
 const ACCENT = '#0891B2';
 
@@ -177,167 +171,40 @@ export default function CounselingApply({ onComplete, onBack }) {
     select: (types) => types.filter((type) => type.applicationRoute === APPLICATION_ROUTE.DIRECT),
   });
 
-  // Step 0 — consent. 정책 본문과 내 동의 이력을 모두 서버에서 조회한다(로컬 저장 금지).
+  // Step 0 — consent. 정책·동의 이력 조회와 동의 기록은 AI 도우미와 공유하는 훅이 맡는다.
+  // 이 화면은 훅 결과(true/false)를 받아 단계(step)만 바꾼다.
   const {
-    data: consentPolicies = [],
-    isLoading: isConsentPoliciesLoading,
-    isError: hasConsentPoliciesError,
-    isFetching: isConsentPoliciesFetching,
-    refetch: refetchConsentPolicies,
-  } = useQuery({
-    queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING],
-    queryFn: () => fetchConsentPolicies(CONSENT_MODULE_CODE.COUNSELING),
-  });
-  const {
-    data: myConsents = [],
-    isLoading: isMyConsentsLoading,
-    isError: hasMyConsentsError,
-    isFetching: isMyConsentsFetching,
-    refetch: refetchMyConsents,
-  } = useQuery({
-    queryKey: ['myConsents'],
-    queryFn: fetchMyConsents,
-  });
-  const isConsentLoading = isConsentPoliciesLoading || isMyConsentsLoading;
-  const isConsentFetching = isConsentPoliciesFetching || isMyConsentsFetching;
-  const hasConsentQueryError = hasConsentPoliciesError || hasMyConsentsError;
-  const refetchConsent = () => {
-    refetchConsentPolicies();
-    refetchMyConsents();
-  };
-
-  // 상담 신청에 필요한 정책은 "개인정보 처리 필수 동의" 정확히 1건이어야 한다.
-  // 0건 또는 2건 이상이면 정책 설정 오류이므로, 임의로 하나를 골라 진행하지 않고 신청 자체를 막는다.
-  const requiredPersonalInfoPolicies = useMemo(
-    () => consentPolicies.filter((p) => p.consentType === CONSENT_TYPE.PERSONAL_INFO && p.required === true),
-    [consentPolicies],
-  );
-  const currentPolicy =
-    requiredPersonalInfoPolicies.length === 1 ? requiredPersonalInfoPolicies[0] : null;
-  const hasConsentConfigError =
-    !isConsentLoading && !hasConsentQueryError && requiredPersonalInfoPolicies.length !== 1;
-
-  // 내 동의 이력 중, 현재 정책에 대해 철회되지 않은(withdrawnAt === null) 이력만 "유효"로 본다.
-  const activeConsent = useMemo(
-    () =>
-      myConsents.find(
-        (c) => isValidActiveConsent(c, currentPolicy?.consentPolicyId),
-      ),
-    [myConsents, currentPolicy],
-  );
+    currentPolicy,
+    activeConsent,
+    isLoading: isConsentLoading,
+    isFetching: isConsentFetching,
+    error: consentQueryError,
+    hasConfigError: hasConsentConfigError,
+    refetch: refetchConsent,
+    consentChecked,
+    changeConsentChecked,
+    resetConsentChecked,
+    consentError,
+    setConsentError,
+    isAgreeing,
+    refreshConsentState,
+    agreeCurrentPolicy,
+  } = useCounselingConsent();
+  const hasConsentQueryError = !!consentQueryError;
   const activeConsentId = activeConsent?.userConsentId ?? null;
-
-  // 체크박스는 서버 동의 기록 없이는 아무 의미가 없는 일시 UI 상태일 뿐이다.
-  const [consentChecked, setConsentChecked] = useState({
-    checked: false,
-    consentPolicyId: null,
-    version: null,
-  });
-  const [consentError, setConsentError] = useState('');
+  // 최종 제출 직전 동의 재조회 중인지 표시한다(동의 기록 중 상태는 훅의 isAgreeing).
   const [isConsentRefreshing, setIsConsentRefreshing] = useState(false);
-  useEffect(() => {
-    setConsentChecked({ checked: false, consentPolicyId: null, version: null });
-  }, [currentPolicy?.consentPolicyId, currentPolicy?.version]);
-  const agreeMutation = useMutation({
-    mutationFn: (consentPolicyId) => agreeToConsentPolicy(consentPolicyId),
-  });
   const returnToConsentStep = () => {
-    setConsentChecked({ checked: false, consentPolicyId: null, version: null });
+    resetConsentChecked();
     setSubmitError('');
     setStep(0);
   };
 
-  // 정책 변경이나 동의 철회가 오래된 Query 캐시에 남지 않도록 서버의 최신 상태를 확인한다.
-  const refreshConsentState = async () => {
-    const [policiesResult, consentsResult] = await Promise.all([
-      refetchConsentPolicies({ throwOnError: true }),
-      refetchMyConsents({ throwOnError: true }),
-    ]);
-    const refreshedRequiredPolicies = (policiesResult.data ?? []).filter(
-      (policy) => policy.consentType === CONSENT_TYPE.PERSONAL_INFO && policy.required === true,
-    );
-
-    if (refreshedRequiredPolicies.length !== 1) {
-      return { policy: null, consent: null };
-    }
-
-    const policy = refreshedRequiredPolicies[0];
-    const consent = (consentsResult.data ?? []).find((item) =>
-      isValidActiveConsent(item, policy.consentPolicyId),
-    );
-    return { policy, consent: consent ?? null };
-  };
-
-  // "동의하고 다음" 버튼 핸들러. 최신 정책과 동의 이력을 재확인한 뒤,
-  // 유효한 동의가 있으면 다음 단계로 넘어가고, 없으면 최신 정책에 동의한 뒤 진행한다.
+  // "동의하고 다음" 버튼 핸들러. 동의가 확인되면(true) 다음 단계로 넘어간다.
   const handleAgreeAndNext = async () => {
-    if (agreeMutation.isPending || isConsentRefreshing || !currentPolicy) {
-      return;
-    }
-    setConsentError('');
-    setIsConsentRefreshing(true);
-    try {
-      const initialConsentState = await refreshConsentState();
-      if (!initialConsentState.policy) {
-        setConsentError('동의 처리 후 유효한 동의 정책을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
-        return;
-      }
-
-      if (initialConsentState.consent) {
-        setConsentChecked({ checked: false, consentPolicyId: null, version: null });
-        setStep(1);
-        return;
-      }
-
-      if (
-        initialConsentState.policy.consentPolicyId !== currentPolicy.consentPolicyId ||
-        initialConsentState.policy.version !== currentPolicy.version
-      ) {
-        setConsentChecked({ checked: false, consentPolicyId: null, version: null });
-        setConsentError('동의 정책이 변경되었습니다. 최신 내용을 확인한 뒤 다시 동의해 주세요.');
-        return;
-      }
-
-      if (
-        !consentChecked.checked ||
-        consentChecked.consentPolicyId !== currentPolicy.consentPolicyId ||
-        consentChecked.version !== currentPolicy.version
-      ) {
-        setConsentError('기존 동의가 더 이상 유효하지 않습니다. 동의 내용을 확인한 뒤 동의에 체크해 주세요.');
-        return;
-      }
-
-      await agreeMutation.mutateAsync(initialConsentState.policy.consentPolicyId);
-      setConsentChecked({ checked: false, consentPolicyId: null, version: null });
-
-      const consentStateAfterAgree = await refreshConsentState();
-      if (!consentStateAfterAgree.policy) {
-        setConsentError('동의 처리 후 유효한 동의 정책을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
-        return;
-      }
-      if (!consentStateAfterAgree.consent) {
-        setConsentError('동의 처리 후 유효한 동의 기록을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
-        return;
-      }
+    const isConsentReady = await agreeCurrentPolicy();
+    if (isConsentReady) {
       setStep(1);
-    } catch (error) {
-      if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.CONSENT_CONFLICT) {
-        // 동시에 들어온 다른 요청이 먼저 동의를 기록했을 수 있다. 이력을 한 번만 재조회해
-        // 이미 유효한 동의가 생겼는지 확인하고, 없으면 조용히 넘어가지 않고 오류로 멈춘다.
-        try {
-          const consentStateAfterConflict = await refreshConsentState();
-          if (consentStateAfterConflict.policy && consentStateAfterConflict.consent) {
-            setConsentChecked({ checked: false, consentPolicyId: null, version: null });
-            setStep(1);
-            return;
-          }
-        } catch {
-          // 재조회 자체가 실패하면 아래 공통 오류 메시지로 떨어진다.
-        }
-      }
-      setConsentError('동의 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.');
-    } finally {
-      setIsConsentRefreshing(false);
     }
   };
 
@@ -395,8 +262,8 @@ export default function CounselingApply({ onComplete, onBack }) {
       // 최신 이력을 다시 조회해서 사용자가 직접 재확인하게 한다.
       if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
         await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.COUNSELING] }),
-          queryClient.invalidateQueries({ queryKey: ['myConsents'] }),
+          queryClient.invalidateQueries({ queryKey: COUNSELING_CONSENT_POLICIES_QUERY_KEY }),
+          queryClient.invalidateQueries({ queryKey: MY_CONSENTS_QUERY_KEY }),
         ]);
         // submitError는 2단계 알림 영역에서만 렌더되므로, 되돌아갈 0단계에서 보이도록
         // 동일한 내용을 consentError로도 남긴다.
@@ -578,14 +445,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                       <input
                         type="checkbox"
                         checked={consentChecked.checked}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setConsentChecked({
-                            checked,
-                            consentPolicyId: checked ? currentPolicy.consentPolicyId : null,
-                            version: checked ? currentPolicy.version : null,
-                          });
-                        }}
+                        onChange={(e) => changeConsentChecked(e.target.checked)}
                         className="w-5 h-5 rounded-[4px] flex-shrink-0"
                         style={{ accentColor: ACCENT }}
                       />
@@ -607,10 +467,10 @@ export default function CounselingApply({ onComplete, onBack }) {
                 <Button
                   size="md"
                   disabled={
-                    ((!activeConsentId && !consentChecked.checked) || agreeMutation.isPending) ||
+                    ((!activeConsentId && !consentChecked.checked) || isAgreeing) ||
                     isConsentRefreshing
                   }
-                  loading={agreeMutation.isPending || isConsentRefreshing}
+                  loading={isAgreeing || isConsentRefreshing}
                   style={activeConsentId || consentChecked.checked ? { background: ACCENT } : {}}
                   onClick={handleAgreeAndNext}
                 >
