@@ -26,6 +26,11 @@ import { ApiError } from '@/api/client';
 import { formatDateTime } from '@/utils/date';
 import ResumeCompetencyCard from './ResumeCompetencyCard';
 import ResumeExtracurricularCard from './ResumeExtracurricularCard';
+import CareerAiAssistButton from '@/components/career/CareerAiAssistButton';
+import { CAREER_AI_TASK } from '@/api/careerAi';
+
+const CAREER_DESCRIPTION_MAX_LENGTH = 500;
+const RESUME_SUMMARY_MAX_LENGTH = 200;
 
 const ACCENT = '#059669';
 
@@ -123,6 +128,7 @@ function RepeatableFieldSection({
   onAdd,
   onRemove,
   onChange,
+  renderTextFieldAction,
 }) {
   return (
     <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
@@ -174,12 +180,15 @@ function RepeatableFieldSection({
               </div>
               {textField && (
                 <div>
-                  <label
-                    className="block text-[11px] font-semibold text-[#656D76] mb-1"
-                    htmlFor={`${title}-${idx}-${textField.key}`}
-                  >
-                    {textField.label}
-                  </label>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label
+                      className="block text-[11px] font-semibold text-[#656D76]"
+                      htmlFor={`${title}-${idx}-${textField.key}`}
+                    >
+                      {textField.label}
+                    </label>
+                    {renderTextFieldAction?.(item, idx)}
+                  </div>
                   <textarea
                     id={`${title}-${idx}-${textField.key}`}
                     value={item[textField.key] ?? ''}
@@ -221,6 +230,8 @@ function ResumeTab() {
   const [certifications, setCertifications] = useState([]);
   const [languageTests, setLanguageTests] = useState([]);
   const [portfolioUrl, setPortfolioUrl] = useState('');
+  const [resumeSummary, setResumeSummary] = useState('');
+  const [aiAssistanceUsed, setAiAssistanceUsed] = useState(false);
 
   // 목록이 로드되면 최신 버전(서버가 최신순으로 내려주는 첫 항목)을 기본 선택한다.
   useEffect(() => {
@@ -254,6 +265,8 @@ function ResumeTab() {
     setCertifications((content.certifications ?? []).map((c) => withDefaults(emptyCertification(), c)));
     setLanguageTests((content.languageTests ?? []).map((l) => withDefaults(emptyLanguageTest(), l)));
     setPortfolioUrl(content.extra?.portfolioUrl ?? '');
+    setResumeSummary(content.extra?.resumeSummary ?? '');
+    setAiAssistanceUsed(!!doc.aiAssistanceUsed);
     setLoadedId(doc.careerDocumentId);
     setCreating(false);
   }, [detailQuery.data, loadedId]);
@@ -268,6 +281,8 @@ function ResumeTab() {
     setCertifications([]);
     setLanguageTests([]);
     setPortfolioUrl('');
+    setResumeSummary('');
+    setAiAssistanceUsed(false);
     setCreating(true);
   };
 
@@ -309,9 +324,36 @@ function ResumeTab() {
         score: l.score.trim() || null,
         acquiredDate: l.acquiredDate || null,
       })),
-      extra: portfolioUrl.trim() ? { portfolioUrl: portfolioUrl.trim() } : {},
+      extra: {
+        ...(portfolioUrl.trim() ? { portfolioUrl: portfolioUrl.trim() } : {}),
+        ...(resumeSummary.trim() ? { resumeSummary: resumeSummary.trim() } : {}),
+      },
     },
+    aiAssistanceUsed,
   });
+
+  // 연락처(전화·이메일·주소)는 제외하고 자기소개 근거가 되는 사실만 AI에 보낸다.
+  const summaryContext = JSON.stringify({
+    educations: educations
+      .filter((e) => e.schoolName.trim())
+      .map((e) => ({ schoolName: e.schoolName.trim(), major: e.major.trim() })),
+    careers: careers
+      .filter((c) => c.companyName.trim())
+      .map((c) => ({
+        companyName: c.companyName.trim(),
+        position: c.position.trim(),
+        description: c.description.trim().slice(0, 200),
+      })),
+    certifications: certifications.map((c) => c.certificationName.trim()).filter(Boolean),
+    languageTests: languageTests
+      .filter((l) => l.testName.trim())
+      .map((l) => ({ testName: l.testName.trim(), score: l.score.trim() })),
+  });
+  const hasSummaryFacts =
+    educations.some((e) => e.schoolName.trim()) ||
+    careers.some((c) => c.companyName.trim()) ||
+    certifications.some((c) => c.certificationName.trim()) ||
+    languageTests.some((l) => l.testName.trim());
 
   const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -508,6 +550,37 @@ function ResumeTab() {
             />
           </div>
 
+          {/* 한 줄 자기소개 — contentData.extra.resumeSummary 로 저장(백엔드와 약속한 확장 키) */}
+          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
+            <div className="mb-1.5 flex items-start justify-between gap-3">
+              <label htmlFor="resumeSummary" className="block text-[12px] font-semibold text-[#656D76]">
+                한 줄 자기소개
+              </label>
+              <CareerAiAssistButton
+                task={CAREER_AI_TASK.RESUME_SUMMARY}
+                fieldLabel="한 줄 자기소개"
+                maxLength={RESUME_SUMMARY_MAX_LENGTH}
+                disabledReason={
+                  hasSummaryFacts ? null : '학력·경력·자격·어학 중 하나를 먼저 입력해야 AI 초안을 만들 수 있어요.'
+                }
+                context={summaryContext}
+                applyFocusTargetId="resumeSummary"
+                onApply={(content) => {
+                  setResumeSummary(content);
+                  setAiAssistanceUsed(true);
+                }}
+              />
+            </div>
+            <input
+              id="resumeSummary"
+              value={resumeSummary}
+              maxLength={RESUME_SUMMARY_MAX_LENGTH}
+              onChange={(e) => setResumeSummary(e.target.value)}
+              placeholder="이력서 상단에 들어갈 한 줄 자기소개를 입력하세요."
+              className="w-full h-9 px-3 text-[13px] border border-[#E5E7EB] rounded-[6px] focus:outline-none focus:border-[#059669]"
+            />
+          </div>
+
           {/* 연락처 */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -590,6 +663,28 @@ function ResumeTab() {
             onAdd={() => addItem(setCareers, emptyCareer)}
             onRemove={(idx) => removeItem(setCareers, idx)}
             onChange={(idx, field, value) => updateItem(setCareers, idx, field, value)}
+            renderTextFieldAction={(item, idx) => (
+              <CareerAiAssistButton
+                task={CAREER_AI_TASK.EXPERIENCE_STAR}
+                fieldLabel="경력 설명"
+                maxLength={CAREER_DESCRIPTION_MAX_LENGTH}
+                disabledReason={
+                  !item.companyName.trim() ? '회사명을 먼저 입력해야 AI 초안을 만들 수 있어요.' : null
+                }
+                context={JSON.stringify({
+                  companyName: item.companyName.trim(),
+                  position: item.position.trim(),
+                  startDate: item.startDate,
+                  endDate: item.endDate,
+                  description: item.description.trim(),
+                })}
+                applyFocusTargetId={`경력-${idx}-description`}
+                onApply={(content) => {
+                  updateItem(setCareers, idx, 'description', content);
+                  setAiAssistanceUsed(true);
+                }}
+              />
+            )}
           />
 
           <RepeatableFieldSection
