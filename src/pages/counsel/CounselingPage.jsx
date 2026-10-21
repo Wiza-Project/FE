@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import CounselingApply from './CounselingApply';
+import CounselingAiAssistantPanel from '@/components/counsel/CounselingAiAssistantPanel';
 import MyCounseling from './MyCounseling';
 import StressTestPanel from './StressTestPanel';
 import { PageHeader, Button } from '@/components/common';
+import { useAuthStore } from '@/stores/authStore';
 
 const ACCENT = '#0891B2';
 
@@ -12,8 +14,9 @@ const ACCENT = '#0891B2';
  * @param {() => void} props.onApply
  * @param {() => void} props.onMy
  * @param {() => void} props.onStress
+ * @param {() => void} props.onAi
  */
-function CounselingHome({ onApply, onMy, onStress }) {
+function CounselingHome({ onApply, onMy, onStress, onAi }) {
   return (
     <div>
       <PageHeader
@@ -23,6 +26,9 @@ function CounselingHome({ onApply, onMy, onStress }) {
         accentColor={ACCENT}
         actions={
           <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={onAi}>
+              AI 상담 추천
+            </Button>
             <Button size="sm" variant="outline" onClick={onStress}>
               스트레스 검사
             </Button>
@@ -153,6 +159,7 @@ function StressTestView({ onBack }) {
  */
 export default function CounselingPage() {
   const queryClient = useQueryClient();
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   const [view, setView] = useState('home');
   const [applySource, setApplySource] = useState('home');
 
@@ -174,7 +181,9 @@ export default function CounselingPage() {
     return (
       <CounselingApply
         onComplete={() => setView('my')}
-        onBack={() => setView(applySource === 'my' ? 'my' : 'home')}
+        onBack={() => {
+          setView(applySource === 'my' ? 'my' : 'home');
+        }}
       />
     );
   }
@@ -184,11 +193,24 @@ export default function CounselingPage() {
   if (view === 'stress') {
     return <StressTestView onBack={() => setView('home')} />;
   }
+  if (view === 'ai') {
+    return (
+      // 동의 화면은 패널 내부 단계로 처리하므로 여기서 다른 뷰로 바꾸지 않는다(패널이 사라지면 신청 내용도 사라진다).
+      // 일반 신청 화면으로는 일정을 넘기지 않고 빈 화면으로만 보낸다. key는 계정이 바뀌면 패널 상태를 새로 시작하게 한다.
+      <CounselingAiAssistantPanel
+        key={userId ?? 'anonymous'}
+        onBack={() => setView('home')}
+        onOpenApply={() => openApply('ai')}
+        onOpenMy={() => setView('my')}
+      />
+    );
+  }
   return (
     <CounselingHome
       onApply={() => openApply('home')}
       onMy={() => setView('my')}
       onStress={() => setView('stress')}
+      onAi={() => setView('ai')}
     />
   );
 }
