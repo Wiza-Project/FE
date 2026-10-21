@@ -100,13 +100,8 @@ const storedUser = (() => {
 
   const isProfilingAgreed = Boolean(activeConsent);
 
-  // 1. 취창업(CAREER) 활성 정책 목록 조회 (consentPolicyId 획득용)
-  const { data: careerPolicies = [] } = useQuery({
-    queryKey: ['careerConsentPolicies'],
-    queryFn: () => fetchConsentPolicies('CAREER'),
-  });
 
-  // 2. 모달 동의 클릭 시 백엔드 DB 적재(POST /consents) Mutation
+  // 모달 동의 클릭 시 백엔드 DB 적재(POST /consents) Mutation
   const agreeConsentMutation = useMutation({
     mutationFn: () => agreeToConsentPolicy(7), // DB 7번 정책: AI 맞춤형 채용공고 추천 활용 동의(PROFILING)
     onSuccess: async () => {
