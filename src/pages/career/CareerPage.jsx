@@ -111,7 +111,7 @@ export default function CareerPage() {
           onClick={() => navigate('/career/job-chat-test')}
           className="h-8 px-5 text-[13px] font-semibold rounded-[6px] text-[#059669] transition-colors hover:bg-white hover:text-[#047857] whitespace-nowrap"
         >
-          AI 테스트
+          AI봇 잡매칭
         </button>
       </div>
 
