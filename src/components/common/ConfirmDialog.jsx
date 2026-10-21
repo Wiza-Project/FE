@@ -9,6 +9,7 @@ import { Button } from './Button';
  * @param {string} [props.confirmLabel]
  * @param {string} [props.cancelLabel]
  * @param {boolean} [props.danger]
+ * @param {boolean} [props.loading]
  * @param {() => void} props.onConfirm
  * @param {() => void} props.onCancel
  */
@@ -19,6 +20,7 @@ export function ConfirmDialog({
   confirmLabel = '확인',
   cancelLabel = '취소',
   danger,
+  loading,
   onConfirm,
   onCancel,
 }) {
@@ -30,10 +32,10 @@ export function ConfirmDialog({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" size="sm" onClick={onCancel}>
+          <Button variant="secondary" size="sm" onClick={onCancel} disabled={loading}>
             {cancelLabel}
           </Button>
-          <Button variant={danger ? 'danger' : 'primary'} size="sm" onClick={onConfirm}>
+          <Button variant={danger ? 'danger' : 'primary'} size="sm" loading={loading} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </>

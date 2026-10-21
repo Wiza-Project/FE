@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const WIDTHS = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
+const WIDTHS = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
 
 /**
  * @param {Object} props
@@ -9,7 +9,7 @@ const WIDTHS = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
  * @param {string} props.title
  * @param {import('react').ReactNode} props.children
  * @param {import('react').ReactNode} [props.footer]
- * @param {'sm'|'md'|'lg'} [props.size]
+ * @param {'sm'|'md'|'lg'|'xl'} [props.size]
  */
 export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   useEffect(() => {

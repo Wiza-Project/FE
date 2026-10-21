@@ -1,65 +1,39 @@
-import { useRef, useState } from 'react';
-import { Button, FileUpload, toast } from '@/components/common';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const SEMESTERS = ['2026-1', '2026-2', '2025-2', '2025-1'];
-
-const CATEGORY_L = ['선택', '비교과 일반', '창업·혁신', '글로벌', '사회봉사'];
-const CATEGORY_M = {
-  '비교과 일반': ['학습역량', '진로개발', '리더십', '문화예술', '취업지원'],
-  '창업·혁신': ['창업교육', '아이디어', '투자유치'],
-  글로벌: ['해외연수', '문화교류', '어학'],
-  사회봉사: ['국내봉사', '해외봉사', '환경'],
-};
-const CATEGORY_S = {
-  학습역량: ['독서', '글쓰기', '수학', '과학', '토론'],
-  진로개발: ['진로탐색', '직업체험', '멘토링'],
-  리더십: ['캠프', '워크숍', '팀빌딩'],
-  문화예술: ['공연', '전시', '체험'],
-  취업지원: ['NCS', '이력서', '모의면접'],
-  창업교육: ['강의', '실습'],
-  아이디어: ['경진대회', '해커톤'],
-  투자유치: ['피칭', 'IR'],
-  해외연수: ['단기연수', '장기연수'],
-  문화교류: ['워크숍', '체험'],
-  어학: ['회화', '자격증'],
-  국내봉사: ['환경정화', '교육봉사'],
-  해외봉사: ['아시아', '아프리카'],
-  환경: ['캠페인', '플로깅'],
-};
-
-const TYPE_TAGS = [
-  '학습',
-  '진로',
-  '상담',
-  '봉사',
-  '리더십',
-  '창업',
-  '취업',
-  '글로벌',
-  '문화',
-  '체험',
-];
-const CORE_COMPETENCIES = ['자기관리', '의사소통', '대인관계', '글로벌', '문제해결', '직업윤리'];
-const SUB_COMPETENCIES = {
-  자기관리: ['자아정체성', '자기조절', '진로설계'],
-  의사소통: ['언어능력', '발표능력', '문서작성'],
-  대인관계: ['협업', '리더십', '갈등관리'],
-  글로벌: ['외국어', '다문화이해', '국제감각'],
-  문제해결: ['비판적사고', '창의성', '정보분석'],
-  직업윤리: ['책임감', '공동체의식', '성실성'],
-};
-const GRADES = ['1학년', '2학년', '3학년', '4학년'];
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, FileUpload, StatusBadge, Tabs, toast } from '@/components/common';
+import {
+  createProgram,
+  fetchCompetencyOptions,
+  fetchMileagePolicyPreview,
+  fetchProgramDetailAdmin,
+  updateProgram,
+  uploadProgramOperationPlan,
+} from '@/api/programs';
+import { ApiError } from '@/api/client';
+import { useCommonCode } from '@/hooks/useCommonCode';
+import { formatDate } from '@/utils/date';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
-function Section({ num, title, id, children }) {
+function Section({
+  num,
+  title,
+  children,
+  id,
+  role,
+  'aria-labelledby': ariaLabelledBy,
+  tabIndex,
+  hidden,
+}) {
   return (
     <div
       id={id}
+      role={role}
+      aria-labelledby={ariaLabelledBy}
+      tabIndex={tabIndex}
+      hidden={hidden}
       className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden"
     >
       <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center gap-3">
@@ -78,10 +52,10 @@ function Section({ num, title, id, children }) {
 
 // ─── Field helpers ────────────────────────────────────────────────────────────
 
-function Field({ label, required, error, children }) {
+function Field({ label, required, error, htmlFor, children }) {
   return (
     <div>
-      <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
+      <label htmlFor={htmlFor} className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
         {label} {required && <span className="text-[#CF222E]">*</span>}
       </label>
       {children}
@@ -90,194 +64,861 @@ function Field({ label, required, error, children }) {
   );
 }
 
-function TextInput({ value, onChange, placeholder = '', error }) {
+function TextInput({ id, value, onChange, placeholder = '', error, maxLength, disabled }) {
   return (
     <input
+      id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+      maxLength={maxLength}
+      disabled={disabled}
+      aria-invalid={!!error}
+      className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors disabled:bg-[#F3F4F6] disabled:text-[#9AA0A6] disabled:cursor-not-allowed ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
 }
 
-function NumberInput({ value, onChange, min = 0, max, placeholder = '' }) {
+function TextArea({ id, value, onChange, placeholder = '', rows = 3 }) {
+  return (
+    <textarea
+      id={id}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      className="w-full px-3 py-2.5 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white resize-none focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
+    />
+  );
+}
+
+function NumberInput({ id, value, onChange, min = 0, max, placeholder = '', error }) {
   return (
     <input
+      id={id}
       type="number"
       value={value}
       min={min}
       max={max}
       onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
       placeholder={placeholder}
-      className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
+      className={`w-full h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
 }
 
-function SelectInput({ value, onChange, options, error }) {
+/**
+ * 백엔드 FK(operatingUnitCodeId 등)를 받는 select. options는 {id, label, active?}[] 형태.
+ * active가 false인 옵션은 비활성 표시(회색 텍스트 + "(비활성)" 접미사)만 하고 선택은 계속 허용한다.
+ */
+function IdSelect({ id, value, onChange, options, placeholder = '선택하세요', error, disabled }) {
   return (
     <select
+      id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`w-full h-9 px-2 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+      disabled={disabled}
+      className={`w-full h-9 px-2 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors disabled:bg-[#F3F4F6] disabled:text-[#9AA0A6] disabled:cursor-not-allowed ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     >
+      <option value="">{placeholder}</option>
       {options.map((o) => (
-        <option key={o}>{o}</option>
+        <option
+          key={o.id}
+          value={o.id}
+          className={o.active === false ? 'text-[#9AA0A6]' : undefined}
+        >
+          {o.active === false ? `${o.label} (비활성)` : o.label}
+        </option>
       ))}
     </select>
   );
 }
 
-function DateInput({ value, onChange }) {
+function DateInput({ id, value, onChange, error, ariaLabel, disabled }) {
   return (
     <input
+      id={id}
       type="date"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151]"
+      aria-label={ariaLabel}
+      aria-invalid={!!error}
+      disabled={disabled}
+      className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors disabled:bg-[#F3F4F6] disabled:text-[#9AA0A6] disabled:cursor-not-allowed ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
     />
   );
 }
 
-function Toggle({ checked, onChange, label }) {
+function TimeInput({ id, value, onChange, error, ariaLabel, disabled }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-      <div
-        onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors ${checked ? 'bg-[#374151]' : 'bg-[#D1D5DB]'}`}
-      >
-        <div
-          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : ''}`}
-        />
-      </div>
-      {label && <span className="text-[12px] text-[#444D56]">{label}</span>}
-    </label>
+    <input
+      id={id}
+      type="time"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+      aria-invalid={!!error}
+      disabled={disabled}
+      className={`h-9 px-3 text-[13px] rounded-[6px] border focus:outline-none focus:ring-2 focus:ring-[#374151]/30 focus:border-[#374151] transition-colors disabled:bg-[#F3F4F6] disabled:text-[#9AA0A6] disabled:cursor-not-allowed ${error ? 'border-[#CF222E] bg-[#FFF5F5]' : 'border-[#E5E7EB] bg-white'}`}
+    />
   );
 }
+
+/** 2택 라디오 그룹. 옵션이 항상 2개뿐인 날짜/장소 입력 방식 선택에 사용한다. */
+function SessionRadioGroup({ name, options, value, onChange, ariaLabel, disabled }) {
+  return (
+    <div role="radiogroup" aria-label={ariaLabel} className="flex items-center gap-4">
+      {options.map((opt) => (
+        <label
+          key={opt.value}
+          className={`flex items-center gap-1.5 text-[12px] ${disabled ? 'text-[#9AA0A6] cursor-not-allowed' : 'text-[#1F2328] cursor-pointer'}`}
+        >
+          <input
+            type="radio"
+            name={name}
+            checked={value === opt.value}
+            onChange={() => onChange(opt.value)}
+            disabled={disabled}
+            className="w-3.5 h-3.5 accent-[#374151]"
+          />
+          {opt.label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+// ─── 회차(세션) 카드 ──────────────────────────────────────────────────────────
+
+/**
+ * @param {Object} props
+ * @param {number} props.index 0-based 배열 위치. 표시 라벨("n회차")과 sessionNo는 여기서 파생된다.
+ * @param {{localId: string|number, sessionName: string, dateMode: 'RANGE'|'SINGLE', startsAt: string, startsAtTime: string, endsAt: string, endsAtTime: string, locationType: 'DIRECT_INPUT'|'SAME_AS_PREVIOUS', location: string}} props.session
+ * @param {(patch: Object) => void} props.onChange
+ * @param {() => void} props.onRemove
+ * @param {boolean} props.removable
+ * @param {boolean} [props.startsAtError]
+ * @param {boolean} [props.endsAtError]
+ * @param {boolean} [props.startsAtTimeError]
+ * @param {boolean} [props.endsAtTimeError]
+ * @param {boolean} [props.locationError]
+ * @param {boolean} [props.readOnly] true면 모든 입력과 삭제 버튼을 비활성화한다(수정 모드 — 회차 변경사항이 저장되지 않으므로).
+ */
+function SessionCard({
+  index,
+  session,
+  onChange,
+  onRemove,
+  removable,
+  startsAtError,
+  endsAtError,
+  startsAtTimeError,
+  endsAtTimeError,
+  locationError,
+  readOnly,
+}) {
+  const isSingle = session.dateMode === 'SINGLE';
+  return (
+    <div className="border border-[#E5E7EB] rounded-[8px] p-4 bg-white">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[13px] font-bold text-[#1F2328]">{index + 1}회차</h3>
+        {removable && !readOnly && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-[11px] font-semibold text-[#CF222E] hover:underline"
+          >
+            삭제
+          </button>
+        )}
+      </div>
+      <div className="flex flex-col gap-4">
+        <Field label="회차명" htmlFor={`session-${session.localId}-name`}>
+          <TextInput
+            id={`session-${session.localId}-name`}
+            value={session.sessionName}
+            onChange={(v) => onChange({ sessionName: v })}
+            placeholder="예) 1주차 오리엔테이션"
+            maxLength={200}
+            disabled={readOnly}
+          />
+        </Field>
+
+        <Field label="날짜 설정" required>
+          <SessionRadioGroup
+            name={`date-mode-${session.localId}`}
+            ariaLabel={`${index + 1}회차 날짜 설정`}
+            value={session.dateMode}
+            onChange={(v) =>
+              onChange(v === 'SINGLE' ? { dateMode: v, endsAt: session.startsAt } : { dateMode: v })
+            }
+            options={[
+              { value: 'RANGE', label: '기간설정' },
+              { value: 'SINGLE', label: '단일일자설정' },
+            ]}
+            disabled={readOnly}
+          />
+        </Field>
+
+        {isSingle ? (
+          <Field label="날짜" required htmlFor={`session-${session.localId}-date`}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <DateInput
+                id={`session-${session.localId}-date`}
+                value={session.startsAt}
+                onChange={(v) => onChange({ startsAt: v, endsAt: v })}
+                ariaLabel={`${index + 1}회차 날짜`}
+                error={startsAtError}
+                disabled={readOnly}
+              />
+              <TimeInput
+                value={session.startsAtTime}
+                onChange={(v) => onChange({ startsAtTime: v })}
+                ariaLabel={`${index + 1}회차 시작 시각`}
+                error={startsAtTimeError}
+                disabled={readOnly}
+              />
+              <span className="text-[12px] text-[#9AA0A6]">~</span>
+              <TimeInput
+                value={session.endsAtTime}
+                onChange={(v) => onChange({ endsAtTime: v })}
+                ariaLabel={`${index + 1}회차 종료 시각`}
+                error={endsAtTimeError}
+                disabled={readOnly}
+              />
+            </div>
+          </Field>
+        ) : (
+          <Field label="시작 ~ 종료" required>
+            <div className="flex items-center gap-2 flex-wrap">
+              <DateInput
+                value={session.startsAt}
+                onChange={(v) => onChange({ startsAt: v })}
+                ariaLabel={`${index + 1}회차 시작일`}
+                error={startsAtError}
+                disabled={readOnly}
+              />
+              <TimeInput
+                value={session.startsAtTime}
+                onChange={(v) => onChange({ startsAtTime: v })}
+                ariaLabel={`${index + 1}회차 시작 시각`}
+                error={startsAtTimeError}
+                disabled={readOnly}
+              />
+              <span className="text-[12px] text-[#9AA0A6]">~</span>
+              <DateInput
+                value={session.endsAt}
+                onChange={(v) => onChange({ endsAt: v })}
+                ariaLabel={`${index + 1}회차 종료일`}
+                error={endsAtError}
+                disabled={readOnly}
+              />
+              <TimeInput
+                value={session.endsAtTime}
+                onChange={(v) => onChange({ endsAtTime: v })}
+                ariaLabel={`${index + 1}회차 종료 시각`}
+                error={endsAtTimeError}
+                disabled={readOnly}
+              />
+            </div>
+          </Field>
+        )}
+
+        <Field
+          label="장소"
+          htmlFor={`session-${session.localId}-location`}
+          error={locationError}
+          required={session.locationType === 'DIRECT_INPUT'}
+        >
+          {index > 0 && (
+            <div className="mb-2">
+              <SessionRadioGroup
+                name={`location-type-${session.localId}`}
+                ariaLabel={`${index + 1}회차 장소 입력 방식`}
+                value={session.locationType}
+                onChange={(v) =>
+                  onChange({
+                    locationType: v,
+                    location: v === 'SAME_AS_PREVIOUS' ? '' : session.location,
+                  })
+                }
+                options={[
+                  { value: 'DIRECT_INPUT', label: '직접입력' },
+                  { value: 'SAME_AS_PREVIOUS', label: '전회차와 동일' },
+                ]}
+                disabled={readOnly}
+              />
+            </div>
+          )}
+          <TextInput
+            id={`session-${session.localId}-location`}
+            value={session.location}
+            onChange={(v) => onChange({ location: v })}
+            placeholder="예) 학생회관 3층 세미나실"
+            maxLength={300}
+            error={locationError}
+            disabled={readOnly || session.locationType === 'SAME_AS_PREVIOUS'}
+          />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+function emptySession(localId) {
+  return {
+    localId,
+    sessionName: '',
+    dateMode: 'RANGE',
+    startsAt: '',
+    startsAtTime: '',
+    endsAt: '',
+    endsAtTime: '',
+    locationType: 'DIRECT_INPUT',
+    location: '',
+  };
+}
+
+// 1회차는 "전회차와 동일"을 선택할 대상이 없으므로 항상 DIRECT_INPUT이어야 한다.
+// 프리페치 데이터나 회차 삭제로 인덱스 0이 바뀌는 경우 모두 이 정규화를 거친다.
+function normalizeFirstSession(list) {
+  if (list.length === 0 || list[0].locationType === 'DIRECT_INPUT') return list;
+  const [first, ...rest] = list;
+  return [{ ...first, locationType: 'DIRECT_INPUT' }, ...rest];
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** 'YYYY-MM-DD' (+ 선택적 'HH:mm') → UTC ISO 문자열(Instant). 시각을 생략하면 자정으로 채운다.
+ * 4개 날짜를 모두 같은 기준으로 변환해야 백엔드의 "모집종료 ≤ 운영시작" 규칙이 같은 날짜
+ * 입력에서도 자연스럽게 성립한다. */
+function toInstant(dateStr, timeStr) {
+  if (!dateStr) return null;
+  return new Date(`${dateStr}T${timeStr || '00:00'}:00Z`).toISOString();
+}
+
+function getDetailErrorMessage(error) {
+  if (!(error instanceof ApiError)) {
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  if (error.code === 'A004') return '이 프로그램에 접근할 권한이 없습니다.';
+  if (error.code === 'P001') return '요청한 프로그램을 찾을 수 없습니다.';
+  return error.message || '프로그램 정보를 불러오지 못했습니다.';
+}
+
+// Bean Validation이 필드경로 그대로("sessions[0].startsAt: 널이어서는 안됩니다") 내려주는
+// 케이스를 위한 안전망. 클라이언트 검증(validate())으로 대부분 걸러지지만, 미처 모르는
+// 회차 필드 요구사항이 더 있을 경우를 대비한다.
+function isSessionFieldValidationError(message) {
+  return typeof message === 'string' && message.includes('sessions[');
+}
+
+function getRegisterErrorMessage(error) {
+  if (!(error instanceof ApiError)) {
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  if (error.code === 'A004') return '프로그램을 등록할 권한이 없습니다.';
+  if (isSessionFieldValidationError(error.message)) {
+    return '회차 정보를 다시 확인해 주세요. 시작일과 종료일이 비어있지 않은지 확인해 주세요.';
+  }
+  return error.message || '등록 중 오류가 발생했습니다.';
+}
+
+function getEditErrorMessage(error) {
+  if (!(error instanceof ApiError)) {
+    return '네트워크 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  if (error.code === 'A004') return '이 프로그램을 수정할 권한이 없습니다.';
+  if (error.code === 'P009') return error.message || '모집이 종료된 프로그램은 수정할 수 없습니다.';
+  if (isSessionFieldValidationError(error.message)) {
+    return '회차 정보를 다시 확인해 주세요. 시작일과 종료일이 비어있지 않은지 확인해 주세요.';
+  }
+  return error.message || '수정 중 오류가 발생했습니다.';
+}
+
+const TABS = [
+  { key: 'basic', label: '① 기본정보' },
+  { key: 'schedule', label: '② 모집·운영·정원' },
+  { key: 'sessions', label: '③ 회차 관리' },
+  { key: 'policy', label: '④ 역량·정책' },
+  { key: 'attachment', label: '⑤ 첨부' },
+];
 
 // ─── Main form ────────────────────────────────────────────────────────────────
 
 /**
- * 비교과 프로그램 등록/수정 폼 (5개 섹션: 기본정보/모집·정원/역량연계/수료기준·마일리지/운영계획·예산).
+ * 비교과 프로그램 등록/수정 폼. ProgramRegisterRequestDTO/ProgramUpdateRequestDTO(백엔드)에
+ * 맞춘 5개 탭으로 구성: 기본정보 / 모집·운영·정원 / 회차 관리 / 역량·정책 / 첨부.
+ * 수정 모드는 GET /staff/programs/{id}로 상세를 받아와 프리필한 뒤 PUT으로 저장한다.
+ * 회차(장소 포함)는 등록(POST) 요청 바디의 `sessions` 배열로만 전송된다 — 수정(PUT)의
+ * ProgramUpdateRequestDTO에는 `sessions` 필드가 없다(회차 정보는 별도 관리 대상). 다만 화면
+ * 자체의 최소 1개 카드 규칙은 등록/수정 모두에서 동일하게 검증해 저장을 막고 토스트로
+ * 안내한다(등록 시 백엔드는 회차가 아예 없으면 P022(PROGRAM_SESSION_REQUIRED)로 거부).
  *
  * @param {Object} props
- * @param {string} [props.programId] 편집 대상 ID. 있으면 수정 모드.
+ * @param {number} [props.programId] 편집 대상 ID. 있으면 수정 모드.
  * @param {() => void} props.onBack
- * @param {() => void} props.onSubmit 심사요청 후 콜백
+ * @param {() => void} props.onSubmit 등록/수정 완료 후 콜백
  */
 export default function ProgramForm({ programId, onBack, onSubmit }) {
   const isEdit = !!programId;
+  const queryClient = useQueryClient();
 
-  // Section 1
-  const [name, setName] = useState(isEdit ? '해외문화체험 워크숍' : '');
-  const [semester, setSem] = useState('2026-1');
-  const [catL, setCatL] = useState('선택');
-  const [catM, setCatM] = useState('선택');
-  const [catS, setCatS] = useState('선택');
-  const [typeTags, setTypeTags] = useState(isEdit ? ['글로벌', '체험'] : []);
-  const [online, setOnline] = useState('오프라인');
-  const [place, setPlace] = useState(isEdit ? '산학협력관 대강의실' : '');
+  const [activeTab, setActiveTab] = useState('basic');
 
-  // Section 2
-  const [recruitStart, setRcS] = useState(isEdit ? '2026-08-01' : '');
-  const [recruitEnd, setRcE] = useState(isEdit ? '2026-08-16' : '');
-  const [operStart, setOpS] = useState(isEdit ? '2026-09-01' : '');
-  const [operEnd, setOpE] = useState(isEdit ? '2026-09-07' : '');
-  const [rounds, setRounds] = useState(isEdit ? 5 : '');
-  const [capacity, setCapacity] = useState(isEdit ? 30 : '');
-  const [applyType, setApplyType] = useState('개인');
-  const [groupMin, setGroupMin] = useState(2);
-  const [groupMax, setGroupMax] = useState(5);
-  const [grades, setGrades] = useState([]);
-  const [deptLimit, setDeptLimit] = useState('');
-  const [prereq, setPrereq] = useState('');
+  // 기본정보
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [programTypeCodeId, setProgramTypeCodeId] = useState('');
+  const [operatingUnitCodeId, setOperatingUnitCodeId] = useState('');
 
-  // Section 3
-  const [compSel, setCompSel] = useState('자기관리');
-  const [subSel, setSubSel] = useState((SUB_COMPETENCIES['자기관리'] ?? [])[0] ?? '');
-  const [weightIn, setWeightIn] = useState(30);
-  const [compRows, setCompRows] = useState(
-    isEdit
-      ? [
-          { competency: '글로벌', sub: '국제감각', weight: 40 },
-          { competency: '대인관계', sub: '협업', weight: 30 },
-        ]
-      : [],
+  // 모집·운영·정원
+  const [recruitStart, setRcS] = useState('');
+  const [recruitEnd, setRcE] = useState('');
+  const [operStart, setOpS] = useState('');
+  const [operEnd, setOpE] = useState('');
+  const [capacity, setCapacity] = useState('');
+
+  // 회차 관리 — 등록 모드는 항상 1회차 카드로 시작(최소 1개 규칙과 일치)
+  const [sessions, setSessions] = useState(() => (isEdit ? [] : [emptySession('new-1')]));
+  // 시작/종료일이 비어있는 카드의 localId — SessionCard에 빨간 테두리로 표시하기 위함
+  const [sessionFieldErrors, setSessionFieldErrors] = useState(new Set());
+  // 당일 시각 부분 입력/순서 오류가 있는 카드의 localId — 시각 입력란에 빨간 테두리로 표시
+  const [sessionTimeErrors, setSessionTimeErrors] = useState(new Set());
+  // 직접입력인데 장소가 비어있는 카드의 localId
+  const [sessionLocationErrors, setSessionLocationErrors] = useState(new Set());
+
+  // 역량·정책
+  const [competencyId, setCompetencyId] = useState('');
+  const [completionRate, setCompletionRate] = useState(80);
+
+  // Validation / submit state
+  const [errors, setErrors] = useState({});
+  const [prefilled, setPrefilled] = useState(false);
+  const [fileGroupId, setFileGroupId] = useState(null);
+  const [existingFileName, setExistingFileName] = useState(null);
+  const [existingFileRemoved, setExistingFileRemoved] = useState(false);
+  const uploadSeqRef = useRef(0);
+
+  const {
+    data: detailData,
+    isLoading: detailLoading,
+    isError: detailErrored,
+    error: detailError,
+  } = useQuery({
+    queryKey: ['adminProgramDetail', programId],
+    queryFn: () => fetchProgramDetailAdmin(programId),
+    enabled: isEdit,
+  });
+
+  // 수정 모드에서는 상세조회 완료(=competencyId 확정) 전까지 대기했다가, 확정된 id를
+  // includeCompetencyId로 넘겨 비활성 상태라도 현재 값이 옵션에 포함되도록 한다.
+  // 등록 모드는 기존과 동일하게 파라미터 없이 즉시 호출한다.
+  const competencyIncludeId = isEdit ? detailData?.competencyId : undefined;
+
+  const {
+    data: competencyData,
+    isPending: competencyLoading,
+    isError: competencyErrored,
+  } = useQuery({
+    queryKey: isEdit
+      ? ['competencyOptions', 'edit', competencyIncludeId]
+      : ['competencyOptions', 'create'],
+    queryFn: () => fetchCompetencyOptions({ includeCompetencyId: competencyIncludeId }),
+    enabled: isEdit ? !!detailData : true,
+  });
+  // 활성 목록에는 없지만 기존 프로그램이 참조 중인(비활성화된) 값을 셀렉트에 표시하기 위해
+  // 상세 응답의 원본 id/label을 옵션 끝에 병합한다. (역량은 BE가 includeCompetencyId로
+  // 현재 값을 직접 포함해 내려주므로 이 병합 로직을 타지 않는다 — 분류/부서에서만 계속 사용.)
+  const mergeCurrentOption = (options, currentId, currentLabel) =>
+    isEdit && currentId != null && !options.some((o) => o.id === currentId)
+      ? [...options, { id: currentId, label: currentLabel }]
+      : options;
+
+  const competencyOptions = (competencyData ?? []).map((c) => ({
+    id: c.competencyId,
+    label: c.competencyName,
+    active: c.active,
+  }));
+  const competencyPlaceholder = competencyLoading
+    ? '불러오는 중…'
+    : competencyErrored
+      ? '목록을 불러오지 못했습니다'
+      : '선택하세요';
+
+  const {
+    data: programTypeCodes = [],
+    isLoading: programTypeLoading,
+    isError: programTypeErrored,
+  } = useCommonCode('PROGRAM_TYPE');
+  const programTypeOptions = mergeCurrentOption(
+    programTypeCodes.map((c) => ({ id: c.codeId, label: c.codeName })),
+    detailData?.programTypeCodeId,
+    detailData?.programTypeCodeName,
   );
 
-  // Section 4
-  const [attendance, setAttendance] = useState(80);
-  const [reportRequired, setReportReq] = useState(true);
-  const [surveyRequired, setSurveyReq] = useState(true);
-  const [mileage, setMileage] = useState(isEdit ? 50 : '');
+  // 등록 모드에서만 사용 — 아직 저장 전이라 매핑된 정책을 알 수 없으므로 프로그램 유형
+  // 선택값이 바뀔 때마다 미리보기 API로 실시간 조회한다. 수정 모드는 detailData에 이미
+  // 매핑된 정책이 내려오므로 이 조회를 쓰지 않는다.
+  const {
+    data: mileagePreview,
+    isFetching: mileagePreviewLoading,
+    isError: mileagePreviewErrored,
+  } = useQuery({
+    queryKey: ['mileagePolicyPreview', programTypeCodeId],
+    queryFn: () => fetchMileagePolicyPreview(Number(programTypeCodeId)),
+    enabled: !isEdit && !!programTypeCodeId,
+  });
 
-  // Section 5
-  const [budget, setBudget] = useState(isEdit ? 5000000 : '');
+  const {
+    data: departmentCodes = [],
+    isLoading: departmentLoading,
+    isError: departmentErrored,
+    refetch: refetchDepartments,
+  } = useCommonCode('DEPARTMENT');
+  const departmentOptions = mergeCurrentOption(
+    departmentCodes.map((c) => ({ id: c.codeId, label: c.codeName })),
+    detailData?.operatingUnitCodeId,
+    detailData?.operatingUnitCodeName,
+  );
 
-  // Validation state
-  const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
+  // 수정 모드 프리필에 필요한 옵션 조회가 실패했거나(에러) 로딩이 끝났는데도 비어 있으면,
+  // prefilled가 영원히 false로 남아 로딩 화면에 갇히므로 별도 상태로 구분해 재시도 UI를 보여준다.
+  const optionsUnavailable =
+    competencyErrored ||
+    programTypeErrored ||
+    departmentErrored ||
+    (!competencyLoading &&
+      !programTypeLoading &&
+      !departmentLoading &&
+      (competencyOptions.length === 0 ||
+        programTypeOptions.length === 0 ||
+        departmentOptions.length === 0));
 
-  const sec1Ref = useRef(null);
-  const sec3Ref = useRef(null);
+  // 수정 모드 프리필: 상세조회 + 역량/분류/부서 옵션 목록이 모두 준비되면 한 번만 채운다.
+  // 역량·분류·부서는 상세 응답의 원본 id를 그대로 쓴다(옵션 목록은 셀렉트 표시용).
+  useEffect(() => {
+    if (!isEdit || prefilled || !detailData) return;
+    if (
+      competencyOptions.length === 0 ||
+      programTypeOptions.length === 0 ||
+      departmentOptions.length === 0
+    )
+      return;
 
-  const toggleTag = (tag) =>
-    setTypeTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
-  const toggleGrade = (g) =>
-    setGrades((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+    setName(detailData.programName ?? '');
+    setDescription(detailData.description ?? '');
+    setRcS(formatDate(detailData.recruitmentStartsAt));
+    setRcE(formatDate(detailData.recruitmentEndsAt));
+    setOpS(formatDate(detailData.operationStartsAt));
+    setOpE(formatDate(detailData.operationEndsAt));
+    setCapacity(detailData.capacity ?? '');
+    setCompletionRate(detailData.completionRate != null ? Number(detailData.completionRate) : 80);
+    setExistingFileName(detailData.fileName ?? null);
 
-  const addCompRow = () => {
-    if (!compSel || compSel === '선택' || !subSel) return;
-    if (typeof weightIn !== 'number' || weightIn <= 0) return;
-    const totalSoFar = compRows.reduce((s, r) => s + r.weight, 0);
-    if (totalSoFar + weightIn > 100) {
-      toast('가중치 합계가 100%를 초과합니다.', 'error');
+    if (detailData.competencyId != null) {
+      setCompetencyId(String(detailData.competencyId));
+    }
+    if (detailData.programTypeCodeId != null) {
+      setProgramTypeCodeId(String(detailData.programTypeCodeId));
+    }
+    if (detailData.operatingUnitCodeId != null) {
+      setOperatingUnitCodeId(String(detailData.operatingUnitCodeId));
+    }
+
+    // 기존 회차가 없는 프로그램(과거 이력)도 화면은 항상 최소 1장으로 시작한다.
+    const existingSessions = Array.isArray(detailData.sessions) ? detailData.sessions : [];
+    const nextSessions =
+      existingSessions.length > 0
+        ? existingSessions.map((s, i) => {
+            const startDate = formatDate(s.startsAt);
+            const endDate = formatDate(s.endsAt);
+            // 시각이 정확히 00:00이면 과거 데이터가 시간 미입력(자정 디폴트)이었을 가능성이 높아
+            // 빈 값으로 프리필해 불필요한 "00:00" 노출을 피한다. 단, 한쪽만 자정이고
+            // 다른 쪽은 실제 시각이 있다면 자정 쪽도 사용자가 명시적으로 입력한 값일 수 있으므로
+            // 두 값이 모두 자정일 때만 지운다.
+            const startTime = s.startsAt ? s.startsAt.slice(11, 16) : '';
+            const endTime = s.endsAt ? s.endsAt.slice(11, 16) : '';
+            const bothMidnight = startTime === '00:00' && endTime === '00:00';
+            return {
+              localId: s.programSessionId ?? `existing-${i}`,
+              sessionName: s.sessionName ?? '',
+              dateMode: startDate === endDate ? 'SINGLE' : 'RANGE',
+              startsAt: startDate,
+              startsAtTime: bothMidnight ? '' : startTime,
+              endsAt: endDate,
+              endsAtTime: bothMidnight ? '' : endTime,
+              locationType: s.locationType ?? 'DIRECT_INPUT',
+              location: s.location ?? '',
+            };
+          })
+        : [emptySession('new-1')];
+    setSessions(normalizeFirstSession(nextSessions));
+
+    setPrefilled(true);
+  }, [isEdit, prefilled, detailData, competencyOptions, programTypeOptions, departmentOptions]);
+
+  const handleSubmitError = (err) => {
+    if (err instanceof ApiError && err.code === 'P022') {
+      setActiveTab('sessions');
+      toast('최소 1회차는 입력해야합니다.', 'error');
       return;
     }
-    setCompRows((prev) => [...prev, { competency: compSel, sub: subSel, weight: weightIn }]);
+    toast(isEdit ? getEditErrorMessage(err) : getRegisterErrorMessage(err), 'error');
   };
 
-  const removeCompRow = (i) => setCompRows((prev) => prev.filter((_, idx) => idx !== i));
+  const registerMutation = useMutation({
+    mutationFn: createProgram,
+    onSuccess: (data) => {
+      toast(`'${data.programName}' 프로그램이 등록되었습니다.`, 'success');
+      queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
+      onSubmit();
+    },
+    onError: handleSubmitError,
+  });
 
-  const totalWeight = compRows.reduce((s, r) => s + r.weight, 0);
+  const updateMutation = useMutation({
+    mutationFn: (payload) => updateProgram(programId, payload),
+    onSuccess: () => {
+      toast('수정 내용이 저장되었습니다.', 'success');
+      queryClient.invalidateQueries({ queryKey: ['adminPrograms'] });
+      queryClient.invalidateQueries({ queryKey: ['adminProgramDetail', programId] });
+      onSubmit();
+    },
+    onError: handleSubmitError,
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: uploadProgramOperationPlan,
+  });
+
+  const validatePeriodRule = () => {
+    if (recruitStart && recruitEnd && recruitStart >= recruitEnd) {
+      return '모집 시작일은 모집 종료일보다 빨라야 합니다.';
+    }
+    if (operStart && operEnd && operStart >= operEnd) {
+      return '운영 시작일은 운영 종료일보다 빨라야 합니다.';
+    }
+    if (recruitEnd && operStart && recruitEnd > operStart) {
+      return '모집 종료일은 운영 시작일보다 늦을 수 없습니다.';
+    }
+    return null;
+  };
 
   const validate = () => {
     const newErrors = {};
     if (!name.trim()) newErrors.name = true;
-    if (compRows.length === 0) newErrors.competency = true;
+    if (!programTypeCodeId) newErrors.programTypeCodeId = true;
+    if (!operatingUnitCodeId) newErrors.operatingUnitCodeId = true;
+    if (!recruitStart) newErrors.recruitStart = true;
+    if (!recruitEnd) newErrors.recruitEnd = true;
+    if (!operStart) newErrors.operStart = true;
+    if (!operEnd) newErrors.operEnd = true;
+    if (!capacity || Number(capacity) <= 0) newErrors.capacity = true;
+    if (!competencyId) newErrors.competencyId = true;
     setErrors(newErrors);
 
     if (newErrors.name) {
-      sec1Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveTab('basic');
       toast('필수 입력 항목을 확인해 주세요.', 'error');
       return false;
     }
-    if (newErrors.competency) {
-      sec3Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      toast('역량 연계를 1개 이상 추가해 주세요.', 'error');
+    if (newErrors.programTypeCodeId || newErrors.operatingUnitCodeId) {
+      setActiveTab('basic');
+      toast('프로그램 분류와 운영부서를 선택해 주세요.', 'error');
       return false;
     }
+    if (
+      newErrors.recruitStart ||
+      newErrors.recruitEnd ||
+      newErrors.operStart ||
+      newErrors.operEnd ||
+      newErrors.capacity
+    ) {
+      setActiveTab('schedule');
+      toast('모집·운영 기간과 정원을 확인해 주세요.', 'error');
+      return false;
+    }
+    // 수정 모드에서는 회차 입력이 읽기 전용이라(회차 변경은 저장되지 않음) 회차 검증을 건너뛴다.
+    if (!isEdit) {
+      if (sessions.length === 0) {
+        setActiveTab('sessions');
+        toast('최소 1회차는 입력해야합니다.', 'error');
+        return false;
+      }
+      const dateErrorSessions = [];
+      const timeErrorSessions = [];
+      sessions.forEach((s) => {
+        const endDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
+        if (!s.startsAt || !endDate || s.startsAt > endDate) {
+          dateErrorSessions.push(s);
+          return;
+        }
+        if (s.startsAt === endDate) {
+          if (Boolean(s.startsAtTime) !== Boolean(s.endsAtTime)) {
+            timeErrorSessions.push(s);
+          } else if (s.startsAtTime && s.endsAtTime && s.startsAtTime >= s.endsAtTime) {
+            timeErrorSessions.push(s);
+          }
+        }
+      });
+      if (dateErrorSessions.length > 0 || timeErrorSessions.length > 0) {
+        setSessionFieldErrors(new Set(dateErrorSessions.map((s) => s.localId)));
+        setSessionTimeErrors(new Set(timeErrorSessions.map((s) => s.localId)));
+        setActiveTab('sessions');
+        toast('모든 회차의 날짜(및 시각)를 확인해 주세요.', 'error');
+        return false;
+      }
+      setSessionFieldErrors(new Set());
+      setSessionTimeErrors(new Set());
+
+      const missingLocationSessions = sessions.filter(
+        (s) => s.locationType === 'DIRECT_INPUT' && !s.location.trim(),
+      );
+      if (missingLocationSessions.length > 0) {
+        setSessionLocationErrors(new Set(missingLocationSessions.map((s) => s.localId)));
+        setActiveTab('sessions');
+        toast('모든 회차의 장소를 입력하거나 "전회차와 동일"을 선택해 주세요.', 'error');
+        return false;
+      }
+      setSessionLocationErrors(new Set());
+    }
+
+    if (newErrors.competencyId) {
+      setActiveTab('policy');
+      toast('연계 핵심역량을 선택해 주세요.', 'error');
+      return false;
+    }
+
+    const periodError = validatePeriodRule();
+    if (periodError) {
+      setActiveTab('schedule');
+      toast(periodError, 'error');
+      return false;
+    }
+
     return true;
   };
 
-  const handleTempSave = () => {
-    setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
-      toast('임시 저장되었습니다.', 'success');
-    }, 600);
+  const buildPayload = () => ({
+    // 새로 업로드한 파일이 있으면 그 fileGroupId를 보낸다.
+    // 수정 모드에서 파일을 바꾸지 않았다면 키 자체를 생략해 백엔드가 기존 첨부(file_group_id)를 그대로 유지하도록 한다.
+    // 기존 첨부만 삭제하고 새로 업로드하지 않았다면 clearFileGroup: true를 보내 프로그램-첨부 연결(file_group_id)만
+    // 해제하도록 요청한다. FileGroup은 여러 도메인이 공유하는 테이블이라 fileGroupId를 null로 보내는 방식은
+    // 쓰지 않는다 — clearFileGroup은 연결 해제(unlink)일 뿐 FileGroup/StoredFile row 자체를 지우지 않는다.
+    ...(isEdit
+      ? {
+          ...(fileGroupId != null ? { fileGroupId } : {}),
+          // 백엔드 ProgramUpdateRequestDTO의 clearFileGroup은 원시 boolean이라 키 자체가
+          // 없으면 역직렬화 단계에서 실패한다(FAIL_ON_NULL_FOR_PRIMITIVES) — 항상 명시적으로 보낸다.
+          clearFileGroup: fileGroupId == null && existingFileRemoved,
+        }
+      : { fileGroupId }),
+    operatingUnitCodeId: Number(operatingUnitCodeId),
+    programTypeCodeId: Number(programTypeCodeId),
+    competencyId: Number(competencyId),
+    programName: name.trim(),
+    description: description.trim() || null,
+    recruitmentStartsAt: toInstant(recruitStart),
+    recruitmentEndsAt: toInstant(recruitEnd),
+    operationStartsAt: toInstant(operStart),
+    operationEndsAt: toInstant(operEnd),
+    capacity: Number(capacity),
+    completionRate,
+    // ProgramUpdateRequestDTO에는 sessions 필드가 없어 수정 모드에서는 보낼 수 없다.
+    // 그래서 수정 모드의 회차 섹션은 읽기 전용으로 렌더링한다(SessionCard readOnly prop) —
+    // 회차 변경 기능이 아직 없으므로 payload에도 포함하지 않는다. 등록 모드에서만 sessions를 포함시킨다.
+    ...(isEdit
+      ? {}
+      : {
+          sessions: sessions.map((s, i) => {
+            const endsAtDate = s.dateMode === 'SINGLE' ? s.startsAt : s.endsAt;
+            return {
+              sessionNo: i + 1,
+              sessionName: s.sessionName.trim() || null,
+              startsAt: toInstant(s.startsAt, s.startsAtTime),
+              endsAt: toInstant(endsAtDate, s.endsAtTime),
+              locationType: s.locationType,
+              location: s.locationType === 'DIRECT_INPUT' ? s.location.trim() || null : null,
+            };
+          }),
+        }),
+  });
+
+  const handleRegister = () => {
+    if (!validate()) return;
+    registerMutation.mutate(buildPayload());
   };
 
-  const handleSubmit = () => {
+  const handleEditSave = () => {
     if (!validate()) return;
-    setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
-      toast('심사 요청이 완료되었습니다. 검토 후 결과를 안내드립니다.', 'success');
-      onSubmit();
-    }, 800);
+    updateMutation.mutate(buildPayload());
   };
+
+  const updateSession = (localId, patch) => {
+    setSessions((prev) => prev.map((s) => (s.localId === localId ? { ...s, ...patch } : s)));
+  };
+
+  const addSession = () => {
+    setSessions((prev) => [...prev, emptySession(`new-${Date.now()}`)]);
+  };
+
+  const removeSession = (localId) => {
+    setSessions((prev) =>
+      prev.length <= 1 ? prev : normalizeFirstSession(prev.filter((s) => s.localId !== localId)),
+    );
+  };
+
+  // 수정 모드: 상세조회가 끝나고 옵션 목록까지 프리필됐을 때만 폼을 보여준다.
+  if (isEdit && (detailLoading || (!prefilled && !optionsUnavailable)) && !detailErrored) {
+    return (
+      <div>
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-[12px] text-[#9AA0A6] hover:text-[#1F2328] transition-colors"
+          >
+            ← 목록
+          </button>
+          <div className="h-4 w-px bg-[#E5E7EB]" />
+          <h1 className="text-[20px] font-black text-[#1F2328]">프로그램 수정</h1>
+        </div>
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center text-[13px] text-[#9AA0A6]">
+          불러오는 중...
+        </div>
+      </div>
+    );
+  }
+
+  if (isEdit && (detailErrored || (!prefilled && optionsUnavailable))) {
+    return (
+      <div>
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-[12px] text-[#9AA0A6] hover:text-[#1F2328] transition-colors"
+          >
+            ← 목록
+          </button>
+          <div className="h-4 w-px bg-[#E5E7EB]" />
+          <h1 className="text-[20px] font-black text-[#1F2328]">프로그램 수정</h1>
+        </div>
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center">
+          <p className="text-[14px] font-bold text-[#1F2328] mb-2">
+            {detailErrored
+              ? getDetailErrorMessage(detailError)
+              : '옵션 목록을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.'}
+          </p>
+          <Button variant="outline" onClick={onBack}>
+            목록으로
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const saving =
+    (isEdit ? updateMutation.isPending : registerMutation.isPending) || uploadMutation.isPending;
 
   return (
     <div>
@@ -294,436 +935,396 @@ export default function ProgramForm({ programId, onBack, onSubmit }) {
           {isEdit ? '프로그램 수정' : '프로그램 등록'}
         </h1>
         {isEdit && (
-          <span className="text-[11px] font-mono text-[#9AA0A6] bg-[#F3F4F6] px-2 py-0.5 rounded-[4px]">
-            P001
-          </span>
+          <>
+            <span className="text-[11px] font-mono text-[#9AA0A6] bg-[#F3F4F6] px-2 py-0.5 rounded-[4px]">
+              #{programId}
+            </span>
+            {detailData?.programStatusLabel && (
+              <StatusBadge status={detailData.programStatusLabel} size="sm" />
+            )}
+          </>
         )}
       </div>
 
-      <div className="flex flex-col gap-5 pb-24">
-        {/* ── Section 1: 기본정보 ── */}
-        <div ref={sec1Ref}>
-          <Section num={1} title="기본정보" id="sec1">
-            <div className="grid grid-cols-2 gap-5">
-              <div className="col-span-2">
-                <Field label="프로그램명" required error={errors.name}>
-                  <TextInput
-                    value={name}
-                    onChange={setName}
-                    placeholder="예) 2026-1 해외문화체험 워크숍"
-                    error={errors.name}
-                  />
-                </Field>
-              </div>
+      <div className="mb-5">
+        <Tabs
+          tabs={TABS}
+          active={activeTab}
+          onChange={setActiveTab}
+          accentColor={ACCENT}
+          withPanels
+        />
+      </div>
 
-              <Field label="운영학기" required>
-                <SelectInput value={semester} onChange={setSem} options={SEMESTERS} />
-              </Field>
-
-              <Field label="프로그램 분류 (대·중·소)" required>
-                <div className="flex gap-2">
-                  <SelectInput
-                    value={catL}
-                    onChange={(v) => {
-                      setCatL(v);
-                      setCatM('선택');
-                      setCatS('선택');
-                    }}
-                    options={CATEGORY_L}
-                  />
-                  <SelectInput
-                    value={catM}
-                    onChange={(v) => {
-                      setCatM(v);
-                      setCatS('선택');
-                    }}
-                    options={catL !== '선택' ? ['선택', ...(CATEGORY_M[catL] ?? [])] : ['선택']}
-                  />
-                  <SelectInput
-                    value={catS}
-                    onChange={setCatS}
-                    options={catM !== '선택' ? ['선택', ...(CATEGORY_S[catM] ?? [])] : ['선택']}
-                  />
-                </div>
-              </Field>
-
-              <div className="col-span-2">
-                <Field label="유형 태그 (다중 선택)">
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {TYPE_TAGS.map((tag) => {
-                      const active = typeTags.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          onClick={() => toggleTag(tag)}
-                          className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${active ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#D1D5DB]'}`}
-                          style={active ? { background: ACCENT } : {}}
-                        >
-                          {tag}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Field>
-              </div>
-
-              <Field label="진행 방식" required>
-                <div className="flex gap-2">
-                  {['오프라인', '온라인', '혼합'].map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setOnline(m)}
-                      className={`h-9 px-4 text-[12px] font-semibold rounded-[6px] border transition-colors ${online === m ? 'border-[#374151] text-white' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#D1D5DB]'}`}
-                      style={online === m ? { background: ACCENT } : {}}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-
-              <Field label="장소 / URL">
+      <div className="pb-24">
+        <Section
+          num={1}
+          title="기본정보"
+          id="panel-basic"
+          role="tabpanel"
+          aria-labelledby="tab-basic"
+          tabIndex={0}
+          hidden={activeTab !== 'basic'}
+        >
+          <div className="grid grid-cols-2 gap-5">
+            <div className="col-span-2">
+              <Field label="프로그램명" required error={errors.name} htmlFor="programName">
                 <TextInput
-                  value={place}
-                  onChange={setPlace}
-                  placeholder={
-                    online === '온라인' ? 'https://zoom.us/j/...' : '예) 산학협력관 301호'
-                  }
+                  id="programName"
+                  value={name}
+                  onChange={setName}
+                  placeholder="예) 2026-1 해외문화체험 워크숍"
+                  error={errors.name}
+                  maxLength={200}
                 />
               </Field>
             </div>
-          </Section>
-        </div>
 
-        {/* ── Section 2: 모집·정원 ── */}
-        <Section num={2} title="모집·정원" id="sec2">
+            <div className="col-span-2">
+              <Field label="설명" htmlFor="description">
+                <TextArea
+                  id="description"
+                  value={description}
+                  onChange={setDescription}
+                  placeholder="프로그램에 대한 설명을 입력하세요."
+                />
+              </Field>
+            </div>
+
+            <Field
+              label="프로그램분류"
+              required
+              error={errors.programTypeCodeId}
+              htmlFor="programTypeCodeId"
+            >
+              <IdSelect
+                id="programTypeCodeId"
+                value={programTypeCodeId}
+                onChange={setProgramTypeCodeId}
+                options={programTypeOptions}
+                placeholder="선택하세요"
+                disabled={programTypeLoading || programTypeErrored}
+                error={errors.programTypeCodeId}
+              />
+            </Field>
+
+            <Field
+              label="운영부서"
+              required
+              error={errors.operatingUnitCodeId}
+              htmlFor="operatingUnitCodeId"
+            >
+              <IdSelect
+                id="operatingUnitCodeId"
+                value={operatingUnitCodeId}
+                onChange={setOperatingUnitCodeId}
+                options={departmentOptions}
+                placeholder={
+                  departmentLoading
+                    ? '불러오는 중…'
+                    : departmentErrored
+                      ? '목록을 불러오지 못했습니다'
+                      : '선택하세요'
+                }
+                disabled={departmentLoading || departmentErrored}
+                error={errors.operatingUnitCodeId}
+              />
+              {departmentErrored && (
+                <p className="text-[11px] text-[#CF222E] mt-1">
+                  운영부서 목록을 불러오지 못했습니다.{' '}
+                  <button
+                    type="button"
+                    onClick={() => refetchDepartments()}
+                    className="underline font-semibold"
+                  >
+                    다시 시도
+                  </button>
+                </p>
+              )}
+            </Field>
+          </div>
+        </Section>
+
+        <Section
+          num={2}
+          title="모집·운영·정원"
+          id="panel-schedule"
+          role="tabpanel"
+          aria-labelledby="tab-schedule"
+          tabIndex={0}
+          hidden={activeTab !== 'schedule'}
+        >
           <div className="grid grid-cols-2 gap-5">
             <Field label="모집 기간" required>
               <div className="flex items-center gap-2">
-                <DateInput value={recruitStart} onChange={setRcS} />
+                <DateInput
+                  value={recruitStart}
+                  onChange={setRcS}
+                  error={errors.recruitStart}
+                  ariaLabel="모집 시작일"
+                />
                 <span className="text-[12px] text-[#9AA0A6]">~</span>
-                <DateInput value={recruitEnd} onChange={setRcE} />
+                <DateInput
+                  value={recruitEnd}
+                  onChange={setRcE}
+                  error={errors.recruitEnd}
+                  ariaLabel="모집 종료일"
+                />
               </div>
             </Field>
 
             <Field label="운영 기간" required>
               <div className="flex items-center gap-2">
-                <DateInput value={operStart} onChange={setOpS} />
+                <DateInput
+                  value={operStart}
+                  onChange={setOpS}
+                  error={errors.operStart}
+                  ariaLabel="운영 시작일"
+                />
                 <span className="text-[12px] text-[#9AA0A6]">~</span>
-                <DateInput value={operEnd} onChange={setOpE} />
+                <DateInput
+                  value={operEnd}
+                  onChange={setOpE}
+                  error={errors.operEnd}
+                  ariaLabel="운영 종료일"
+                />
               </div>
             </Field>
 
-            <Field label="총 회차">
-              <NumberInput value={rounds} onChange={setRounds} min={1} placeholder="예) 5" />
-            </Field>
-
-            <Field label="정원" required>
-              <NumberInput value={capacity} onChange={setCapacity} min={1} placeholder="예) 30" />
-            </Field>
-
-            <div className="col-span-2">
-              <Field label="신청 구분" required>
-                <div className="flex gap-3 items-center flex-wrap">
-                  {['개인', '그룹'].map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setApplyType(t)}
-                      className={`h-9 px-5 text-[12px] font-semibold rounded-[6px] border transition-colors ${applyType === t ? 'border-[#374151] text-white' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#D1D5DB]'}`}
-                      style={applyType === t ? { background: ACCENT } : {}}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                  {applyType === '그룹' && (
-                    <div className="flex items-center gap-2 ml-2">
-                      <span className="text-[12px] text-[#656D76]">최소</span>
-                      <div className="w-20">
-                        <NumberInput value={groupMin} onChange={setGroupMin} min={2} />
-                      </div>
-                      <span className="text-[12px] text-[#656D76]">최대</span>
-                      <div className="w-20">
-                        <NumberInput value={groupMax} onChange={setGroupMax} min={2} />
-                      </div>
-                      <span className="text-[12px] text-[#656D76]">명</span>
-                    </div>
-                  )}
-                </div>
-              </Field>
-            </div>
-
-            <Field label="대상 학년 (다중 선택)">
-              <div className="flex gap-2 mt-1">
-                {GRADES.map((g) => {
-                  const active = grades.includes(g);
-                  return (
-                    <button
-                      key={g}
-                      onClick={() => toggleGrade(g)}
-                      className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${active ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#D1D5DB]'}`}
-                      style={active ? { background: ACCENT } : {}}
-                    >
-                      {g}
-                    </button>
-                  );
-                })}
-                {grades.length === 0 && (
-                  <span className="text-[11px] text-[#9AA0A6] self-center">선택 없음 = 전체</span>
-                )}
-              </div>
-            </Field>
-
-            <Field label="대상 학과 (쉼표 구분)">
-              <TextInput
-                value={deptLimit}
-                onChange={setDeptLimit}
-                placeholder="예) 컴퓨터공학과, 경영학과 (비워두면 전체)"
+            <Field label="정원" required error={errors.capacity} htmlFor="capacity">
+              <NumberInput
+                id="capacity"
+                value={capacity}
+                onChange={setCapacity}
+                min={1}
+                placeholder="예) 30"
+                error={errors.capacity}
               />
             </Field>
-
-            <div className="col-span-2">
-              <Field label="선수 요건">
-                <TextInput
-                  value={prereq}
-                  onChange={setPrereq}
-                  placeholder="예) 비교과 마일리지 100점 이상"
-                />
-              </Field>
-            </div>
           </div>
         </Section>
 
-        {/* ── Section 3: 역량 연계 ── */}
-        <div ref={sec3Ref}>
-          <Section num={3} title="역량 연계" id="sec3">
-            <div
-              className={`p-4 rounded-[8px] mb-5 border ${errors.competency ? 'bg-[#FFF5F5] border-[#FECACA]' : 'bg-[#F3F4F6] border-[#E5E7EB]'}`}
-            >
-              <p
-                className={`text-[12px] font-semibold ${errors.competency ? 'text-[#CF222E]' : 'text-[#374151]'}`}
-              >
-                핵심역량 연계를 <strong>최소 1개 이상</strong> 추가해야 저장할 수 있습니다. 가중치
-                합계는 100% 이하여야 합니다.
+        <Section
+          num={3}
+          title="회차 관리"
+          id="panel-sessions"
+          role="tabpanel"
+          aria-labelledby="tab-sessions"
+          tabIndex={0}
+          hidden={activeTab !== 'sessions'}
+        >
+          <div className="flex flex-col gap-4">
+            {isEdit && (
+              <p className="text-[12px] text-[#656D76]">
+                등록된 회차 정보는 수정할 수 없습니다.
               </p>
-            </div>
-
-            {/* Add row */}
-            <div className="flex gap-3 items-end mb-5 flex-wrap">
-              <div className="flex-1 min-w-[150px]">
-                <label className="block text-[10px] font-semibold text-[#656D76] mb-1.5">
-                  핵심역량
-                </label>
-                <SelectInput
-                  value={compSel}
-                  onChange={(v) => {
-                    setCompSel(v);
-                    setSubSel((SUB_COMPETENCIES[v] ?? [])[0] ?? '');
-                  }}
-                  options={CORE_COMPETENCIES}
-                />
-              </div>
-              <div className="flex-1 min-w-[150px]">
-                <label className="block text-[10px] font-semibold text-[#656D76] mb-1.5">
-                  하위역량
-                </label>
-                <SelectInput
-                  value={subSel}
-                  onChange={setSubSel}
-                  options={SUB_COMPETENCIES[compSel] ?? []}
-                />
-              </div>
-              <div className="w-28">
-                <label className="block text-[10px] font-semibold text-[#656D76] mb-1.5">
-                  가중치(%)
-                </label>
-                <NumberInput
-                  value={weightIn}
-                  onChange={setWeightIn}
-                  min={1}
-                  max={100}
-                  placeholder="30"
-                />
-              </div>
-              <Button onClick={addCompRow} style={{ background: ACCENT }} size="sm">
-                + 추가
-              </Button>
-            </div>
-
-            {/* Rows table */}
-            {compRows.length > 0 ? (
-              <div className="rounded-[8px] border border-[#E5E7EB] overflow-hidden">
-                <table className="w-full border-collapse text-[12px]">
-                  <thead>
-                    <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                      {['핵심역량', '하위역량', '가중치(%)', ''].map((h) => (
-                        <th
-                          key={h}
-                          className={`px-4 py-2.5 text-[10px] font-semibold text-[#656D76] ${h === '' ? 'w-10' : 'text-left'}`}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {compRows.map((r, i) => (
-                      <tr key={i} className="border-b border-[#F3F4F6] last:border-0">
-                        <td className="px-4 py-3">
-                          <span
-                            className="text-[11px] font-bold px-2 py-0.5 rounded-full text-white"
-                            style={{ background: ACCENT }}
-                          >
-                            {r.competency}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-[#444D56]">{r.sub}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 rounded-full bg-[#E5E7EB] w-24 overflow-hidden">
-                              <div
-                                className="h-full rounded-full"
-                                style={{ width: `${r.weight}%`, background: ACCENT }}
-                              />
-                            </div>
-                            <span className="font-bold text-[#1F2328]">{r.weight}%</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => removeCompRow(i)}
-                            className="text-[#9AA0A6] hover:text-[#CF222E] text-[14px] transition-colors"
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="bg-[#F6F8FA]">
-                      <td
-                        colSpan={2}
-                        className="px-4 py-2 text-[11px] font-semibold text-[#656D76]"
-                      >
-                        합계
-                      </td>
-                      <td className="px-4 py-2">
-                        <span
-                          className={`text-[12px] font-black ${totalWeight > 100 ? 'text-[#CF222E]' : totalWeight === 100 ? 'text-[#059669]' : 'text-[#1F2328]'}`}
-                        >
-                          {totalWeight}%
-                          {totalWeight > 100 ? ' (초과!)' : totalWeight === 100 ? ' ✓' : ''}
-                        </span>
-                      </td>
-                      <td />
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-[8px] border border-dashed border-[#D1D5DB] py-8 text-center text-[12px] text-[#9AA0A6]">
-                역량을 추가하세요.
-              </div>
             )}
-          </Section>
-        </div>
-
-        {/* ── Section 4: 수료 기준·마일리지 ── */}
-        <Section num={4} title="수료 기준·마일리지" id="sec4">
-          <div className="grid grid-cols-2 gap-5">
-            <Field label="이수 출석률 기준 (%)">
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={attendance || 80}
-                  onChange={(e) => setAttendance(Number(e.target.value))}
-                  className="flex-1 accent-[#374151]"
-                />
-                <div className="w-20">
-                  <NumberInput value={attendance} onChange={setAttendance} min={0} max={100} />
-                </div>
-                <span className="text-[12px] text-[#656D76]">%</span>
-              </div>
-            </Field>
-
-            <Field label="적립 마일리지 (점)">
-              <NumberInput value={mileage} onChange={setMileage} min={0} placeholder="예) 50" />
-            </Field>
-
-            <Field label="결과보고서 필수">
-              <Toggle
-                checked={reportRequired}
-                onChange={setReportReq}
-                label={reportRequired ? '필수' : '선택'}
+            {sessions.map((s, i) => (
+              <SessionCard
+                key={s.localId}
+                index={i}
+                session={s}
+                onChange={(patch) => updateSession(s.localId, patch)}
+                onRemove={() => removeSession(s.localId)}
+                removable={sessions.length > 1}
+                startsAtError={sessionFieldErrors.has(s.localId)}
+                endsAtError={sessionFieldErrors.has(s.localId)}
+                startsAtTimeError={sessionTimeErrors.has(s.localId)}
+                endsAtTimeError={sessionTimeErrors.has(s.localId)}
+                locationError={sessionLocationErrors.has(s.localId)}
+                readOnly={isEdit}
               />
-            </Field>
-
-            <Field label="만족도 설문 필수">
-              <Toggle
-                checked={surveyRequired}
-                onChange={setSurveyReq}
-                label={surveyRequired ? '필수' : '선택'}
-              />
-            </Field>
+            ))}
+            {!isEdit && (
+              <button
+                type="button"
+                onClick={addSession}
+                className="h-9 px-4 self-start text-[12px] font-bold rounded-[6px] border border-dashed border-[#9AA0A6] text-[#656D76] hover:border-[#374151] hover:text-[#1F2328] transition-colors"
+              >
+                + 회차 추가
+              </button>
+            )}
           </div>
         </Section>
 
-        {/* ── Section 5: 운영계획·예산 ── */}
-        <Section num={5} title="운영계획·예산" id="sec5">
+        <Section
+          num={4}
+          title="역량·정책"
+          id="panel-policy"
+          role="tabpanel"
+          aria-labelledby="tab-policy"
+          tabIndex={0}
+          hidden={activeTab !== 'policy'}
+        >
           <div className="grid grid-cols-2 gap-5">
+            <Field
+              label="연계 핵심역량"
+              required
+              error={errors.competencyId}
+              htmlFor="competencyId"
+            >
+              <IdSelect
+                id="competencyId"
+                value={competencyId}
+                onChange={setCompetencyId}
+                options={competencyOptions}
+                placeholder={competencyPlaceholder}
+                disabled={competencyLoading || competencyErrored}
+                error={errors.competencyId}
+              />
+            </Field>
+
+            <Field label="마일리지 정책" htmlFor="mileagePolicyPreview">
+              {isEdit ? (
+                <>
+                  <div
+                    id="mileagePolicyPreview"
+                    className="h-9 flex items-center text-[13px] text-[#1F2328]"
+                  >
+                    {detailData?.mileageActivityName
+                      ? `${detailData.mileageActivityName} · ${detailData.mileagePoints}점 적립`
+                      : '매핑된 마일리지 정책이 없습니다'}
+                  </div>
+                  <p className="mt-1 text-[11px] text-[#9AA0A6]">
+                    프로그램 유형을 변경하면 저장 시 정책이 자동으로 바뀌어 적용됩니다.
+                  </p>
+                </>
+              ) : (
+                <div
+                  id="mileagePolicyPreview"
+                  role="status"
+                  aria-live="polite"
+                  className="h-9 flex items-center text-[13px] text-[#1F2328]"
+                >
+                  {!programTypeCodeId
+                    ? '프로그램 유형을 먼저 선택하세요'
+                    : mileagePreviewLoading
+                      ? '불러오는 중…'
+                      : mileagePreviewErrored
+                        ? '정책 정보를 불러오지 못했습니다'
+                        : mileagePreview?.mileageActivityName
+                          ? `${mileagePreview.mileageActivityName} · ${mileagePreview.mileagePoints}점 적립`
+                          : '매핑된 마일리지 정책이 없습니다'}
+                </div>
+              )}
+            </Field>
+
             <div className="col-span-2">
-              <Field label="운영계획서 첨부">
-                <FileUpload
-                  accept=".pdf,.hwp,.doc,.docx"
-                  onFiles={(files) => {
-                    if (files.length > 0) toast(`'${files[0].name}' 첨부됨`, 'success');
-                  }}
-                />
+              <Field label="이수 출석률 기준 (%)">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={completionRate}
+                    onChange={(e) => setCompletionRate(Number(e.target.value))}
+                    className="flex-1 accent-[#374151]"
+                  />
+                  <div className="w-20">
+                    <NumberInput
+                      value={completionRate}
+                      onChange={setCompletionRate}
+                      min={0}
+                      max={100}
+                    />
+                  </div>
+                  <span className="text-[12px] text-[#656D76]">%</span>
+                </div>
               </Field>
             </div>
-            <Field label="총 예산 (원)">
-              <NumberInput value={budget} onChange={setBudget} min={0} placeholder="예) 5000000" />
-            </Field>
-            <div className="flex items-end pb-0.5">
-              {typeof budget === 'number' && budget > 0 && (
-                <p className="text-[12px] text-[#9AA0A6]">
-                  ≈{' '}
-                  <span className="font-bold text-[#1F2328]">
-                    {budget.toLocaleString('ko-KR')}원
-                  </span>
-                </p>
-              )}
-            </div>
           </div>
+        </Section>
+
+        <Section
+          num={5}
+          title="첨부"
+          id="panel-attachment"
+          role="tabpanel"
+          aria-labelledby="tab-attachment"
+          tabIndex={0}
+          hidden={activeTab !== 'attachment'}
+        >
+          <Field label="운영계획서 첨부 (선택)">
+            {isEdit && existingFileName && fileGroupId == null && (
+              existingFileRemoved ? (
+                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#FFF8F8] rounded-[6px] border border-[#F3D6D8]">
+                  <span className="text-[12px] text-[#CF222E] flex-1 truncate line-through">
+                    {existingFileName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExistingFileRemoved(false)}
+                    className="text-[11px] font-semibold text-[#2563EB] hover:underline"
+                  >
+                    되돌리기
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#F9FAFB] rounded-[6px] border border-[#E5E7EB]">
+                  <span className="text-[12px] text-[#1F2328] flex-1 truncate">
+                    {existingFileName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExistingFileRemoved(true)}
+                    className="text-[11px] font-semibold text-[#CF222E] hover:underline"
+                  >
+                    삭제
+                  </button>
+                </div>
+              )
+            )}
+            <FileUpload
+              accept=".pdf"
+              onFiles={(files) => {
+                // 업로드 중 파일을 빠르게 교체/삭제하면 이전 요청의 응답이 나중에 도착해 최신 fileGroupId를 덮어쓸 수 있어, seq로 최신 요청인지 확인 후에만 반영
+                if (files.length > 0) {
+                  const seq = ++uploadSeqRef.current;
+                  uploadMutation.mutate(files[0], {
+                    onSuccess: (data) => {
+                      if (uploadSeqRef.current !== seq) return;
+                      setFileGroupId(data.fileGroupId);
+                      toast('운영계획서가 업로드되었습니다.', 'success');
+                    },
+                    onError: (err) => {
+                      if (uploadSeqRef.current !== seq) return;
+                      toast(err.message ?? '운영계획서 업로드에 실패했습니다.', 'error');
+                    },
+                  });
+                } else {
+                  uploadSeqRef.current += 1;
+                  setFileGroupId(null);
+                }
+              }}
+            />
+            {uploadMutation.isPending ? (
+              <p role="status" className="text-[11px] text-[#2563EB] mt-1.5">업로드 중…</p>
+            ) : (
+              isEdit &&
+              !existingFileRemoved && (
+                <p className="text-[10px] text-[#9AA0A6] mt-1.5">
+                  새 파일을 첨부하지 않으면 기존에 첨부된 파일이 그대로 유지됩니다.
+                </p>
+              )
+            )}
+          </Field>
         </Section>
       </div>
 
       {/* ── Fixed bottom action bar ── */}
       {/* PortalShell 사이드바(240px)를 가리지 않도록 left-[240px]로 오프셋 (DiagnosisHistory의 고정 바와 동일한 처리) */}
       <div className="fixed bottom-0 left-[240px] right-0 bg-white border-t border-[#E5E7EB] shadow-[0_-2px_12px_rgba(0,0,0,0.08)] z-40">
-        <div className="max-w-[1200px] mx-auto px-6 py-3 flex items-center justify-between">
-          <p className="text-[11px] text-[#9AA0A6]">
-            역량 연계: <span className="font-bold text-[#1F2328]">{compRows.length}개</span>
-            {compRows.length > 0 && (
-              <span className="ml-2">
-                가중치 합계{' '}
-                <span className={`font-bold ${totalWeight > 100 ? 'text-[#CF222E]' : ''}`}>
-                  {totalWeight}%
-                </span>
-              </span>
-            )}
-          </p>
-          <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={onBack}>
-              취소
-            </Button>
-            <Button variant="outline" loading={saving} onClick={handleTempSave}>
-              임시 저장
-            </Button>
-            <Button loading={saving} onClick={handleSubmit} style={{ background: ACCENT }}>
-              심사 요청
-            </Button>
-          </div>
+        <div className="max-w-[1200px] mx-auto px-6 py-3 flex items-center justify-end gap-3">
+          <Button variant="outline" onClick={onBack}>
+            취소
+          </Button>
+          <Button
+            loading={saving}
+            onClick={isEdit ? handleEditSave : handleRegister}
+            style={{ background: ACCENT }}
+          >
+            {isEdit ? '수정 저장' : '등록'}
+          </Button>
         </div>
       </div>
     </div>

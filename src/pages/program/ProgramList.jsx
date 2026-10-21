@@ -1,150 +1,42 @@
-import { useState } from 'react';
-import { PROGRAMS } from '@/data/dummy';
-import { PageHeader, StatusBadge, Pagination, Button } from '@/components/common';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchPrograms, fetchCompetencyOptionsStudent } from '@/api/programs';
+import { applyToProgram } from '@/api/programApplications';
+import { PageHeader, StatusBadge, Pagination, Button, Modal, toast } from '@/components/common';
+import { formatDate } from '@/utils/date';
+import { useProgramConsent } from '@/hooks/useProgramConsent';
+import { PROGRAM_APPLICATION_ERROR_CODE, CONSENT_MODULE_CODE } from '@/constants/domain';
 
 const ACCENT = '#2563EB';
 
-// Extended programs with more detail
-const ALL_PROGRAMS = [
-  ...PROGRAMS,
-  {
-    id: 'P016',
-    name: '해외문화체험 워크숍',
-    category: '글로벌',
-    period: '2026-08-01 ~ 2026-08-15',
-    capacity: 30,
-    applied: 20,
-    status: '마감임박',
-    competency: '글로벌',
-    credit: 4,
-    dept: '국제교류처',
-    mileage: 200,
-    mode: '오프라인',
-    isGroup: false,
-  },
-  {
-    id: 'P017',
-    name: '영어 프레젠테이션 클리닉',
-    category: '글로벌',
-    period: '2026-08-05 ~ 2026-08-20',
-    capacity: 25,
-    applied: 12,
-    status: '모집중',
-    competency: '글로벌',
-    credit: 2,
-    dept: '교양교육원',
-    mileage: 80,
-    mode: '온·오프라인',
-    isGroup: false,
-  },
-  {
-    id: 'P018',
-    name: '캡스톤디자인 경진대회',
-    category: '전공역량',
-    period: '2026-08-10 ~ 2026-08-31',
-    capacity: 10,
-    applied: 6,
-    status: '모집중',
-    competency: '종합적 사고력',
-    credit: 3,
-    dept: '공과대학',
-    mileage: 150,
-    mode: '오프라인',
-    isGroup: true,
-  },
-  {
-    id: 'P019',
-    name: '진로탐색 워크숍',
-    category: '진로·취업',
-    period: '2026-08-12 ~ 2026-08-28',
-    capacity: 40,
-    applied: 8,
-    status: '모집중',
-    competency: '자기관리',
-    credit: 2,
-    dept: '진로취업처',
-    mileage: 100,
-    mode: '오프라인',
-    isGroup: false,
-  },
-  {
-    id: 'P020',
-    name: '독서인증제',
-    category: '자기계발',
-    period: '상시',
-    capacity: 0,
-    applied: 0,
-    status: '진행중',
-    competency: '자원·정보·기술 활용',
-    credit: 1,
-    dept: '학술정보원',
-    mileage: 50,
-    mode: '온라인',
-    isGroup: false,
-  },
-  {
-    id: 'P021',
-    name: '리더십 캠프',
-    category: '리더십',
-    period: '2026-07-20 ~ 2026-08-05',
-    capacity: 30,
-    applied: 30,
-    status: '종료',
-    competency: '대인관계',
-    credit: 3,
-    dept: '학생처',
-    mileage: 130,
-    mode: '오프라인',
-    isGroup: false,
-  },
-];
-
-// Add dept/mileage/mode/isGroup to original programs
-const ENRICHED = ALL_PROGRAMS.map((p) => ({
-  ...p,
-  dept:
-    p.dept ??
-    ['국제교류처', '교양교육원', '공과대학', '진로취업처', '학술정보원', '학생처', '창업지원단'][
-      parseInt(p.id.replace('P', '')) % 7
-    ],
-  mileage: p.mileage ?? p.credit * 30,
-  mode: p.mode ?? (parseInt(p.id.replace('P', '')) % 3 === 0 ? '온라인' : '오프라인'),
-  isGroup: p.isGroup ?? false,
-}));
-
-const COMP_OPTIONS = [
-  { value: '', label: '핵심역량 전체' },
-  { value: '자기관리', label: '자기관리' },
-  { value: '의사소통', label: '의사소통' },
-  { value: '글로벌', label: '글로벌' },
-  { value: '대인관계', label: '대인관계' },
-  { value: '종합적 사고력', label: '종합적 사고력' },
-  { value: '자원·정보·기술 활용', label: '자원·정보·기술 활용' },
-];
-
-const DEPT_OPTIONS = [
-  { value: '', label: '주관부서 전체' },
-  { value: '국제교류처', label: '국제교류처' },
-  { value: '교양교육원', label: '교양교육원' },
-  { value: '공과대학', label: '공과대학' },
-  { value: '진로취업처', label: '진로취업처' },
-  { value: '학술정보원', label: '학술정보원' },
-  { value: '학생처', label: '학생처' },
-];
+// ProgramListItemResponseDTO(GET /api/students/programs) -> 목록 화면에서 쓰는 행 모양으로 변환.
+const toRow = (dto) => ({
+  id: dto.programId,
+  name: dto.programName,
+  category: dto.programTypeCodeName,
+  dept: dto.operatingUnitCodeName,
+  period: `${formatDate(dto.recruitmentStartsAt)} ~ ${formatDate(dto.recruitmentEndsAt)}`,
+  recruitStart: dto.recruitmentStartsAt,
+  recruitEnd: dto.recruitmentEndsAt,
+  capacity: dto.capacity ?? 0,
+  status: dto.programStatusLabel,
+  applied: dto.applicantCount ?? 0,
+  competency: dto.competencyName ?? null,
+  mileage: dto.mileagePoints ?? 0,
+  myApplicationStatus: dto.myApplicationStatus ?? null,
+  myApplicationStatusLabel: dto.myApplicationStatusLabel ?? null,
+});
 
 const SORT_OPTIONS = [
   { value: 'new', label: '신규순' },
   { value: 'deadline', label: '마감임박순' },
-  { value: 'recommend', label: '추천순' },
 ];
 
-const CHIPS = [
-  { label: '전체', count: 128 },
-  { label: '모집중', count: 24 },
-  { label: '마감임박', count: 5 },
-  { label: '신청가능', count: 18 },
-  { label: '내 학과 대상', count: 11 },
-];
+// 백엔드 정렬 화이트리스트(createdAt/recruitmentEndsAt/programName)에 맞춘 매핑.
+const SORT_PARAM = {
+  new: 'createdAt,desc',
+  deadline: 'recruitmentEndsAt,asc',
+};
 
 const COMP_COLORS = {
   자기관리: '#2563EB',
@@ -167,42 +59,133 @@ function CompBadge({ label }) {
   );
 }
 
-function getStatusBadges(p) {
-  const isFull = p.applied >= p.capacity && p.capacity > 0;
-  const days =
-    p.period !== '상시'
-      ? Math.ceil(
-          (new Date(p.period.split(' ~ ')[1] ?? p.period).getTime() - Date.now()) / 86400000,
-        )
-      : 99;
-  const isUrgent =
-    !isFull && (days <= 3 || (p.capacity > 0 && (p.capacity - p.applied) / p.capacity <= 0.1));
-  return { isFull, isUrgent, days };
-}
+const isFull = (p) => p.applied >= p.capacity && p.capacity > 0;
+// 모집기간이 끝나면(운영중/종료) 신청을 받지 않는다 — ProgramDetail.jsx의 isClosed와 같은 이유.
+const isRecruitClosed = (p) => p.status === '종료' || p.status === '운영중';
 
 /**
  * @param {Object} props
  * @param {(id: string) => void} props.onDetail
- * @param {(id: string) => void} props.onGroupApply
  * @param {() => void} [props.onMyApplications]
  */
-export default function ProgramList({ onDetail, onGroupApply, onMyApplications }) {
+export default function ProgramList({ onDetail, onMyApplications }) {
   const [viewMode, setViewMode] = useState('table');
   const [chip, setChip] = useState('전체');
   const [sort, setSort] = useState('new');
   const [comp, setComp] = useState('');
-  const [dept, setDept] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
+  const [applyTarget, setApplyTarget] = useState(null);
+  const [openContentIds, setOpenContentIds] = useState(() => new Set());
+  const [applying, setApplying] = useState(false);
   const PAGE_SIZE = 10;
 
-  const filtered = ENRICHED.filter(
-    (p) =>
-      (!comp || p.competency === comp) &&
-      (!dept || p.dept === dept) &&
-      (!keyword || p.name.includes(keyword)),
-  );
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const consent = useProgramConsent();
+  const queryClient = useQueryClient();
+
+  const status = chip === '모집중' ? 'DRAFT' : undefined;
+  const competencyId = comp || undefined;
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['studentPrograms', { status, competencyId, keyword: submittedKeyword, sort, page }],
+    queryFn: () =>
+      fetchPrograms({
+        status,
+        competencyId,
+        keyword: submittedKeyword || undefined,
+        sort: SORT_PARAM[sort],
+        page: page - 1,
+        size: PAGE_SIZE,
+      }),
+  });
+
+  const { data: competencyOptionsData } = useQuery({
+    queryKey: ['studentCompetencyOptions'],
+    queryFn: fetchCompetencyOptionsStudent,
+  });
+
+  const COMP_OPTIONS = [
+    { value: '', label: '핵심역량 전체' },
+    ...(competencyOptionsData ?? []).map((c) => ({
+      value: String(c.competencyId),
+      label: c.competencyName,
+    })),
+  ];
+
+  useEffect(() => {
+    if (!data) return;
+    const lastPage = Math.max(1, data.totalPages || 1);
+    if (page > lastPage) setPage(lastPage);
+  }, [data, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [comp, chip, sort]);
+
+  const openApply = (p) => {
+    setOpenContentIds(new Set());
+    consent.resetChecked();
+    setApplyTarget(p);
+  };
+
+  const closeApply = () => {
+    if (applying) return;
+    setApplyTarget(null);
+  };
+
+  const toggleContent = (consentPolicyId) => {
+    setOpenContentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(consentPolicyId)) next.delete(consentPolicyId);
+      else next.add(consentPolicyId);
+      return next;
+    });
+  };
+
+  const handleApplyConfirm = async () => {
+    if (!applyTarget) return;
+    setApplying(true);
+    try {
+      await consent.ensureAllAgreed();
+    } catch (err) {
+      toast(err.message ?? '약관 동의 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'danger');
+      setApplying(false);
+      return;
+    }
+    try {
+      const res = await applyToProgram(applyTarget.id);
+      if (res.applicationStatus === 'WAITLISTED') {
+        toast(`정원이 마감되어 대기 ${res.waitlistOrder ?? ''}순번으로 등록되었습니다.`, 'info');
+      } else {
+        toast('신청이 완료되었습니다.', 'success');
+      }
+      setApplyTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['studentPrograms'] });
+    } catch (err) {
+      if (err.code === PROGRAM_APPLICATION_ERROR_CODE.REQUIRED_CONSENT_NOT_AGREED) {
+        toast('필수 동의 항목에 동의해야 신청할 수 있습니다.', 'danger');
+        queryClient.invalidateQueries({ queryKey: ['myConsents'] });
+        queryClient.invalidateQueries({ queryKey: ['consentPolicies', CONSENT_MODULE_CODE.PROGRAM] });
+      } else {
+        toast(err.message ?? '신청에 실패했습니다.', 'danger');
+      }
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const CHIPS = ['전체', '모집중'];
+
+  const paged = (data?.content ?? []).map(toRow);
+  const totalItems = data?.totalElements ?? 0;
+  const totalPages = Math.max(1, data?.totalPages || 1);
+  const currentPage = Math.min(page, totalPages);
+
+  const runSearch = () => {
+    setPage(1);
+    setSubmittedKeyword(keyword);
+  };
 
   return (
     <div>
@@ -238,20 +221,6 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold text-[#656D76] uppercase">주관부서</label>
-            <select
-              value={dept}
-              onChange={(e) => setDept(e.target.value)}
-              className="h-9 px-3 pr-7 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white appearance-none focus:outline-none focus:border-[#2563EB]"
-            >
-              {DEPT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold text-[#656D76] uppercase">검색어</label>
             <input
               value={keyword}
@@ -264,16 +233,17 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
             <button
               onClick={() => {
                 setComp('');
-                setDept('');
                 setKeyword('');
+                setChip('전체');
                 setPage(1);
+                setSubmittedKeyword('');
               }}
               className="h-9 px-4 text-[13px] font-semibold text-[#656D76] border border-[#E5E7EB] rounded-[6px] hover:bg-[#F9FAFB] transition-colors"
             >
               초기화
             </button>
             <button
-              onClick={() => setPage(1)}
+              onClick={runSearch}
               className="h-9 px-4 text-[13px] font-bold text-white rounded-[6px] transition-colors"
               style={{ background: ACCENT }}
             >
@@ -286,17 +256,15 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
       {/* Chip filters + sort + view toggle */}
       <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
         <div className="flex gap-1.5 flex-wrap">
-          {CHIPS.map((c) => (
+          {CHIPS.map((label) => (
             <button
-              key={c.label}
-              onClick={() => setChip(c.label)}
-              className={`px-3 py-1.5 rounded-[999px] text-[12px] font-bold transition-all border ${chip === c.label ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'}`}
-              style={chip === c.label ? { background: ACCENT } : {}}
+              key={label}
+              onClick={() => setChip(label)}
+              aria-pressed={chip === label}
+              className={`px-3 py-1.5 rounded-[999px] text-[12px] font-bold transition-all border ${chip === label ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'}`}
+              style={chip === label ? { background: ACCENT } : {}}
             >
-              {c.label}{' '}
-              <span className={chip === c.label ? 'text-[#BFDBFE]' : 'text-[#9AA0A6]'}>
-                {c.count}
-              </span>
+              {label}
             </button>
           ))}
         </div>
@@ -339,8 +307,19 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
         </div>
       </div>
 
+      {isError && (
+        <div className="bg-white rounded-[8px] border border-[#FEE2E2] px-4 py-8 mb-4 text-center text-[13px] text-[#CF222E]">
+          {error?.message ?? '프로그램 목록을 불러오지 못했습니다.'}
+        </div>
+      )}
+      {isLoading && !isError && (
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] px-4 py-8 mb-4 text-center text-[13px] text-[#656D76]">
+          불러오는 중...
+        </div>
+      )}
+
       {/* TABLE VIEW */}
-      {viewMode === 'table' && (
+      {!isLoading && !isError && viewMode === 'table' && (
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
@@ -367,7 +346,8 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
               </thead>
               <tbody>
                 {paged.map((p, i) => {
-                  const { isFull, isUrgent } = getStatusBadges(p);
+                  const full = isFull(p);
+                  const recruitClosed = isRecruitClosed(p);
                   return (
                     <tr
                       key={p.id}
@@ -382,19 +362,9 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                           >
                             {p.name}
                           </button>
-                          {isUrgent && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                              마감임박
-                            </span>
-                          )}
-                          {isFull && (
+                          {full && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
                               정원마감
-                            </span>
-                          )}
-                          {p.isGroup && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#DBEAFE] text-[#0969DA]">
-                              그룹
                             </span>
                           )}
                         </div>
@@ -403,16 +373,19 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                         {p.dept}
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <CompBadge label={p.competency} />
+                        {p.competency ? (
+                          <CompBadge label={p.competency} />
+                        ) : (
+                          <span className="text-[#9AA0A6]">-</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 text-center text-[#656D76] whitespace-nowrap text-[12px]">
                         {p.period}
                       </td>
                       <td className="px-3 py-3 text-center">
                         {p.capacity > 0 ? (
-                          <span className={isFull ? 'text-[#CF222E] font-bold' : ''}>
-                            {p.applied}/{p.capacity}
-                            {p.isGroup ? '팀' : '명'}
+                          <span className={full ? 'text-[#CF222E] font-bold' : ''}>
+                            {p.applied}/{p.capacity}명
                           </span>
                         ) : (
                           <span className="text-[#9AA0A6]">-</span>
@@ -422,21 +395,33 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                         {p.mileage}점
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <StatusBadge status={isFull ? '마감' : p.status} size="sm" />
+                        <StatusBadge status={full ? '마감' : p.status} size="sm" />
                       </td>
                       <td className="px-3 py-3 text-center">
-                        {isFull ? (
-                          <button className="h-7 px-3 text-[12px] font-bold text-[#2563EB] border border-[#2563EB] rounded-[5px] hover:bg-[#EFF6FF] transition-colors">
-                            대기신청
+                        {p.myApplicationStatus === 'WAITLISTED' ? (
+                          <span className="inline-flex items-center h-7 px-3 text-[12px] font-bold text-[#D97706] bg-[#FEF3C7] rounded-[5px]">
+                            대기중
+                          </span>
+                        ) : p.myApplicationStatus ? (
+                          <span className="inline-flex items-center h-7 px-3 text-[12px] font-bold text-[#656D76] bg-[#F3F4F6] rounded-[5px]">
+                            신청완료
+                          </span>
+                        ) : full ? (
+                          <button
+                            onClick={() => openApply(p)}
+                            disabled={recruitClosed}
+                            className="h-7 px-3 text-[12px] font-bold text-[#2563EB] border border-[#2563EB] rounded-[5px] hover:bg-[#EFF6FF] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {recruitClosed ? p.status : '대기신청'}
                           </button>
                         ) : (
                           <button
-                            onClick={() => (p.isGroup ? onGroupApply(p.id) : onDetail(p.id))}
-                            disabled={p.status === '종료'}
+                            onClick={() => openApply(p)}
+                            disabled={recruitClosed}
                             className="h-7 px-3 text-[12px] font-bold text-white rounded-[5px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                            style={{ background: p.status === '종료' ? '#9AA0A6' : ACCENT }}
+                            style={{ background: recruitClosed ? '#9AA0A6' : ACCENT }}
                           >
-                            {p.status === '종료' ? '종료' : p.isGroup ? '팀신청' : '신청'}
+                            {recruitClosed ? p.status : '신청'}
                           </button>
                         )}
                       </td>
@@ -447,12 +432,12 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
             </table>
           </div>
           <div className="px-4 py-3 border-t border-[#E5E7EB] flex items-center justify-between">
-            <span className="text-[12px] text-[#656D76]">총 {filtered.length}건</span>
+            <span className="text-[12px] text-[#656D76]">총 {totalItems}건</span>
             <Pagination
-              page={page}
-              totalPages={Math.ceil(filtered.length / PAGE_SIZE)}
+              page={currentPage}
+              totalPages={totalPages}
               onChange={setPage}
-              totalItems={filtered.length}
+              totalItems={totalItems}
               pageSize={PAGE_SIZE}
             />
           </div>
@@ -460,11 +445,12 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
       )}
 
       {/* CARD VIEW */}
-      {viewMode === 'card' && (
+      {!isLoading && !isError && viewMode === 'card' && (
         <>
           <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-2">
             {paged.map((p) => {
-              const { isFull, isUrgent, days } = getStatusBadges(p);
+              const full = isFull(p);
+              const recruitClosed = isRecruitClosed(p);
               return (
                 <div
                   key={p.id}
@@ -475,40 +461,21 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                     style={{ background: COMP_COLORS[p.competency] ?? ACCENT }}
                   />
                   <div className="p-4 flex flex-col flex-1 gap-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex gap-1 mb-1.5 flex-wrap">
-                          <CompBadge label={p.competency} />
-                          {isUrgent && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEF3C7] text-[#D97706]">
-                              마감임박
-                            </span>
-                          )}
-                          {isFull && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
-                              정원마감
-                            </span>
-                          )}
-                          {p.isGroup && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#DBEAFE] text-[#0969DA]">
-                              그룹
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => onDetail(p.id)}
-                          className="text-[14px] font-bold text-[#1F2328] hover:text-[#2563EB] text-left leading-snug"
-                        >
-                          {p.name}
-                        </button>
+                    <div>
+                      <div className="flex gap-1 mb-1.5 flex-wrap">
+                        {p.competency && <CompBadge label={p.competency} />}
+                        {full && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
+                            정원마감
+                          </span>
+                        )}
                       </div>
-                      {days <= 7 && days > 0 && (
-                        <span
-                          className={`text-[12px] font-black flex-shrink-0 ${days <= 3 ? 'text-[#CF222E]' : 'text-[#D97706]'}`}
-                        >
-                          D-{days}
-                        </span>
-                      )}
+                      <button
+                        onClick={() => onDetail(p.id)}
+                        className="text-[14px] font-bold text-[#1F2328] hover:text-[#2563EB] text-left leading-snug"
+                      >
+                        {p.name}
+                      </button>
                     </div>
                     <div className="text-[12px] text-[#656D76]">
                       {p.dept} · {p.period}
@@ -518,7 +485,7 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                         <div className="flex justify-between text-[11px] mb-1">
                           <span className="text-[#9AA0A6]">정원</span>
                           <span
-                            className={`font-semibold ${isFull ? 'text-[#CF222E]' : 'text-[#1F2328]'}`}
+                            className={`font-semibold ${full ? 'text-[#CF222E]' : 'text-[#1F2328]'}`}
                           >
                             {p.applied}/{p.capacity}명
                           </span>
@@ -528,7 +495,7 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                             className="h-full rounded-full"
                             style={{
                               width: `${Math.min((p.applied / p.capacity) * 100, 100)}%`,
-                              background: isFull ? '#CF222E' : ACCENT,
+                              background: full ? '#CF222E' : ACCENT,
                             }}
                           />
                         </div>
@@ -536,22 +503,24 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
                     )}
                     <div className="flex items-center justify-between pt-2 border-t border-[#F3F4F6] mt-auto">
                       <span className="text-[12px] font-bold text-[#D97706]">🏅 {p.mileage}점</span>
-                      <button
-                        onClick={() => (p.isGroup ? onGroupApply(p.id) : onDetail(p.id))}
-                        disabled={p.status === '종료'}
-                        className={`h-7 px-3 text-[12px] font-bold rounded-[5px] transition-colors disabled:opacity-40 ${isFull ? 'text-[#2563EB] border border-[#2563EB] hover:bg-[#EFF6FF]' : 'text-white'}`}
-                        style={
-                          isFull ? {} : { background: p.status === '종료' ? '#9AA0A6' : ACCENT }
-                        }
-                      >
-                        {p.status === '종료'
-                          ? '종료'
-                          : isFull
-                            ? '대기신청'
-                            : p.isGroup
-                              ? '팀신청'
-                              : '신청'}
-                      </button>
+                      {p.myApplicationStatus === 'WAITLISTED' ? (
+                        <span className="inline-flex items-center h-7 px-3 text-[12px] font-bold text-[#D97706] bg-[#FEF3C7] rounded-[5px]">
+                          대기중
+                        </span>
+                      ) : p.myApplicationStatus ? (
+                        <span className="inline-flex items-center h-7 px-3 text-[12px] font-bold text-[#656D76] bg-[#F3F4F6] rounded-[5px]">
+                          신청완료
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => openApply(p)}
+                          disabled={recruitClosed}
+                          className={`h-7 px-3 text-[12px] font-bold rounded-[5px] transition-colors disabled:opacity-40 ${full ? 'text-[#2563EB] border border-[#2563EB] hover:bg-[#EFF6FF]' : 'text-white'}`}
+                          style={full ? {} : { background: recruitClosed ? '#9AA0A6' : ACCENT }}
+                        >
+                          {recruitClosed ? p.status : full ? '대기신청' : '신청'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -560,15 +529,108 @@ export default function ProgramList({ onDetail, onGroupApply, onMyApplications }
           </div>
           <div className="mt-4">
             <Pagination
-              page={page}
-              totalPages={Math.ceil(filtered.length / PAGE_SIZE)}
+              page={currentPage}
+              totalPages={totalPages}
               onChange={setPage}
-              totalItems={filtered.length}
+              totalItems={totalItems}
               pageSize={PAGE_SIZE}
             />
           </div>
         </>
       )}
+
+      {/* 목록에서 바로 신청 — 이용약관 동의 모달. */}
+      <Modal
+        open={!!applyTarget}
+        onClose={closeApply}
+        title="신청 확인"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={closeApply} disabled={applying}>
+              취소
+            </Button>
+            <Button
+              size="sm"
+              disabled={!consent.canProceed || consent.isLoading || applying}
+              loading={applying}
+              style={{ background: consent.canProceed ? ACCENT : undefined }}
+              onClick={handleApplyConfirm}
+            >
+              신청
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-[13px] text-[#1F2328]">
+            {applyTarget && `[${applyTarget.name}]에 신청하시겠습니까? 신청 후 승인까지 1~2 영업일 소요될 수 있습니다.`}
+          </p>
+          {applyTarget && isFull(applyTarget) && (
+            <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-[8px] px-4 py-3">
+              <p className="text-[12px] font-bold text-[#92400E]">
+                정원이 마감되어 신청 시 대기열로 등록됩니다.
+              </p>
+            </div>
+          )}
+          {consent.isLoading && (
+            <p className="text-[12px] text-[#9AA0A6]">약관 정보를 불러오는 중...</p>
+          )}
+          {!consent.isLoading && consent.isError && (
+            <p className="text-[12px] text-[#CF222E]">
+              약관 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+            </p>
+          )}
+          {!consent.isLoading && !consent.isError && (
+            <div className="flex flex-col gap-2">
+              {consent.requiredPolicies.map((policy) => {
+                const agreed = consent.isPolicyAgreed(policy.consentPolicyId);
+                const contentOpen = openContentIds.has(policy.consentPolicyId);
+                if (agreed) {
+                  return (
+                    <p
+                      key={policy.consentPolicyId}
+                      className="text-[12px] font-semibold text-[#1A7F37]"
+                    >
+                      ✓ {policy.title}에 동의했습니다.
+                    </p>
+                  );
+                }
+                return (
+                  <div key={policy.consentPolicyId} className="flex flex-col gap-1.5">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={consent.checkedIds.has(policy.consentPolicyId)}
+                        onChange={(e) =>
+                          consent.toggleChecked(policy.consentPolicyId, e.target.checked)
+                        }
+                        className="mt-0.5 w-4 h-4 rounded-[3px] accent-[#2563EB] flex-shrink-0"
+                      />
+                      <span className="text-[12px] text-[#656D76] leading-snug">
+                        {policy.title}에 동의합니다.
+                      </span>
+                    </label>
+                    {/* button을 label 밖으로 분리: label 내부에 두면 클릭 시 체크박스 토글과 버튼 onClick이 동시에 발생하고, interactive element가 중첩됨 */}
+                    <button
+                      type="button"
+                      onClick={() => toggleContent(policy.consentPolicyId)}
+                      aria-expanded={contentOpen}
+                      className="text-[12px] text-[#2563EB] underline self-start ml-[26px]"
+                    >
+                      {contentOpen ? '내용 접기' : '내용 보기'}
+                    </button>
+                    {contentOpen && (
+                      <div className="max-h-32 overflow-y-auto text-[11px] text-[#656D76] whitespace-pre-wrap bg-[#F9FAFB] border border-[#E5E7EB] rounded-[6px] px-3 py-2">
+                        {policy.content}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

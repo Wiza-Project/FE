@@ -101,7 +101,7 @@ export default function ScaleManage() {
         </Button>
       </div>
 
-      <div className="grid gap-5" style={{ gridTemplateColumns: '340px 1fr' }}>
+      <div className="grid gap-5" style={{ gridTemplateColumns: '380px 1fr' }}>
         {/* LEFT: Template list */}
         <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
           <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
@@ -114,7 +114,7 @@ export default function ScaleManage() {
                 {['ID', '템플릿명', '점수', '문항수', '관리'].map((h, i) => (
                   <th
                     key={h}
-                    className={`px-4 py-2.5 text-[10px] font-semibold text-[#656D76] ${i >= 2 ? 'text-center' : 'text-left'}`}
+                    className={`px-2.5 py-2.5 text-[10px] font-semibold text-[#656D76] whitespace-nowrap ${i >= 2 ? 'text-center' : 'text-left'}`}
                   >
                     {h}
                   </th>
@@ -128,10 +128,10 @@ export default function ScaleManage() {
                   onClick={() => setSelected(t.id)}
                   className={`border-b border-[#F3F4F6] last:border-0 cursor-pointer transition-colors ${selected === t.id ? 'bg-[#F3F4F6]' : 'hover:bg-[#FAFAFA]'}`}
                 >
-                  <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">{t.id}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-2.5 py-3 font-mono text-[11px] text-[#9AA0A6]">{t.id}</td>
+                  <td className="px-2.5 py-3">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-[#1F2328]">{t.name}</span>
+                      <span className="font-semibold text-[#1F2328] whitespace-nowrap">{t.name}</span>
                       {t.isDefault && (
                         <span
                           className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
@@ -142,18 +142,20 @@ export default function ScaleManage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-2.5 py-3 text-center">
                     <span
-                      className="text-[11px] font-black px-2 py-0.5 rounded-full text-white"
+                      className="text-[11px] font-black px-2 py-0.5 rounded-full text-white whitespace-nowrap"
                       style={{ background: POINTS_COLOR[t.points] ?? '#6B7280' }}
                     >
                       {t.points}점
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-center text-[#656D76]">{t.usedCount}개</td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-2.5 py-3 text-center text-[#656D76] whitespace-nowrap">
+                    {t.usedCount}개
+                  </td>
+                  <td className="px-2.5 py-3 text-center">
                     <button
-                      className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
+                      className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors whitespace-nowrap"
                       style={{ color: ACCENT }}
                       onClick={(e) => {
                         e.stopPropagation();

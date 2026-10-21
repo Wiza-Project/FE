@@ -1,290 +1,142 @@
-import { useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart,
   Button,
-  ConfirmDialog,
+  CommonCodeSelect,
   DonutChart,
   Drawer,
+  EmptyState,
   Modal,
+  Pagination,
+  SkeletonLoader,
   StatTile,
   StatusBadge,
   Tabs,
   toast,
 } from '@/components/common';
+import {
+  fetchAssessmentAttendance,
+  fetchAssessmentDistribution,
+  fetchAssessmentNonParticipants,
+  fetchAssessmentRounds,
+  notifyAssessmentNonParticipants,
+  registerAssessmentRound,
+  updateAssessmentRound,
+} from '@/api/competency';
+import { ApiError } from '@/api/client';
+import { useCommonCode } from '@/hooks/useCommonCode';
 
 const ACCENT = '#1F2937'; // 교직원 포털 공통 포인트컬러 (무채색 기조)
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
-const INITIAL_ROUNDS = [
-  {
-    id: 'D2026-1-PRE',
-    name: '2026-1 핵심역량 사전진단',
-    year: '2026',
-    semester: '1학기',
-    type: '사전',
-    startDate: '2026-03-10',
-    endDate: '2026-03-24',
-    target: '재학생 전체',
-    respondents: 1842,
-    capacity: 2100,
-    status: '결과공개',
-  },
-  {
-    id: 'D2026-1-POST',
-    name: '2026-1 핵심역량 사후진단',
-    year: '2026',
-    semester: '1학기',
-    type: '사후',
-    startDate: '2026-06-09',
-    endDate: '2026-06-23',
-    target: '재학생 전체',
-    respondents: 1106,
-    capacity: 1537,
-    status: '진행중',
-  },
-  {
-    id: 'D2025-2-PRE',
-    name: '2025-2 핵심역량 사전진단',
-    year: '2025',
-    semester: '2학기',
-    type: '사전',
-    startDate: '2025-09-01',
-    endDate: '2025-09-15',
-    target: '재학생 전체',
-    respondents: 1923,
-    capacity: 2080,
-    status: '결과공개',
-  },
-  {
-    id: 'D2025-2-POST',
-    name: '2025-2 핵심역량 사후진단',
-    year: '2025',
-    semester: '2학기',
-    type: '사후',
-    startDate: '2025-12-01',
-    endDate: '2025-12-15',
-    target: '재학생 전체',
-    respondents: 1890,
-    capacity: 2080,
-    status: '결과공개',
-  },
-  {
-    id: 'D2026-1-N',
-    name: '2026 신입생 입학역량진단',
-    year: '2026',
-    semester: '1학기',
-    type: '사전',
-    startDate: '2026-03-10',
-    endDate: '2026-03-14',
-    target: '2026학번 신입생',
-    respondents: 612,
-    capacity: 620,
-    status: '결과공개',
-  },
-  {
-    id: 'D2026-2-PRE',
-    name: '2026-2 핵심역량 사전진단',
-    year: '2026',
-    semester: '2학기',
-    type: '사전',
-    startDate: '2026-09-07',
-    endDate: '2026-09-21',
-    target: '재학생 전체',
-    respondents: 0,
-    capacity: 2150,
-    status: '계획',
-  },
-];
+const NON_PARTICIPANT_PAGE_SIZE = 10;
 
-const NON_RESPONDENTS = [
-  {
-    studentId: '20231500',
-    name: '강다은',
-    dept: '경영학과',
-    grade: 3,
-    lastLogin: '2026-06-05',
-    notified: false,
-  },
-  {
-    studentId: '20240102',
-    name: '임채원',
-    dept: '컴퓨터공학과',
-    grade: 1,
-    lastLogin: '2026-06-08',
-    notified: true,
-  },
-  {
-    studentId: '20232201',
-    name: '송민준',
-    dept: '산업공학과',
-    grade: 2,
-    lastLogin: '2026-05-30',
-    notified: false,
-  },
-  {
-    studentId: '20241300',
-    name: '한소율',
-    dept: '심리학과',
-    grade: 1,
-    lastLogin: '2026-06-09',
-    notified: false,
-  },
-  {
-    studentId: '20230912',
-    name: '임수아',
-    dept: '사회복지학과',
-    grade: 4,
-    lastLogin: '2026-05-28',
-    notified: false,
-  },
-  {
-    studentId: '20231654',
-    name: '윤준호',
-    dept: '경영학과',
-    grade: 3,
-    lastLogin: '2026-06-01',
-    notified: true,
-  },
-  {
-    studentId: '20232900',
-    name: '배지수',
-    dept: '컴퓨터공학과',
-    grade: 2,
-    lastLogin: '2026-06-07',
-    notified: false,
-  },
-  {
-    studentId: '20241122',
-    name: '조민재',
-    dept: '글로벌통상학과',
-    grade: 1,
-    lastLogin: '2026-06-09',
-    notified: false,
-  },
-];
-
-const COLLEGE_DATA = [
-  {
-    college: '공과대학',
-    cnt: 312,
-    c1: 68.2,
-    c2: 65.1,
-    c3: 70.4,
-    c4: 59.3,
-    c5: 72.1,
-    c6: 74.8,
-    avg: 68.3,
-  },
-  {
-    college: '경영대학',
-    cnt: 248,
-    c1: 71.4,
-    c2: 70.8,
-    c3: 72.1,
-    c4: 63.7,
-    c5: 67.9,
-    c6: 76.2,
-    avg: 70.4,
-  },
-  {
-    college: '사회과학대학',
-    cnt: 198,
-    c1: 73.1,
-    c2: 72.5,
-    c3: 74.8,
-    c4: 61.2,
-    c5: 64.3,
-    c6: 78.1,
-    avg: 70.7,
-  },
-  {
-    college: '인문대학',
-    cnt: 156,
-    c1: 74.2,
-    c2: 75.3,
-    c3: 76.1,
-    c4: 68.9,
-    c5: 62.1,
-    c6: 79.4,
-    avg: 72.7,
-  },
-  {
-    college: '자연과학대학',
-    cnt: 112,
-    c1: 66.8,
-    c2: 63.4,
-    c3: 68.2,
-    c4: 57.1,
-    c5: 74.5,
-    c6: 72.3,
-    avg: 67.1,
-  },
-  {
-    college: '글로벌대학',
-    cnt: 80,
-    c1: 70.3,
-    c2: 73.2,
-    c3: 71.5,
-    c4: 78.4,
-    c5: 63.8,
-    c6: 75.1,
-    avg: 72.1,
-  },
-];
+const ROUNDS_QUERY_KEY = ['assessmentRounds'];
 
 // ─── Tab 1: 회차 관리 ─────────────────────────────────────────────────────────
 
-function RoundManage() {
-  const [rounds, setRounds] = useState(INITIAL_ROUNDS);
+// 학년은 공통코드가 없어 고정값을 쓴다(GRADE 코드그룹 미도입).
+const GRADES = [1, 2, 3, 4];
+
+const ASSESSMENT_TYPES = [
+  { value: 'PRE', label: '사전진단' },
+  { value: 'POST', label: '사후진단' },
+];
+
+// 응시기간 date input(달력)만 받고 서버는 Instant(시각)를 요구하므로 하루의 시작/끝으로 변환한다.
+// 서버가 UTC Instant로 내려주므로, UTC 기준(KST 등 UTC+ 지역에서는 slice(0,10)이 전날로 밀린다)이 아니라
+// 브라우저 로컬 타임존 기준 날짜로 되돌려야 입력한 날짜와 표시되는 날짜가 일치한다.
+const toStartInstant = (dateStr) => new Date(`${dateStr}T00:00:00`).toISOString();
+const toEndInstant = (dateStr) => new Date(`${dateStr}T23:59:59`).toISOString();
+const toDateInputValue = (isoStr) => {
+  const d = new Date(isoStr);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// majorLabel: majorCodeId → codeName 변환 함수. 모듈 레벨 순수 함수라 useCommonCode를
+// 직접 쓸 수 없어, semesterLabel과 같은 패턴으로 호출하는 쪽에서 만들어 넘겨받는다.
+const describeTarget = (targetCondition, majorLabel) => {
+  if (!targetCondition) return '전체 재학생';
+  if (targetCondition.grades?.length) return targetCondition.grades.map((g) => `${g}학년`).join(', ');
+  if (targetCondition.majorCodeIds?.length) {
+    return targetCondition.majorCodeIds.map((id) => majorLabel(id)).join(', ');
+  }
+  return '전체 재학생';
+};
+
+function RoundManage({ rounds }) {
+  const queryClient = useQueryClient();
+  const invalidateRounds = () => queryClient.invalidateQueries({ queryKey: ROUNDS_QUERY_KEY });
+
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [closeTarget, setCloseTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
 
   // Drawer form
   const [fName, setFName] = useState('');
-  const [fYear, setFYear] = useState('2026');
-  const [fSem, setFSem] = useState('1학기');
-  const [fType, setFType] = useState('사전');
+  const [fYear, setFYear] = useState('');
+  const [fSem, setFSem] = useState('');
+  const [fType, setFType] = useState('PRE');
   const [fStart, setFStart] = useState('');
   const [fEnd, setFEnd] = useState('');
   const [fTargetMode, setFTM] = useState('전체');
   const [fGrades, setFGrades] = useState([]);
-  const [fColleges, setFColl] = useState([]);
   const [fDepts, setFDepts] = useState([]);
-  const [fActive, setFActive] = useState(true);
-  const [dupError, setDupError] = useState('');
+  const [formError, setFormError] = useState('');
 
-  const GRADES = ['1학년', '2학년', '3학년', '4학년'];
-  const COLLEGES = [
-    '공과대학',
-    '경영대학',
-    '사회과학대학',
-    '인문대학',
-    '자연과학대학',
-    '글로벌대학',
-  ];
-  const DEPTS = [
-    '컴퓨터공학과',
-    '경영학과',
-    '심리학과',
-    '산업공학과',
-    '사회복지학과',
-    '글로벌통상학과',
-  ];
+  const { data: semesterCodes = [] } = useCommonCode('SEMESTER');
+  const semesterLabel = (code) => semesterCodes.find((s) => s.code === code)?.codeName ?? code;
+
+  const {
+    data: majorCodes = [],
+    isLoading: majorLoading,
+    isError: majorError,
+    refetch: refetchMajors,
+  } = useCommonCode('MAJOR');
+  const majorLabel = (codeId) => majorCodes.find((m) => m.codeId === codeId)?.codeName ?? codeId;
 
   const openDrawer = () => {
+    setEditTarget(null);
     setFName('');
-    setFYear('2026');
-    setFSem('1학기');
-    setFType('사전');
+    setFYear('');
+    setFSem('');
+    setFType('PRE');
     setFStart('');
     setFEnd('');
     setFTM('전체');
     setFGrades([]);
-    setFColl([]);
     setFDepts([]);
-    setFActive(true);
-    setDupError('');
+    setFormError('');
+    setDrawerOpen(true);
+  };
+
+  const openEdit = (r) => {
+    setEditTarget(r);
+    setFName(r.assessmentName);
+    setFYear(String(r.academicYear));
+    setFSem(r.semesterCode);
+    setFType(r.assessmentType);
+    setFStart(toDateInputValue(r.startsAt));
+    setFEnd(toDateInputValue(r.endsAt));
+    const tc = r.targetCondition;
+    if (tc?.grades?.length) {
+      setFTM('학년');
+      setFGrades(tc.grades);
+      setFDepts([]);
+    } else if (tc?.majorCodeIds?.length) {
+      setFTM('학과');
+      setFDepts(tc.majorCodeIds);
+      setFGrades([]);
+    } else {
+      setFTM('전체');
+      setFGrades([]);
+      setFDepts([]);
+    }
+    setFormError('');
     setDrawerOpen(true);
   };
 
@@ -292,48 +144,68 @@ function RoundManage() {
     set(list.includes(val) ? list.filter((x) => x !== val) : [...list, val]);
   };
 
-  const handleSave = () => {
-    const dup = rounds.find((r) => r.year === fYear && r.semester === fSem && r.type === fType);
-    if (dup) {
-      setDupError(
-        `${fYear}-${fSem === '1학기' ? '1' : '2'} ${fType}진단이 이미 등록되어 있습니다. (${dup.id})`,
-      );
-      return;
-    }
-    if (!fName || !fStart || !fEnd) {
-      toast('필수 항목을 모두 입력해 주세요.', 'error');
-      return;
-    }
-    const targetLabel =
-      fTargetMode === '전체'
-        ? '재학생 전체'
-        : fTargetMode === '학년'
-          ? fGrades.join(', ')
-          : fTargetMode === '단과대'
-            ? fColleges.join(', ')
-            : fDepts.join(', ');
-    const newRound = {
-      id: `D${fYear}-${fSem === '1학기' ? '1' : '2'}-${fType === '사전' ? 'PRE' : 'POST'}-NEW`,
-      name: fName,
-      year: fYear,
-      semester: fSem,
-      type: fType,
-      startDate: fStart,
-      endDate: fEnd,
-      target: targetLabel,
-      respondents: 0,
-      capacity: 0,
-      status: '계획',
-    };
-    setRounds((prev) => [newRound, ...prev]);
-    setDrawerOpen(false);
-    toast('회차가 등록되었습니다.', 'success');
+  const buildTargetCondition = () => {
+    if (fTargetMode === '학년' && fGrades.length) return { grades: fGrades };
+    if (fTargetMode === '학과' && fDepts.length) return { majorCodeIds: fDepts };
+    return null;
   };
 
-  const handleStatus = (r, next) => {
-    setRounds((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: next } : x)));
-    const labels = { 계획: '계획으로 변경', 진행중: '개시', 마감: '마감', 결과공개: '결과 공개' };
-    toast(`'${r.name}'을 ${labels[next]}했습니다.`, 'success');
+  const handleMutationError = (e) => {
+    const message = e instanceof ApiError ? e.message : '회차 저장에 실패했습니다.';
+    setFormError(message);
+    toast(message, 'error');
+  };
+
+  const registerMutation = useMutation({
+    mutationFn: registerAssessmentRound,
+    onSuccess: (created) => {
+      invalidateRounds();
+      setDrawerOpen(false);
+      toast(`'${created.assessmentName}' 회차가 등록되었습니다.`, 'success');
+    },
+    onError: handleMutationError,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updateAssessmentRound,
+    onSuccess: (updated) => {
+      invalidateRounds();
+      setDrawerOpen(false);
+      toast(`'${updated.assessmentName}' 회차가 수정되었습니다.`, 'success');
+    },
+    onError: handleMutationError,
+  });
+
+  const isPending = registerMutation.isPending || updateMutation.isPending;
+
+  const handleSave = () => {
+    if (!fName.trim() || !fYear || !fSem || !fStart || !fEnd) {
+      setFormError('필수 항목을 모두 입력해 주세요.');
+      return;
+    }
+    const startsAt = toStartInstant(fStart);
+    const endsAt = toEndInstant(fEnd);
+    if (!(new Date(startsAt) < new Date(endsAt))) {
+      setFormError('응시 시작일은 종료일보다 빨라야 합니다.');
+      return;
+    }
+    setFormError('');
+
+    const payload = {
+      assessmentName: fName.trim(),
+      academicYear: Number(fYear),
+      semesterCode: fSem,
+      assessmentType: fType,
+      startsAt,
+      endsAt,
+      targetCondition: buildTargetCondition(),
+    };
+
+    if (editTarget) {
+      updateMutation.mutate({ roundId: editTarget.assessmentRoundId, ...payload });
+    } else {
+      registerMutation.mutate(payload);
+    }
   };
 
   return (
@@ -341,7 +213,9 @@ function RoundManage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-[16px] font-black text-[#1F2328]">회차 관리</h2>
-          <p className="text-[12px] text-[#9AA0A6] mt-0.5">핵심역량 진단 회차 개설·상태 전환</p>
+          <p className="text-[12px] text-[#9AA0A6] mt-0.5">
+            핵심역량 진단 회차 등록 — 기본정보와 응시조건을 한 번에 저장합니다.
+          </p>
         </div>
         <Button onClick={openDrawer} style={{ background: ACCENT }}>
           + 회차 등록
@@ -353,152 +227,87 @@ function RoundManage() {
           <table className="w-full border-collapse text-[12px]">
             <thead>
               <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                {[
-                  '회차ID',
-                  '진단명',
-                  '학년도·학기',
-                  '구분',
-                  '응시기간',
-                  '대상',
-                  '응시/대상',
-                  '상태',
-                  '관리',
-                ].map((h, i) => (
-                  <th
-                    key={h}
-                    className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 5 ? 'text-center' : 'text-left'}`}
-                  >
-                    {h}
-                  </th>
-                ))}
+                {['회차ID', '진단명', '학년도·학기', '구분', '응시기간', '대상', '상태', '관리'].map(
+                  (h, i) => (
+                    <th
+                      key={h}
+                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 5 ? 'text-center' : 'text-left'}`}
+                    >
+                      {h}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
-              {rounds.map((r) => {
-                const rate = r.capacity > 0 ? Math.round((r.respondents / r.capacity) * 100) : 0;
-                return (
+              {rounds.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-[12px] text-[#9AA0A6]">
+                    등록된 회차가 없습니다. 위 버튼으로 새 회차를 등록해 주세요.
+                  </td>
+                </tr>
+              ) : (
+                rounds.map((r) => (
                   <tr
-                    key={r.id}
+                    key={r.assessmentRoundId}
                     className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors"
                   >
-                    <td className="px-4 py-3 font-mono text-[10px] text-[#9AA0A6]">{r.id}</td>
+                    <td className="px-4 py-3 font-mono text-[10px] text-[#9AA0A6]">
+                      {r.assessmentRoundId}
+                    </td>
                     <td className="px-4 py-3 font-bold text-[#1F2328] max-w-[200px]">
-                      <p className="truncate">{r.name}</p>
+                      <p className="truncate">{r.assessmentName}</p>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-[#656D76]">
-                      {r.year}학년도 {r.semester}
+                      {r.academicYear}학년도 {semesterLabel(r.semesterCode)}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.type === '사전' ? 'bg-[#F3F4F6] text-[#374151]' : 'bg-[#FEE2E2] text-[#CF222E]'}`}
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.assessmentType === 'PRE' ? 'bg-[#F3F4F6] text-[#374151]' : 'bg-[#FEE2E2] text-[#CF222E]'}`}
                       >
-                        {r.type}
+                        {r.assessmentType === 'PRE' ? '사전' : '사후'}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6] whitespace-nowrap">
-                      {r.startDate} ~ {r.endDate}
+                      {toDateInputValue(r.startsAt)} ~ {toDateInputValue(r.endsAt)}
                     </td>
                     <td className="px-4 py-3 text-center text-[11px] text-[#656D76] whitespace-nowrap">
-                      {r.target}
+                      {describeTarget(r.targetCondition, majorLabel)}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {r.capacity > 0 ? (
-                        <div>
-                          <span className="font-bold" style={{ color: ACCENT }}>
-                            {r.respondents.toLocaleString()}
-                          </span>
-                          <span className="text-[#9AA0A6]">/{r.capacity.toLocaleString()}</span>
-                          <div className="h-1 rounded-full bg-[#E5E7EB] mt-1 mx-auto w-16 overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{ width: `${rate}%`, background: ACCENT }}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-[#D1D5DB]">—</span>
-                      )}
+                      <StatusBadge status={r.roundStatus} variant="neutral" label="초안" size="sm" />
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {/* 이 화면에서 '마감'은 결과 발표 대기(조치 필요) 의미라 warning으로 덮어씁니다 */}
-                      <StatusBadge
-                        status={r.status}
-                        variant={r.status === '마감' ? 'warning' : undefined}
-                        size="sm"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex gap-1 justify-center flex-wrap">
-                        {r.status === '계획' && (
-                          <button
-                            onClick={() => handleStatus(r, '진행중')}
-                            className="h-6 px-2 text-[10px] font-bold rounded-[4px] text-white"
-                            style={{ background: ACCENT }}
-                          >
-                            개시
-                          </button>
-                        )}
-                        {r.status === '진행중' && (
-                          <button
-                            onClick={() => setCloseTarget(r)}
-                            className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#FEF3C7] text-[#D97706] hover:bg-[#FDE68A]"
-                          >
-                            마감
-                          </button>
-                        )}
-                        {r.status === '마감' && (
-                          <button
-                            onClick={() => handleStatus(r, '결과공개')}
-                            className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#D1FAE5] text-[#059669] hover:bg-[#A7F3D0]"
-                          >
-                            결과공개
-                          </button>
-                        )}
-                        <button
-                          onClick={() => toast('수정 기능은 다음 버전에서 제공됩니다.', 'info')}
-                          className="h-6 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
-                          style={{ color: ACCENT }}
-                        >
-                          수정
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => openEdit(r)}
+                        className="h-5 px-2 text-[10px] font-bold rounded-[4px] bg-[#F3F4F6] hover:bg-[#F3F4F6] transition-colors"
+                        style={{ color: ACCENT }}
+                      >
+                        수정
+                      </button>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Close confirm */}
-      <ConfirmDialog
-        open={!!closeTarget}
-        title="진단 마감 확인"
-        message={`'${closeTarget?.name}'을 마감합니다. 마감 후 추가 응시가 불가하며 결과 처리를 시작합니다.`}
-        confirmLabel="마감 처리"
-        danger
-        onConfirm={() => {
-          if (closeTarget) {
-            handleStatus(closeTarget, '마감');
-            setCloseTarget(null);
-          }
-        }}
-        onCancel={() => setCloseTarget(null)}
-      />
-
-      {/* Register drawer */}
+      {/* Register / Edit drawer */}
       <Drawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        title="회차 등록"
+        onClose={() => {
+          if (!isPending) setDrawerOpen(false);
+        }}
+        title={editTarget ? '회차 수정' : '회차 등록'}
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDrawerOpen(false)}>
+            <Button variant="outline" onClick={() => setDrawerOpen(false)} disabled={isPending}>
               취소
             </Button>
-            <Button style={{ background: ACCENT }} onClick={handleSave}>
-              등록
+            <Button style={{ background: ACCENT }} onClick={handleSave} loading={isPending}>
+              {editTarget ? '수정 저장' : '등록'}
             </Button>
           </div>
         }
@@ -511,10 +320,7 @@ function RoundManage() {
             </label>
             <input
               value={fName}
-              onChange={(e) => {
-                setFName(e.target.value);
-                setDupError('');
-              }}
+              onChange={(e) => setFName(e.target.value)}
               placeholder="예) 2026-2 핵심역량 사전진단"
               className="w-full h-9 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] focus:outline-none focus:border-[#374151] bg-white"
             />
@@ -522,38 +328,18 @@ function RoundManage() {
 
           {/* Year / Semester */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">
-                학년도
-              </label>
-              <select
-                value={fYear}
-                onChange={(e) => {
-                  setFYear(e.target.value);
-                  setDupError('');
-                }}
-                className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-              >
-                {['2026', '2025', '2024'].map((y) => (
-                  <option key={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-[#656D76] mb-1.5">학기</label>
-              <select
-                value={fSem}
-                onChange={(e) => {
-                  setFSem(e.target.value);
-                  setDupError('');
-                }}
-                className="w-full h-9 px-2 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-              >
-                {['1학기', '2학기'].map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-            </div>
+            <CommonCodeSelect
+              groupCode="ACADEMIC_YEAR"
+              label="학년도"
+              value={fYear}
+              onChange={(e) => setFYear(e.target.value)}
+            />
+            <CommonCodeSelect
+              groupCode="SEMESTER"
+              label="학기"
+              value={fSem}
+              onChange={(e) => setFSem(e.target.value)}
+            />
           </div>
 
           {/* Type radio */}
@@ -562,34 +348,34 @@ function RoundManage() {
               구분 (사전·사후) <span className="text-[#CF222E]">*</span>
             </label>
             <div className="flex gap-3">
-              {['사전', '사후'].map((t) => (
+              {ASSESSMENT_TYPES.map((t) => (
                 <label
-                  key={t}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-[8px] border-2 cursor-pointer transition-all ${fType === t ? 'border-[#374151] bg-[#F3F4F6]' : 'border-[#E5E7EB] bg-white hover:border-[#9CA3AF]'}`}
-                  onClick={() => {
-                    setFType(t);
-                    setDupError('');
-                  }}
+                  key={t.value}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-[8px] border-2 cursor-pointer transition-all ${fType === t.value ? 'border-[#374151] bg-[#F3F4F6]' : 'border-[#E5E7EB] bg-white hover:border-[#9CA3AF]'}`}
+                  onClick={() => setFType(t.value)}
                 >
                   <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${fType === t ? 'border-[#374151]' : 'border-[#D1D5DB]'}`}
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${fType === t.value ? 'border-[#374151]' : 'border-[#D1D5DB]'}`}
                   >
-                    {fType === t && (
+                    {fType === t.value && (
                       <div className="w-2 h-2 rounded-full" style={{ background: ACCENT }} />
                     )}
                   </div>
                   <span
-                    className={`text-[13px] font-bold ${fType === t ? '' : 'text-[#656D76]'}`}
-                    style={fType === t ? { color: ACCENT } : {}}
+                    className={`text-[13px] font-bold ${fType === t.value ? '' : 'text-[#656D76]'}`}
+                    style={fType === t.value ? { color: ACCENT } : {}}
                   >
-                    {t}진단
+                    {t.label}
                   </span>
                 </label>
               ))}
             </div>
-            {dupError && (
+            <p className="mt-2 text-[10px] text-[#9AA0A6] leading-relaxed">
+              이 값은 사후에 사전·사후 비교 화면(SCR-S03)의 짝을 맞추는 기준이 됩니다.
+            </p>
+            {formError && (
               <div className="mt-2 p-2.5 rounded-[6px] bg-[#FEE2E2] border border-[#FECACA] text-[11px] text-[#CF222E] font-semibold">
-                ⚠ {dupError}
+                ⚠ {formError}
               </div>
             )}
           </div>
@@ -618,7 +404,7 @@ function RoundManage() {
           <div>
             <label className="block text-[11px] font-semibold text-[#656D76] mb-2">대상 지정</label>
             <div className="flex gap-2 mb-3 flex-wrap">
-              {['전체', '학년', '단과대', '학과'].map((m) => (
+              {['전체', '학년', '학과'].map((m) => (
                 <button
                   key={m}
                   onClick={() => setFTM(m)}
@@ -644,54 +430,42 @@ function RoundManage() {
                     className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fGrades.includes(g) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
                     style={fGrades.includes(g) ? { background: ACCENT } : {}}
                   >
-                    {g}
-                  </button>
-                ))}
-              </div>
-            )}
-            {fTargetMode === '단과대' && (
-              <div className="flex gap-2 flex-wrap">
-                {COLLEGES.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => toggleList(fColleges, c, setFColl)}
-                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fColleges.includes(c) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
-                    style={fColleges.includes(c) ? { background: ACCENT } : {}}
-                  >
-                    {c}
+                    {g}학년
                   </button>
                 ))}
               </div>
             )}
             {fTargetMode === '학과' && (
               <div className="flex gap-2 flex-wrap">
-                {DEPTS.map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => toggleList(fDepts, d, setFDepts)}
-                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fDepts.includes(d) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
-                    style={fDepts.includes(d) ? { background: ACCENT } : {}}
-                  >
-                    {d}
-                  </button>
-                ))}
+                {majorLoading ? (
+                  <p className="text-[11px] text-[#9AA0A6]">학과 목록을 불러오는 중입니다.</p>
+                ) : majorError ? (
+                  <div className="flex items-center gap-2 text-[11px] text-[#CF222E]">
+                    학과 목록을 불러오지 못했습니다.
+                    <button
+                      onClick={() => refetchMajors()}
+                      className="underline font-bold hover:opacity-80"
+                    >
+                      다시 시도
+                    </button>
+                  </div>
+                ) : majorCodes.length === 0 ? (
+                  <p className="text-[11px] text-[#9AA0A6]">등록된 학과가 없습니다.</p>
+                ) : (
+                  majorCodes.map((m) => (
+                    <button
+                      key={m.codeId}
+                      onClick={() => toggleList(fDepts, m.codeId, setFDepts)}
+                      aria-pressed={fDepts.includes(m.codeId)}
+                      className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${fDepts.includes(m.codeId) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
+                      style={fDepts.includes(m.codeId) ? { background: ACCENT } : {}}
+                    >
+                      {m.codeName}
+                    </button>
+                  ))
+                )}
               </div>
             )}
-          </div>
-
-          {/* Active toggle */}
-          <div className="flex items-center gap-3">
-            <label className="text-[11px] font-semibold text-[#656D76]">사용여부</label>
-            <button
-              onClick={() => setFActive(!fActive)}
-              className={`relative w-9 h-5 rounded-full transition-colors ${fActive ? '' : 'bg-[#D1D5DB]'}`}
-              style={fActive ? { background: ACCENT } : {}}
-            >
-              <div
-                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${fActive ? 'translate-x-4' : ''}`}
-              />
-            </button>
-            <span className="text-[11px] text-[#9AA0A6]">{fActive ? '사용' : '미사용'}</span>
           </div>
         </div>
       </Drawer>
@@ -701,33 +475,79 @@ function RoundManage() {
 
 // ─── Tab 2: 응시 관리 ─────────────────────────────────────────────────────────
 
-function ResponseManage() {
-  const RESPONDENTS = 1106;
-  const CAPACITY = 1537;
-  const RATE = Math.round((RESPONDENTS / CAPACITY) * 100);
+function ResponseManage({ rounds }) {
+  const [roundId, setRoundId] = useState('');
+  const selectedRound = rounds.find((r) => String(r.assessmentRoundId) === roundId) ?? null;
+
+  const { data: majorCodes = [] } = useCommonCode('MAJOR');
+  const majorLabel = (codeId) => majorCodes.find((m) => m.codeId === codeId)?.codeName ?? codeId;
+
+  const {
+    data: attendance,
+    isLoading: attendanceLoading,
+    isError: attendanceError,
+    error: attendanceErrorObj,
+  } = useQuery({
+    queryKey: ['assessmentAttendance', roundId],
+    queryFn: () => fetchAssessmentAttendance(Number(roundId)),
+    enabled: !!roundId,
+  });
+
+  const targetCount = attendance?.targetCount ?? 0;
+  const completedCount = attendance?.completedCount ?? 0;
+  const uncompletedCount = Math.max(targetCount - completedCount, 0);
+  const rateLabel = attendance ? `${Number(attendance.attendanceRate).toFixed(1)}%` : '-';
 
   const [notifOpen, setNotifOpen] = useState(false);
-  const [channels, setChannels] = useState(['앱']);
-  const [notifRows, setNotifRows] = useState(NON_RESPONDENTS);
+  // 발송 완료 여부는 서버가 확정해 준 sentUserIds만 신뢰한다 — 클라이언트가 페이지별로
+  // 추정하면 페이지를 넘나들 때나 "전체 발송"(userIds: null) 이후 실제와 어긋날 수 있다.
+  const [notified, setNotified] = useState(new Set());
   const [selected, setSelected] = useState(new Set());
   const [downloadInfo, setDownloadInfo] = useState(false);
 
-  const CHANNEL_LIST = ['앱', 'SMS', '메일'];
-  const gradeData = [
-    { grade: '1학년', rate: 81, cnt: 310, total: 382 },
-    { grade: '2학년', rate: 76, cnt: 298, total: 392 },
-    { grade: '3학년', rate: 65, cnt: 318, total: 489 },
-    { grade: '4학년', rate: 58, cnt: 180, total: 310 },
-  ];
+  const [page, setPage] = useState(1);
+  // 회차를 바꾸면 이전 회차에서 선택·발송 처리한 userId가 새 회차 명단과 무관해지므로 같이 비운다.
+  useEffect(() => {
+    setPage(1);
+    setSelected(new Set());
+    setNotified(new Set());
+  }, [roundId]);
+  // 페이지를 넘기면 화면에 없는 userId가 선택 상태로 남을 수 있어(체크박스는 안 보이지만
+  // "선택 N명" 카운트엔 남음) 비운다. notifyTarget 자체는 selected가 비면 전체 발송으로
+  // 처리되므로 이 초기화와 무관하게 항상 정확하다.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [page]);
 
-  const toggleChannel = (c) =>
-    setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
-  const notifyTarget =
-    selected.size > 0 ? selected.size : notifRows.filter((r) => !r.notified).length;
+  const {
+    data: nonParticipants,
+    isLoading: nonParticipantsLoading,
+    isError: nonParticipantsError,
+    error: nonParticipantsErrorObj,
+  } = useQuery({
+    queryKey: ['assessmentNonParticipants', roundId, page],
+    queryFn: () =>
+      fetchAssessmentNonParticipants(Number(roundId), {
+        page: page - 1,
+        size: NON_PARTICIPANT_PAGE_SIZE,
+      }),
+    enabled: !!roundId,
+  });
 
-  const allChecked = notifRows.length > 0 && notifRows.every((r) => selected.has(r.studentId));
+  const nonParticipantRows = nonParticipants?.content ?? [];
+  const nonParticipantTotal = nonParticipants?.totalElements ?? 0;
+
+  // 선택 없이 발송하면 이 회차의 전체 미응시자(nonParticipantTotal)가 대상이다 — 현재
+  // 페이지(최대 10명)만 대상으로 착각하지 않도록, 선택이 없을 때는 페이지 카운트가 아니라
+  // 전체 미응시자 수를 보여준다.
+  const notifyTarget = selected.size > 0 ? selected.size : nonParticipantTotal;
+
+  const allChecked =
+    nonParticipantRows.length > 0 && nonParticipantRows.every((r) => selected.has(r.userId));
   const toggleAll = () =>
-    allChecked ? setSelected(new Set()) : setSelected(new Set(notifRows.map((r) => r.studentId)));
+    allChecked
+      ? setSelected(new Set())
+      : setSelected(new Set(nonParticipantRows.map((r) => r.userId)));
   const toggle = (id) =>
     setSelected((prev) => {
       const n = new Set(prev);
@@ -735,92 +555,115 @@ function ResponseManage() {
       return n;
     });
 
-  const sendNotification = () => {
-    setNotifRows((prev) =>
-      prev.map((r) => (!selected.size || selected.has(r.studentId) ? { ...r, notified: true } : r)),
-    );
-    setSelected(new Set());
-    setNotifOpen(false);
-    toast(`${notifyTarget}명에게 알림을 발송했습니다.`, 'success');
-  };
+  const notifyMutation = useMutation({
+    mutationFn: () =>
+      notifyAssessmentNonParticipants(Number(roundId), selected.size ? Array.from(selected) : null),
+    onSuccess: (result) => {
+      setNotified((prev) => new Set([...prev, ...result.sentUserIds]));
+      setSelected(new Set());
+      setNotifOpen(false);
+      const failMessage = result.failedCount > 0 ? ` (실패 ${result.failedCount}건)` : '';
+      toast(`${result.sentUserIds.length}명에게 알림을 발송했습니다.${failMessage}`, 'success');
+    },
+    onError: (e) => {
+      toast(e instanceof ApiError ? e.message : '알림 발송에 실패했습니다.', 'error');
+    },
+  });
 
   const donutData = [
-    { label: '응시', value: RESPONDENTS, color: ACCENT },
-    { label: '미응시', value: CAPACITY - RESPONDENTS, color: '#E5E7EB' },
+    { label: '응시', value: completedCount, color: ACCENT },
+    { label: '미응시', value: uncompletedCount, color: '#E5E7EB' },
   ];
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h2 className="text-[16px] font-black text-[#1F2328]">응시 관리</h2>
-          <p className="text-[12px] text-[#9AA0A6] mt-0.5">진단 회차: 2026-1 핵심역량 사후진단</p>
+          <p className="text-[12px] text-[#9AA0A6] mt-0.5">
+            {selectedRound
+              ? `진단 회차: ${selectedRound.assessmentName} (${describeTarget(selectedRound.targetCondition, majorLabel)})`
+              : '조회할 진단 회차를 선택해 주세요.'}
+          </p>
         </div>
+        <select
+          value={roundId}
+          onChange={(e) => setRoundId(e.target.value)}
+          aria-label="진단 회차 선택"
+          className="h-9 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151] min-w-[220px]"
+        >
+          <option value="">회차 선택</option>
+          {rounds.map((r) => (
+            <option key={r.assessmentRoundId} value={r.assessmentRoundId}>
+              {r.assessmentName}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Top: Donut + Grade bars */}
-      <div className="grid gap-5 mb-5" style={{ gridTemplateColumns: '260px 1fr' }}>
-        {/* Donut */}
-        <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 flex flex-col items-center gap-3">
-          <p className="text-[12px] font-bold text-[#1F2328] self-start">전체 응시율</p>
-          <DonutChart segments={donutData} size={140} centerValue={`${RATE}%`} />
-          <div className="flex gap-6 text-[12px]">
-            <div className="text-center">
-              <div className="text-[20px] font-black" style={{ color: ACCENT }}>
-                {RESPONDENTS.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-[#9AA0A6]">응시</div>
-            </div>
-            <div className="text-center">
-              <div className="text-[20px] font-black text-[#9AA0A6]">
-                {CAPACITY.toLocaleString()}
-              </div>
-              <div className="text-[10px] text-[#9AA0A6]">대상</div>
-            </div>
-          </div>
+      {!roundId && rounds.length === 0 && (
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center text-[12px] text-[#9AA0A6] mb-5">
+          회차 관리 탭에서 진단 회차를 먼저 등록해 주세요.
         </div>
+      )}
 
-        {/* Grade bars */}
-        <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
-          <p className="text-[12px] font-bold text-[#1F2328] mb-4">학년별 응시율</p>
-          <div className="flex flex-col gap-4">
-            {gradeData.map((g) => {
-              const pct = g.rate;
-              const poor = pct < 65;
-              const color = poor ? '#CF222E' : pct < 75 ? '#D97706' : ACCENT;
-              return (
-                <div key={g.grade}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[12px] font-semibold text-[#1F2328] w-14">{g.grade}</span>
-                    <div className="flex-1 mx-3 h-6 bg-[#F3F4F6] rounded-[4px] overflow-hidden relative">
-                      <div
-                        className="h-full rounded-[4px] transition-all flex items-center"
-                        style={{ width: `${pct}%`, background: color, minWidth: '2rem' }}
-                      >
-                        <span className="text-[10px] font-black text-white ml-2 shrink-0">
-                          {pct}%
-                        </span>
-                      </div>
+      {roundId && attendanceError && (
+        <div className="mb-5 p-3 rounded-[8px] bg-[#FEE2E2] border border-[#FECACA] text-[12px] text-[#CF222E] font-semibold">
+          {attendanceErrorObj instanceof ApiError
+            ? attendanceErrorObj.message
+            : '응시율을 조회하지 못했습니다.'}
+        </div>
+      )}
+
+      {roundId && !attendanceError && (
+        <div className="mb-5">
+          {/* Donut */}
+          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 flex flex-col items-center gap-3 max-w-[320px]">
+            <p className="text-[12px] font-bold text-[#1F2328] self-start">전체 응시율</p>
+            {attendanceLoading ? (
+              <p className="py-10 text-[12px] text-[#9AA0A6]">불러오는 중...</p>
+            ) : (
+              <>
+                {targetCount > 0 ? (
+                  <DonutChart segments={donutData} size={140} centerValue={rateLabel} />
+                ) : (
+                  <div
+                    role="status"
+                    className="w-[140px] h-[140px] flex items-center justify-center text-center text-[11px] text-[#9AA0A6] rounded-full border border-dashed border-[#E5E7EB] px-3"
+                  >
+                    대상자가 없어 표시할 데이터가 없습니다.
+                  </div>
+                )}
+                <div className="flex gap-6 text-[12px]">
+                  <div className="text-center">
+                    <div className="text-[20px] font-black" style={{ color: ACCENT }}>
+                      {completedCount.toLocaleString()}
                     </div>
-                    <span className="text-[11px] text-[#9AA0A6] w-24 text-right">
-                      {g.cnt}/{g.total}명
-                    </span>
+                    <div className="text-[10px] text-[#9AA0A6]">응시</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[20px] font-black text-[#9AA0A6]">
+                      {targetCount.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-[#9AA0A6]">대상</div>
                   </div>
                 </div>
-              );
-            })}
+              </>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Non-respondent table */}
       <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
         <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-3 flex-wrap">
           <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
           <span className="text-[13px] font-bold text-[#1F2328]">미응시자 목록</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
-            {CAPACITY - RESPONDENTS}명
-          </span>
+          {roundId && !nonParticipantsLoading && !nonParticipantsError && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
+              {nonParticipantTotal.toLocaleString()}명
+            </span>
+          )}
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => setDownloadInfo(true)}
@@ -830,7 +673,8 @@ function ResponseManage() {
             </button>
             <button
               onClick={() => setNotifOpen(true)}
-              className="h-7 px-3 text-[11px] font-bold rounded-[6px] text-white transition-opacity hover:opacity-90"
+              disabled={nonParticipantTotal === 0}
+              className="h-7 px-3 text-[11px] font-bold rounded-[6px] text-white transition-opacity hover:opacity-90 disabled:opacity-40"
               style={{ background: ACCENT }}
             >
               미응시자 알림 발송
@@ -838,110 +682,141 @@ function ResponseManage() {
           </div>
         </div>
 
-        <table className="w-full border-collapse text-[12px]">
-          <thead>
-            <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-              <th className="w-10 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={allChecked}
-                  onChange={toggleAll}
-                  className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
-                />
-              </th>
-              {['학번', '성명', '학과', '학년', '최근 로그인', '알림 발송'].map((h, i) => (
-                <th
-                  key={h}
-                  className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 4 ? 'text-center' : 'text-left'}`}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {notifRows.map((r) => (
-              <tr
-                key={r.studentId}
-                className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(r.studentId) ? 'bg-[#F3F4F6]' : ''}`}
-              >
-                <td className="px-4 py-3 text-center">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(r.studentId)}
-                    onChange={() => toggle(r.studentId)}
-                    className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
-                  />
-                </td>
-                <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">{r.studentId}</td>
-                <td className="px-4 py-3 font-bold text-[#1F2328]">{r.name}</td>
-                <td className="px-4 py-3 text-[#656D76]">{r.dept}</td>
-                <td className="px-4 py-3 text-center text-[#656D76]">{r.grade}학년</td>
-                <td className="px-4 py-3 text-center font-mono text-[11px] text-[#9AA0A6]">
-                  {r.lastLogin}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {r.notified ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">
-                      발송완료
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#9AA0A6]">
-                      미발송
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {!roundId ? (
+          <EmptyState message="조회할 진단 회차를 선택해 주세요." />
+        ) : nonParticipantsLoading ? (
+          <SkeletonLoader rows={NON_PARTICIPANT_PAGE_SIZE} cols={6} />
+        ) : nonParticipantsError ? (
+          <div className="p-5 text-[12px] text-[#CF222E] font-semibold">
+            {nonParticipantsErrorObj instanceof ApiError
+              ? nonParticipantsErrorObj.message
+              : '미응시자 목록을 조회하지 못했습니다.'}
+          </div>
+        ) : nonParticipantRows.length === 0 ? (
+          <EmptyState message="미응시자가 없습니다." sub="모든 대상자가 응시를 완료했습니다." />
+        ) : (
+          <>
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      onChange={toggleAll}
+                      aria-label="현재 페이지 미응시자 전체 선택"
+                      className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
+                    />
+                  </th>
+                  {['학번', '성명', '학과', '학년', '연락처', '알림 발송'].map((h, i) => (
+                    <th
+                      key={h}
+                      className={`px-4 py-3 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${i >= 4 ? 'text-center' : 'text-left'}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {nonParticipantRows.map((r) => (
+                  <tr
+                    key={r.userId}
+                    className={`border-b border-[#F3F4F6] last:border-0 hover:bg-[#FAFAFA] transition-colors ${selected.has(r.userId) ? 'bg-[#F3F4F6]' : ''}`}
+                  >
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.userId)}
+                        onChange={() => toggle(r.userId)}
+                        aria-label={`${r.name} (${r.studentId}) 선택`}
+                        className="accent-[#374151] w-3.5 h-3.5 cursor-pointer"
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-[#9AA0A6]">
+                      {r.studentId}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-[#1F2328]">{r.name}</td>
+                    <td className="px-4 py-3 text-[#656D76]">{r.majorName ?? '-'}</td>
+                    <td className="px-4 py-3 text-center text-[#656D76]">
+                      {r.grade != null ? `${r.grade}학년` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono text-[11px] text-[#9AA0A6]">
+                      {r.phone ?? '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {notified.has(r.userId) ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669]">
+                          발송완료
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#9AA0A6]">
+                          미발송
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="px-5 py-3 border-t border-[#E5E7EB]">
+              <Pagination
+                page={page}
+                totalPages={nonParticipants.totalPages}
+                onChange={setPage}
+                totalItems={nonParticipantTotal}
+                pageSize={NON_PARTICIPANT_PAGE_SIZE}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Notify modal */}
       <Modal
         open={notifOpen}
-        onClose={() => setNotifOpen(false)}
+        onClose={() => {
+          if (!notifyMutation.isPending) setNotifOpen(false);
+        }}
         title="미응시자 알림 발송"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setNotifOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setNotifOpen(false)}
+              disabled={notifyMutation.isPending}
+            >
               취소
             </Button>
-            <Button style={{ background: ACCENT }} onClick={sendNotification}>
+            <Button
+              style={{ background: ACCENT }}
+              onClick={() => notifyMutation.mutate()}
+              loading={notifyMutation.isPending}
+            >
               발송
             </Button>
           </div>
         }
       >
         <div className="flex flex-col gap-4">
-          <div>
-            <label className="block text-[11px] font-semibold text-[#656D76] mb-2">
-              발송 채널 (다중 선택)
-            </label>
-            <div className="flex gap-2">
-              {CHANNEL_LIST.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => toggleChannel(c)}
-                  className={`h-8 px-4 text-[12px] font-bold rounded-[6px] border-2 transition-colors ${channels.includes(c) ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB]'}`}
-                  style={channels.includes(c) ? { background: ACCENT } : {}}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
+          <div className="p-2.5 rounded-[6px] bg-[#F3F4F6] text-[11px] text-[#656D76]">
+            현재는 인앱(앱) 알림만 발송됩니다. SMS·메일 연동은 아직 준비되지 않았습니다.
           </div>
 
           <div>
             <label className="block text-[11px] font-semibold text-[#656D76] mb-2">
-              문구 미리보기
+              문구 미리보기 <span className="text-[#9AA0A6] font-normal">(실제 발송 문구와 다를 수 있음)</span>
             </label>
             <div className="p-4 rounded-[8px] bg-[#F9FAFB] border border-[#E5E7EB] text-[12px] text-[#444D56] leading-relaxed">
               <p className="font-bold text-[#1F2328] mb-1">[학생지원팀] 핵심역량진단 참여 안내</p>
               <p>
-                안녕하세요. 2026-1 핵심역량 사후진단 응시 기간입니다.
+                안녕하세요. {selectedRound?.assessmentName ?? '핵심역량 진단'} 응시 기간입니다.
                 <br />
-                아직 응시하지 않으셨습니다. <strong>2026-06-23까지</strong> 접속해 주세요.
+                아직 응시하지 않으셨습니다.{' '}
+                {selectedRound?.endsAt && (
+                  <strong>{toDateInputValue(selectedRound.endsAt)}까지</strong>
+                )}{' '}
+                접속해 주세요.
                 <br />
                 포털 로그인 → 핵심역량진단 메뉴에서 바로 응시 가능합니다.
               </p>
@@ -952,9 +827,9 @@ function ResponseManage() {
             className="p-3 rounded-[8px] bg-[#F3F4F6] border border-[#E5E7EB] text-[12px]"
             style={{ color: ACCENT }}
           >
-            발송 대상: <span className="font-black">{notifyTarget}명</span>
-            {selected.size > 0 && (
-              <span className="text-[#9AA0A6] ml-1">(선택 {selected.size}명)</span>
+            발송 대상: <span className="font-black">{notifyTarget.toLocaleString()}명</span>
+            {selected.size === 0 && (
+              <span className="text-[#9AA0A6] ml-1">(선택 없음 — 전체 미응시자)</span>
             )}
           </div>
         </div>
@@ -983,284 +858,405 @@ function ResponseManage() {
 
 // ─── Tab 3: 결과 통계 ─────────────────────────────────────────────────────────
 
-function ResultStats() {
-  const [roundSel, setRoundSel] = useState('2026-1 사후진단');
-  const [collegeSel, setCollegeSel] = useState('전체');
-  const [gradeSel, setGradeSel] = useState('전체');
-  const [deptSel, setDeptSel] = useState('전체');
-  const [queried, setQueried] = useState(true);
-  const [dropOpen, setDropOpen] = useState(false);
-  const [privacyInfo, setPrivacyInfo] = useState(false);
-  const dropRef = useRef(null);
+const GROUP_AXES = [
+  { value: 'GRADE', label: '학년별' },
+  { value: 'MAJOR', label: '전공별' },
+];
 
-  const COMP_AVGS = [
-    { label: '자기관리', value: 71.3 },
-    { label: '의사소통', value: 68.9 },
-    { label: '대인관계', value: 70.4 },
-    { label: '글로벌', value: 61.5 },
-    { label: '문제해결', value: 69.8 },
-    { label: '직업윤리', value: 75.2 },
-  ];
+// 집단별 비교 차트의 y축 고정 스케일. 눈금선·막대 모두 이 값 기준이라 막대 높이로
+// 절대 점수를 읽을 수 있다(데이터 최댓값 기준으로 늘리지 않는다).
+const GROUP_COMPARE_MAX_SCORE = 100;
 
-  const COMP_KEYS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
-  const COMP_LABELS = ['자기관리', '의사소통', '대인관계', '글로벌', '문제해결', '직업윤리'];
+// 이보다 집단이 많으면(주로 전공 축) 종합 평균 상위·하위 3개만 표시한다. 학년 축은 4개
+// 안팎이라 항상 전부 나온다.
+const GROUP_COMPARE_LIMIT = 10;
 
-  // Find minimum value per column for heatmap
-  const minPerCol = {};
-  COMP_KEYS.forEach((k) => {
-    minPerCol[k] = Math.min(...COLLEGE_DATA.map((r) => r[k]));
+// 최대 10개 집단까지 겹치지 않는 색을 준다. 교직원 포털 무채색 기조에 맞춰 채도 낮은
+// 회색 계열만 쓰고, 색만으로 부족할 수 있어 범례를 함께 둔다.
+const GROUP_COLORS = [
+  '#1F2937',
+  '#6B7280',
+  '#9CA3AF',
+  '#4B5563',
+  '#374151',
+  '#78716C',
+  '#A8A29E',
+  '#57534E',
+  '#64748B',
+  '#94A3B8',
+];
+
+// 집단(학년/전공)별로 쪼개져 내려온 평균을 역량별 분포 그래프용으로 역량 축에 다시 모은다.
+// 역량 전체 평균은 집단 평균을 응답자 수로 가중해 합산한다(집단 크기가 제각각이라 단순 평균은 왜곡됨).
+// 축 순서는 결과 방사형 차트와 맞추기 위해 displayOrder로 정렬한다.
+function aggregateByCompetency(groups) {
+  const acc = new Map();
+  groups.forEach((g) => {
+    (g.competencyAverages ?? []).forEach((c) => {
+      const prev = acc.get(c.competencyId) ?? {
+        competencyName: c.competencyName,
+        displayOrder: c.displayOrder,
+        weightedSum: 0,
+        weight: 0,
+      };
+      prev.weightedSum += Number(c.averageScore) * g.respondentCount;
+      prev.weight += g.respondentCount;
+      acc.set(c.competencyId, prev);
+    });
   });
-  minPerCol['avg'] = Math.min(...COLLEGE_DATA.map((r) => r.avg));
+  return [...acc.values()]
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .map((c) => ({
+      label: c.competencyName,
+      value: c.weight > 0 ? Math.round((c.weightedSum / c.weight) * 10) / 10 : 0,
+    }));
+}
 
-  const handleDownload = (type) => {
-    setDropOpen(false);
-    setPrivacyInfo(true);
-    toast(`'${type}' 다운로드 요청이 기록되었습니다.`, 'info');
+// 집단별 비교 그래프용. groups를 그대로 쓰되, x축이 될 역량 축을 모든 집단에 걸친 합집합에서
+// displayOrder 순으로 뽑고(결과 방사형 차트와 동일 순서), 각 집단을 그 역량 축에 맞춘 series로 만든다.
+// 집단이 GROUP_COMPARE_LIMIT를 넘으면 종합 평균 상위 3 + 하위 3만 남긴다(전공 축이 수십 개일 수 있음).
+function buildGroupCompare(groups) {
+  const compMap = new Map();
+  groups.forEach((g) =>
+    (g.competencyAverages ?? []).forEach((c) => {
+      if (!compMap.has(c.competencyId)) {
+        compMap.set(c.competencyId, {
+          id: c.competencyId,
+          name: c.competencyName,
+          displayOrder: c.displayOrder,
+        });
+      }
+    }),
+  );
+  const competencies = [...compMap.values()].sort((a, b) => a.displayOrder - b.displayOrder);
+  const allSeries = groups.map((g) => {
+    const byId = new Map(
+      (g.competencyAverages ?? []).map((c) => [c.competencyId, Number(c.averageScore)]),
+    );
+    const values = competencies.map((c) => byId.get(c.id) ?? null);
+    const present = values.filter((v) => v != null);
+    return {
+      key: g.groupKey,
+      label: g.groupLabel,
+      respondentCount: g.respondentCount,
+      values,
+      mean: present.length ? present.reduce((s, v) => s + v, 0) / present.length : 0,
+    };
+  });
+
+  if (allSeries.length <= GROUP_COMPARE_LIMIT) {
+    return { competencies, series: allSeries, truncated: false, totalGroups: allSeries.length };
+  }
+  const ranked = [...allSeries].sort((a, b) => b.mean - a.mean);
+  const top = ranked.slice(0, 3);
+  const bottom = ranked.slice(-3);
+  return {
+    competencies,
+    series: [...top, ...bottom],
+    truncated: true,
+    totalGroups: allSeries.length,
+    topCount: top.length,
   };
+}
+
+/**
+ * 좁은 x축 슬롯에서 라벨이 서로 겹치지 않도록, 문맥상 자명한 "역량" 접미사를 떼고
+ * 그래도 길면 잘라서 말줄임표를 붙인다. 원본 전체 이름은 <title>로 hover 시 노출한다.
+ *
+ * @param {string} name 원본 역량명 (예: "자기관리 역량")
+ * @param {number} [max=6] 잘라내기 전 허용할 최대 글자 수
+ * @returns {string} 축약된 라벨 (예: "자기관리", "자원·정보·…")
+ */
+function shortCompetencyLabel(name, max = 6) {
+  const stripped = String(name ?? '').replace(/\s*역량$/, '');
+  return stripped.length > max ? `${stripped.slice(0, max)}…` : stripped;
+}
+
+// 역량(6) × 집단(N) 그룹 막대차트. 공용 BarChart는 단일 시리즈만 지원해 여기서만 인라인으로 그린다.
+// y축은 0~100 고정(GROUP_COMPARE_MAX_SCORE)이라 왼쪽 눈금 숫자로 절대 점수를 읽을 수 있다.
+function GroupCompareChart({ competencies, series, height = 200 }) {
+  const gutter = 24; // 왼쪽 눈금 라벨 자리
+  const clusterW = Math.max(52, series.length * 14 + 20);
+  const chartW = gutter + competencies.length * clusterW + 12;
+  const barW = Math.max(5, Math.min(16, (clusterW - 20) / Math.max(series.length, 1) - 2));
+
+  return (
+    <svg width={chartW} height={height + 34} viewBox={`0 0 ${chartW} ${height + 34}`}>
+      {[0, 25, 50, 75, 100].map((score) => {
+        const y = height * (1 - score / GROUP_COMPARE_MAX_SCORE);
+        return (
+          <g key={score}>
+            <line
+              x1={gutter}
+              y1={y}
+              x2={chartW - 8}
+              y2={y}
+              stroke="#E5E7EB"
+              strokeWidth="1"
+              strokeDasharray="3 3"
+            />
+            <text
+              x={gutter - 4}
+              y={y + 3}
+              textAnchor="end"
+              fontSize="9"
+              fill="#9AA0A6"
+              fontFamily="Pretendard, sans-serif"
+            >
+              {score}
+            </text>
+          </g>
+        );
+      })}
+      {competencies.map((c, ci) => {
+        const x0 = gutter + ci * clusterW + 10;
+        return (
+          <g key={c.id}>
+            {series.map((s, si) => {
+              const v = s.values[ci];
+              if (v == null) return null;
+              const barH = (Math.min(v, GROUP_COMPARE_MAX_SCORE) / GROUP_COMPARE_MAX_SCORE) * height;
+              return (
+                <rect
+                  key={s.key}
+                  x={x0 + si * (barW + 2)}
+                  y={height - barH}
+                  width={barW}
+                  height={barH}
+                  fill={GROUP_COLORS[si % GROUP_COLORS.length]}
+                  rx="2"
+                  opacity="0.9"
+                >
+                  <title>{`${s.label} · ${c.name}: ${v.toFixed(1)}점`}</title>
+                </rect>
+              );
+            })}
+            <text
+              x={x0 + (series.length * (barW + 2)) / 2 - 1}
+              y={height + 14}
+              textAnchor="middle"
+              fontSize="10"
+              fill="#656D76"
+              fontFamily="Pretendard, sans-serif"
+            >
+              <title>{c.name}</title>
+              {shortCompetencyLabel(c.name)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function ResultStats({ rounds }) {
+  const [roundId, setRoundId] = useState('');
+  const [groupBy, setGroupBy] = useState('GRADE');
+  const selectedRound = rounds.find((r) => String(r.assessmentRoundId) === roundId) ?? null;
+
+  // 역량별 분포·집단별 비교 두 그래프가 이 한 응답을 공유한다. 분포 그래프는 집단 축과
+  // 무관하게 역량 축으로 다시 모으므로, 집단 축(groupBy)은 비교 그래프의 기준으로만 쓰인다.
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['assessmentDistribution', roundId, groupBy],
+    queryFn: () => fetchAssessmentDistribution(Number(roundId), groupBy),
+    enabled: !!roundId,
+  });
+
+  const groups = data?.groups ?? [];
+  const competencyBars = aggregateByCompetency(groups);
+  const groupCompare = buildGroupCompare(groups);
+  const respondentTotal = groups.reduce((sum, g) => sum + g.respondentCount, 0);
+  const overallAvg =
+    competencyBars.length > 0
+      ? competencyBars.reduce((s, c) => s + c.value, 0) / competencyBars.length
+      : 0;
+  // 응답자·역량 데이터가 모두 있어야 집계가 의미 있다. 응답자 0명이면 aggregateByCompetency가
+  // 값 0인 막대를 채워 length 체크를 통과하므로(BarChart max=0 → NaN, 평균은 0.0점으로 오인),
+  // 세 곳(평균 타일·역량별 분포·집단 비교)이 이 플래그 하나로 빈 상태를 함께 판정한다.
+  const hasResultData = respondentTotal > 0 && competencyBars.length > 0;
 
   return (
     <div>
-      {/* Condition bar */}
-      <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-4 mb-5 flex gap-3 flex-wrap items-end">
-        {[
-          {
-            label: '회차',
-            val: roundSel,
-            set: setRoundSel,
-            opts: ['2026-1 사후진단', '2026-1 사전진단', '2025-2 사후진단', '2025-2 사전진단'],
-          },
-          {
-            label: '단과대',
-            val: collegeSel,
-            set: setCollegeSel,
-            opts: [
-              '전체',
-              '공과대학',
-              '경영대학',
-              '사회과학대학',
-              '인문대학',
-              '자연과학대학',
-              '글로벌대학',
-            ],
-          },
-          {
-            label: '학년',
-            val: gradeSel,
-            set: setGradeSel,
-            opts: ['전체', '1학년', '2학년', '3학년', '4학년'],
-          },
-          {
-            label: '전공',
-            val: deptSel,
-            set: setDeptSel,
-            opts: ['전체', '컴퓨터공학과', '경영학과', '심리학과', '산업공학과'],
-          },
-        ].map((f) => (
-          <div key={f.label} className="flex flex-col gap-1 w-44">
-            <label className="text-[10px] font-semibold text-[#656D76]">{f.label}</label>
-            <select
-              value={f.val}
-              onChange={(e) => f.set(e.target.value)}
-              className="h-8 px-2 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151]"
-            >
-              {f.opts.map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </select>
-          </div>
-        ))}
-        <Button style={{ background: ACCENT }} onClick={() => setQueried(true)}>
-          조회
-        </Button>
-
-        {/* Download dropdown */}
-        <div className="relative ml-auto" ref={dropRef}>
-          <button
-            onClick={() => setDropOpen(!dropOpen)}
-            className="h-8 px-4 text-[12px] font-bold rounded-[6px] border border-[#E5E7EB] text-[#656D76] hover:border-[#374151] hover:text-[#374151] transition-colors flex items-center gap-1"
-          >
-            결과 내려받기 <span className="text-[10px]">▾</span>
-          </button>
-          {dropOpen && (
-            <div className="absolute right-0 top-9 z-30 bg-white rounded-[8px] border border-[#E5E7EB] shadow-lg w-52 overflow-hidden">
-              {[
-                { label: '원시 응답 데이터(CSV)', icon: '📄' },
-                { label: '집계 결과(XLSX)', icon: '📊' },
-              ].map((d) => (
-                <button
-                  key={d.label}
-                  onClick={() => handleDownload(d.label)}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-[12px] text-[#1F2328] hover:bg-[#F3F4F6] transition-colors text-left border-b border-[#F3F4F6] last:border-0"
-                >
-                  <span>{d.icon}</span>
-                  {d.label}
-                </button>
-              ))}
-              <div className="px-4 py-2.5 text-[10px] text-[#9AA0A6] leading-snug border-t border-[#F3F4F6]">
-                개인 식별 데이터 다운로드는 별도 권한이 필요하며 다운로드 이력이 기록됩니다.
-              </div>
-            </div>
-          )}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h2 className="text-[16px] font-black text-[#1F2328]">결과 통계</h2>
+          <p className="text-[12px] text-[#9AA0A6] mt-0.5">
+            {selectedRound
+              ? `진단 회차: ${selectedRound.assessmentName}`
+              : '조회할 진단 회차를 선택해 주세요.'}
+          </p>
         </div>
+        <select
+          value={roundId}
+          onChange={(e) => setRoundId(e.target.value)}
+          aria-label="진단 회차 선택"
+          className="h-9 px-3 text-[12px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#374151] min-w-[220px]"
+        >
+          <option value="">회차 선택</option>
+          {rounds.map((r) => (
+            <option key={r.assessmentRoundId} value={r.assessmentRoundId}>
+              {r.assessmentName}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {queried && (
+      {!roundId && rounds.length === 0 && (
+        <div className="bg-white rounded-[8px] border border-[#E5E7EB] p-10 text-center text-[12px] text-[#9AA0A6]">
+          회차 관리 탭에서 진단 회차를 먼저 등록해 주세요.
+        </div>
+      )}
+
+      {!roundId && rounds.length > 0 && (
+        <EmptyState message="조회할 진단 회차를 선택해 주세요." />
+      )}
+
+      {roundId && isError && (
+        <div className="p-3 rounded-[8px] bg-[#FEE2E2] border border-[#FECACA] text-[12px] text-[#CF222E] font-semibold">
+          {error instanceof ApiError ? error.message : '결과 통계를 조회하지 못했습니다.'}
+        </div>
+      )}
+
+      {roundId && !isError && (
         <>
-          {/* KPI row */}
-          <div className="grid grid-cols-4 gap-4 mb-5">
+          {/* Summary */}
+          <div className="grid grid-cols-2 gap-4 mb-5 max-w-[520px]">
             <StatTile
-              label="응시 대상"
-              value="1,537명"
-              sub="2026-1 사후진단"
+              label="응답 학생"
+              value={isLoading ? '-' : `${respondentTotal.toLocaleString()}명`}
+              sub="학적 정보가 등록된 응답자 기준"
               accentColor={ACCENT}
             />
-            <StatTile label="응시 완료" value="1,106명" sub="미응시 431명" accentColor="#059669" />
             <StatTile
-              label="응시율"
-              value="72.0%"
-              sub="전년 동기 대비"
-              accentColor="#D97706"
-              trend={{ value: '-3.2%p', up: false }}
+              label="전체 평균"
+              value={isLoading || !hasResultData ? '-' : `${overallAvg.toFixed(1)}점`}
+              sub="6개 역량 평균 · 100점 기준"
+              accentColor="#374151"
             />
-            <StatTile label="평균 점수" value="66.2점" sub="100점 기준" accentColor="#374151" />
           </div>
 
-          {/* Bar chart */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 mb-5">
+          {/* Competency distribution bar chart */}
+          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
               <h3 className="text-[13px] font-bold text-[#1F2328]">역량별 평균 점수 분포</h3>
-              <span className="text-[11px] text-[#9AA0A6] ml-1">100점 기준</span>
+              <span className="text-[11px] text-[#9AA0A6] ml-1">
+                100점 기준 · 축 순서는 결과 방사형 차트와 동일
+              </span>
             </div>
-            <div className="flex justify-center overflow-x-auto">
-              <BarChart data={COMP_AVGS} color={ACCENT} height={160} />
-            </div>
-            {/* Threshold line annotation */}
-            <div className="flex justify-center mt-2">
-              <div className="flex items-center gap-1.5 text-[10px] text-[#D97706]">
-                <div className="w-6 border-t-2 border-dashed border-[#D97706]" />
-                <span>60점 기준선 (미달 시 역량 강화 권고)</span>
+
+            {isLoading ? (
+              <div className="py-16 text-center text-[12px] text-[#9AA0A6]">불러오는 중...</div>
+            ) : !hasResultData ? (
+              <EmptyState
+                message="집계할 응답이 없습니다."
+                sub="아직 제출된 진단 결과가 없거나 학적 정보가 등록된 응답자가 없습니다."
+              />
+            ) : (
+              <div className="flex justify-center overflow-x-auto">
+                <BarChart data={competencyBars} color={ACCENT} height={180} unit="점" />
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Heatmap table */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-            <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center gap-2">
+          {/* Group comparison chart */}
+          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 mt-5">
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
               <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-              <h3 className="text-[13px] font-bold text-[#1F2328]">단과대별 역량 점수 비교</h3>
-              <span className="text-[11px] text-[#9AA0A6] ml-1">옅은 빨강 = 해당 열 최솟값</span>
+              <h3 className="text-[13px] font-bold text-[#1F2328]">집단별 비교</h3>
+              <span className="text-[11px] text-[#9AA0A6] ml-1">역량별 평균 점수를 집단 간 비교</span>
+              <div className="ml-auto flex gap-1.5">
+                {GROUP_AXES.map((a) => (
+                  <button
+                    key={a.value}
+                    onClick={() => setGroupBy(a.value)}
+                    aria-pressed={groupBy === a.value}
+                    className={`h-7 px-3 text-[11px] font-bold rounded-full border transition-colors ${groupBy === a.value ? 'text-white border-[#374151]' : 'bg-white text-[#656D76] border-[#E5E7EB] hover:border-[#9CA3AF]'}`}
+                    style={groupBy === a.value ? { background: ACCENT } : {}}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[12px]">
-                <thead>
-                  <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#656D76] text-left whitespace-nowrap">
-                      단과대
-                    </th>
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#656D76] text-center whitespace-nowrap">
-                      응시자
-                    </th>
-                    {COMP_LABELS.map((l) => (
-                      <th
-                        key={l}
-                        className="px-4 py-3 text-[10px] font-semibold text-[#656D76] text-center whitespace-nowrap"
-                      >
-                        {l}
-                      </th>
-                    ))}
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#656D76] text-center whitespace-nowrap">
-                      종합 평균
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {COLLEGE_DATA.map((row, ri) => (
-                    <tr
-                      key={row.college}
-                      className={`border-b border-[#F3F4F6] last:border-0 ${ri % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'} hover:bg-[#F3F4F6] transition-colors`}
-                    >
-                      <td className="px-4 py-3 font-bold text-[#1F2328] whitespace-nowrap">
-                        {row.college}
-                      </td>
-                      <td className="px-4 py-3 text-center text-[#656D76]">{row.cnt}</td>
-                      {COMP_KEYS.map((k) => {
-                        const v = row[k];
-                        const isMin = v === minPerCol[k];
-                        return (
-                          <td
-                            key={k}
-                            className="px-4 py-3 text-center"
-                            style={isMin ? { background: '#FEF2F2' } : {}}
-                          >
-                            <span
-                              className={`text-[12px] font-bold ${isMin ? 'text-[#CF222E]' : ''}`}
-                            >
-                              {v.toFixed(1)}
+
+            {isLoading ? (
+              <div className="py-16 text-center text-[12px] text-[#9AA0A6]">불러오는 중...</div>
+            ) : !hasResultData || groupCompare.series.length === 0 ? (
+              <EmptyState
+                message="비교할 집단이 없습니다."
+                sub={`${groupBy === 'GRADE' ? '학년' : '전공'} 정보가 등록된 응답자가 없습니다.`}
+              />
+            ) : (
+              <>
+                {groupCompare.truncated && (
+                  <p className="text-[11px] text-[#9AA0A6] mb-3">
+                    {groupBy === 'GRADE' ? '학년' : '전공'} {groupCompare.totalGroups}개 중 종합 평균
+                    상위 3개·하위 3개만 표시합니다.
+                  </p>
+                )}
+                <div className="flex justify-center overflow-x-auto">
+                  <GroupCompareChart
+                    competencies={groupCompare.competencies}
+                    series={groupCompare.series}
+                  />
+                </div>
+                {groupCompare.truncated ? (
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    {['상위', '하위'].map((tier, ti) => {
+                      const start = ti === 0 ? 0 : groupCompare.topCount;
+                      const items =
+                        ti === 0
+                          ? groupCompare.series.slice(0, groupCompare.topCount)
+                          : groupCompare.series.slice(groupCompare.topCount);
+                      return (
+                        <div
+                          key={tier}
+                          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] text-[#656D76]"
+                        >
+                          <span className="font-bold">
+                            {tier} {items.length}
+                          </span>
+                          {items.map((s, i) => (
+                            <span key={s.key} className="flex items-center gap-1.5">
+                              <span
+                                className="w-2.5 h-2.5 rounded-[2px] shrink-0"
+                                style={{
+                                  background: GROUP_COLORS[(start + i) % GROUP_COLORS.length],
+                                }}
+                              />
+                              {s.label}
+                              <span className="text-[#9AA0A6]">({s.mean.toFixed(1)})</span>
                             </span>
-                          </td>
-                        );
-                      })}
-                      <td
-                        className="px-4 py-3 text-center"
-                        style={row.avg === minPerCol['avg'] ? { background: '#FEF2F2' } : {}}
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 justify-center">
+                    {groupCompare.series.map((s, si) => (
+                      <div
+                        key={s.key}
+                        className="flex items-center gap-1.5 text-[10px] text-[#656D76]"
                       >
                         <span
-                          className={`text-[12px] font-black ${row.avg === minPerCol['avg'] ? 'text-[#CF222E]' : ''}`}
-                          style={row.avg !== minPerCol['avg'] ? { color: ACCENT } : {}}
-                        >
-                          {row.avg.toFixed(1)}
+                          className="w-2.5 h-2.5 rounded-[2px] shrink-0"
+                          style={{ background: GROUP_COLORS[si % GROUP_COLORS.length] }}
+                        />
+                        {s.label}
+                        <span className="text-[#9AA0A6]">
+                          ({s.respondentCount.toLocaleString()}명)
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {/* Footer: column min */}
-                <tfoot>
-                  <tr className="bg-[#F6F8FA] border-t border-[#E5E7EB]">
-                    <td className="px-4 py-2.5 text-[10px] font-bold text-[#656D76]">최솟값</td>
-                    <td className="px-4 py-2.5 text-center text-[10px] text-[#9AA0A6]">
-                      {Math.min(...COLLEGE_DATA.map((r) => r.cnt))}
-                    </td>
-                    {COMP_KEYS.map((k) => (
-                      <td
-                        key={k}
-                        className="px-4 py-2.5 text-center text-[10px] font-bold text-[#CF222E]"
-                      >
-                        {minPerCol[k].toFixed(1)}
-                      </td>
+                      </div>
                     ))}
-                    <td className="px-4 py-2.5 text-center text-[10px] font-bold text-[#CF222E]">
-                      {minPerCol['avg'].toFixed(1)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </>
       )}
-
-      {/* Privacy modal */}
-      <Modal
-        open={privacyInfo}
-        onClose={() => setPrivacyInfo(false)}
-        title="다운로드 안내"
-        footer={
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setPrivacyInfo(false)}>
-              확인
-            </Button>
-          </div>
-        }
-      >
-        <div className="p-4 rounded-[8px] bg-[#FFF7ED] border border-[#FED7AA] text-[13px] text-[#92400E] leading-relaxed">
-          개인 식별 데이터 다운로드는 별도 권한이 필요하며 <strong>다운로드 이력이 기록</strong>
-          됩니다.
-          <br />
-          권한 신청은 시스템 관리자에게 문의하세요.
-        </div>
-      </Modal>
     </div>
   );
 }
@@ -1269,6 +1265,17 @@ function ResultStats() {
 
 export default function DiagnosisOps() {
   const [tab, setTab] = useState('round');
+
+  // 회차/응시/결과 통계 세 탭이 같은 회차 목록을 참조한다. react-query 캐시가 탭 전환·재조회의
+  // 단일 원천이며, 등록·수정 후에는 각 뮤테이션이 이 키를 무효화한다.
+  const {
+    data: rounds = [],
+    isLoading: roundsLoading,
+    isError: roundsError,
+  } = useQuery({
+    queryKey: ROUNDS_QUERY_KEY,
+    queryFn: fetchAssessmentRounds,
+  });
 
   const TABS = [
     { key: 'round', label: '① 회차 관리' },
@@ -1282,9 +1289,21 @@ export default function DiagnosisOps() {
         <Tabs tabs={TABS} active={tab} onChange={setTab} accentColor={ACCENT} />
       </div>
 
-      {tab === 'round' && <RoundManage />}
-      {tab === 'response' && <ResponseManage />}
-      {tab === 'stats' && <ResultStats />}
+      {/* 조회 중·실패 상태에서는 각 탭의 "등록된 회차가 없습니다" 빈 화면을 띄우지 않는다
+          (rounds가 기본값 []이라 성공한 빈 응답과 구분되지 않기 때문). */}
+      {roundsError ? (
+        <div className="p-3 rounded-[8px] bg-[#FEE2E2] border border-[#FECACA] text-[12px] text-[#CF222E] font-semibold">
+          회차 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+        </div>
+      ) : roundsLoading ? (
+        <SkeletonLoader rows={6} cols={8} />
+      ) : (
+        <>
+          {tab === 'round' && <RoundManage rounds={rounds} />}
+          {tab === 'response' && <ResponseManage rounds={rounds} />}
+          {tab === 'stats' && <ResultStats rounds={rounds} />}
+        </>
+      )}
     </div>
   );
 }

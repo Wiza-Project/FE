@@ -1,6 +1,20 @@
 import { useState, useRef } from 'react';
 
 /**
+ * accept가 확장자 나열(`.pdf,.doc`) 형태일 때만 필터링한다. `image/*` 같은 MIME 패턴
+ * 토큰은 이 프로젝트 내 사용 방식과 맞지 않아 걸러내지 않고 항상 통과시킨다.
+ */
+function isAllowedFile(file, accept) {
+  const tokens = accept
+    .split(',')
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => t.startsWith('.'));
+  if (tokens.length === 0) return true;
+  const name = file.name.toLowerCase();
+  return tokens.some((ext) => name.endsWith(ext));
+}
+
+/**
  * @param {Object} props
  * @param {string} [props.accept]
  * @param {string} [props.maxSize] 표시용 문구 (실제 용량 검증은 하지 않습니다)
@@ -15,16 +29,26 @@ export function FileUpload({
 }) {
   const [dragging, setDragging] = useState(false);
   const [files, setFiles] = useState([]);
+  const [rejectedNames, setRejectedNames] = useState([]);
   const inputRef = useRef(null);
 
   const handleFiles = (fs) => {
     if (!fs) return;
     const arr = Array.from(fs);
-    setFiles((prev) => (multiple ? [...prev, ...arr] : arr));
-    onFiles?.(arr);
+    const valid = arr.filter((f) => isAllowedFile(f, accept));
+    const rejected = arr.filter((f) => !isAllowedFile(f, accept));
+    setRejectedNames(rejected.map((f) => f.name));
+    if (valid.length === 0) return;
+    const filesToUse = multiple ? valid : valid.slice(0, 1);
+    setFiles((prev) => (multiple ? [...prev, ...filesToUse] : filesToUse));
+    onFiles?.(filesToUse);
   };
 
-  const removeFile = (i) => setFiles((prev) => prev.filter((_, j) => j !== i));
+  const removeFile = (i) => {
+    const next = files.filter((_, j) => j !== i);
+    setFiles(next);
+    onFiles?.(next);
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -74,6 +98,11 @@ export function FileUpload({
           허용 형식: {accept} · 최대 {maxSize}
         </p>
       </div>
+      {rejectedNames.length > 0 && (
+        <p role="alert" className="text-[11px] text-[#CF222E]">
+          허용되지 않은 형식이라 제외되었습니다: {rejectedNames.join(', ')}
+        </p>
+      )}
       {files.length > 0 && (
         <div className="flex flex-col gap-1.5">
           {files.map((f, i) => (

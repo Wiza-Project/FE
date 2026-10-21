@@ -1,193 +1,118 @@
-import { useState } from 'react';
-import { PageHeader, Stepper, Button, ConfirmDialog, toast } from '@/components/common';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  PageHeader,
+  Stepper,
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  SkeletonLoader,
+} from '@/components/common';
+import {
+  fetchCounselingTypes,
+  fetchAvailableSchedules,
+  createCounselingReservation,
+} from '@/api/counsel';
+import {
+  useCounselingConsent,
+  COUNSELING_CONSENT_POLICIES_QUERY_KEY,
+  MY_CONSENTS_QUERY_KEY,
+} from '@/hooks/useCounselingConsent';
+import {
+  APPLICATION_ROUTE,
+  APPLICATION_ROUTE_LABEL,
+  COUNSELING_RESERVATION_ERROR_CODE,
+  COUNSELING_RESERVATION_STATUS_LABEL,
+  COUNSELING_TYPE_CODE,
+} from '@/constants/domain';
+
+// 신청 실패 사유를 사용자가 이해할 수 있는 문구로 바꾼다. 문서에 명시된 코드만 분기한다.
+// isCareerType은 선택한 유형이 진로상담(CS200)인지 여부다 — 진로상담 일정은 지도교수
+// 개인이 여는 것이라, 일정이 사라졌을 때 "다른 일정을 선택"만으로는 해결되지 않을 수
+// 있어 문의 경로를 함께 안내한다.
+const getSubmitErrorMessage = (error, isCareerType) => {
+  const errorCode = error?.code;
+  if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
+    return isCareerType
+      ? '선택한 일정을 더 이상 사용할 수 없습니다. 지도교수 또는 상담센터에 문의하거나 다른 일정을 선택해 주세요.'
+      : '선택한 일정을 더 이상 사용할 수 없습니다. 다른 일정을 선택해 주세요.';
+  }
+  if (errorCode === COUNSELING_RESERVATION_ERROR_CODE.INVALID_INPUT) {
+    return '신청 내용을 확인해 주세요.';
+  }
+  // FORBIDDEN(A004)은 동의가 무효화된 경우로, 별도 분기에서 동의 단계로 되돌리며
+  // 전용 안내문을 보여주므로 여기서는 처리하지 않는다.
+  return '상담 신청에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+};
 
 const ACCENT = '#0891B2';
 
-// ─── Data ────────────────────────────────────────────────────────────────────
+// UTC ISO 문자열을 사용자 로컬 기준 날짜/요일/시간으로 변환한다.
+const formatDateTime = (iso) => {
+  const d = new Date(iso);
+  return {
+    dateLabel: d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' }),
+    dayLabel: d.toLocaleDateString('ko-KR', { weekday: 'short' }),
+    timeLabel: d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+  };
+};
 
-const COUNSELING_TYPES = [
-  {
-    key: 'A',
-    title: '지도교수 진로·역량 상담',
-    desc: '신청 즉시 일정 확정 · 1회 상담 진행. 상담 후 상담일지와 실행계획서를 제공합니다.',
-    tags: ['1회 상담', '일정 즉시 확정', '실행계획 제공'],
-    color: '#0891B2',
-  },
-  {
-    key: 'B',
-    title: '상담센터 개인상담',
-    desc: '접수면접 후 상담자 배정 · 다회기 심층 상담 진행. 심리적 어려움 및 대인관계 등을 다룹니다.',
-    tags: ['다회기', '접수면접 후 배정', '심층 상담'],
-    color: '#7C3AED',
-  },
-  {
-    key: 'C',
-    title: '심리검사 · 해석상담',
-    desc: '검사 실시 후 결과 처리 · 별도 해석상담 예약. MBTI, MMPI 등 다양한 검사를 제공합니다.',
-    tags: ['심리검사', '해석상담 포함', 'MBTI·MMPI'],
-    color: '#D97706',
-  },
-];
+// "날짜 (요일) 시간" 한 줄 라벨. 선택 배너·확인 다이얼로그·완료 화면에서 같은 형식을 쓴다.
+const formatScheduleLabel = (iso) => {
+  const { dateLabel, dayLabel, timeLabel } = formatDateTime(iso);
+  return `${dateLabel} (${dayLabel}) ${timeLabel}`;
+};
 
-const COUNSELORS = [
-  {
-    id: 'C01',
-    name: '김상담',
-    role: '지도교수',
-    dept: '컴퓨터공학과',
-    specialties: ['진로설계', '역량개발', '취업'],
-    availableSlots: 4,
-  },
-  {
-    id: 'C02',
-    name: '이전문',
-    role: '전문상담사',
-    dept: '학생상담센터',
-    specialties: ['대인관계', '심리지원', '진로'],
-    availableSlots: 2,
-  },
-  {
-    id: 'C03',
-    name: '박심리',
-    role: '전문상담사',
-    dept: '학생상담센터',
-    specialties: ['심리검사', '스트레스', 'MBTI·MMPI'],
-    availableSlots: 3,
-  },
-  {
-    id: 'C04',
-    name: '최진로',
-    role: '지도교수',
-    dept: '경영학과',
-    specialties: ['취업', '창업', '진로설계'],
-    availableSlots: 0,
-  },
-];
+// 동의 시각은 지난 해에 기록됐을 수 있어 연도까지 표시해야 모호하지 않다.
+// 상담 일정 라벨(formatScheduleLabel)은 임박한 미래라 연도 없이도 명확하므로 그대로 둔다.
+const formatConsentTimestamp = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
-const BASE_SLOTS = [
-  {
-    id: 'S01',
-    date: '2026-08-17',
-    dayLabel: '월',
-    time: '10:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-  {
-    id: 'S02',
-    date: '2026-08-17',
-    dayLabel: '월',
-    time: '11:00',
-    location: '산학협력관 305호',
-    status: 'full',
-  },
-  {
-    id: 'S03',
-    date: '2026-08-18',
-    dayLabel: '화',
-    time: '14:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-  {
-    id: 'S04',
-    date: '2026-08-18',
-    dayLabel: '화',
-    time: '15:00',
-    location: '산학협력관 305호',
-    status: 'closed',
-  },
-  {
-    id: 'S05',
-    date: '2026-08-19',
-    dayLabel: '수',
-    time: '09:00',
-    location: '산학협력관 305호',
-    status: 'holiday',
-  },
-  {
-    id: 'S06',
-    date: '2026-08-19',
-    dayLabel: '수',
-    time: '10:00',
-    location: '산학협력관 305호',
-    status: 'holiday',
-  },
-  {
-    id: 'S07',
-    date: '2026-08-20',
-    dayLabel: '목',
-    time: '13:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-  {
-    id: 'S08',
-    date: '2026-08-20',
-    dayLabel: '목',
-    time: '14:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-  {
-    id: 'S09',
-    date: '2026-08-21',
-    dayLabel: '금',
-    time: '10:00',
-    location: '산학협력관 305호',
-    status: 'full',
-  },
-  {
-    id: 'S10',
-    date: '2026-08-21',
-    dayLabel: '금',
-    time: '11:00',
-    location: '산학협력관 305호',
-    status: 'available',
-  },
-];
+// 상담사 필터 옵션과 필터링에서 같은 키 형식을 공유하도록 한 곳에서 조합한다.
+// 두 곳의 키 형식이 어긋나면 필터가 아무 일정도 못 찾는 버그로 이어진다.
+const counselorKeyOf = (schedule) =>
+  `${schedule.counselorName}||${schedule.counselorDepartmentName ?? ''}`;
 
-// ─── Slot Card ────────────────────────────────────────────────────────────────
+// ─── Schedule Card ────────────────────────────────────────────────────────────
 
 /**
  * @param {Object} props
- * @param {typeof BASE_SLOTS[0]} props.slot
+ * @param {import('@/api/counsel').AvailableSchedule} props.schedule
  * @param {boolean} props.isSelected
  * @param {() => void} props.onClick
  */
-function SlotCard({ slot, isSelected, onClick }) {
-  const disabled = slot.status === 'full' || slot.status === 'closed' || slot.status === 'holiday';
-  const label =
-    slot.status === 'full'
-      ? '1/1 마감'
-      : slot.status === 'closed'
-        ? '마감'
-        : slot.status === 'holiday'
-          ? '휴무'
-          : '0/1 가능';
-  const labelColor = slot.status === 'available' ? '#0891B2' : '#9AA0A6';
+function ScheduleCard({ schedule, isSelected, onClick }) {
+  const start = formatDateTime(schedule.startsAt);
+  const end = formatDateTime(schedule.endsAt);
 
   return (
     <button
-      disabled={disabled}
+      type="button"
+      aria-pressed={isSelected}
       onClick={onClick}
       className={`w-full rounded-[8px] border-2 p-3 text-left transition-all ${
-        disabled
-          ? 'bg-[#F9FAFB] border-[#E5E7EB] cursor-not-allowed opacity-60'
-          : isSelected
-            ? 'bg-[#ECFEFF] border-[#0891B2] shadow-[0_0_0_3px_rgba(8,145,178,0.12)]'
-            : 'bg-white border-[#E5E7EB] hover:border-[#67E8F9] hover:shadow-[0_1px_4px_rgba(8,145,178,0.08)]'
+        isSelected
+          ? 'bg-[#ECFEFF] border-[#0891B2] shadow-[0_0_0_3px_rgba(8,145,178,0.12)]'
+          : 'bg-white border-[#E5E7EB] hover:border-[#67E8F9] hover:shadow-[0_1px_4px_rgba(8,145,178,0.08)]'
       }`}
     >
       <div className="flex items-center justify-between mb-1">
         <span
-          className={`text-[11px] font-black ${isSelected ? 'text-[#0891B2]' : disabled ? 'text-[#9AA0A6]' : 'text-[#1F2328]'}`}
+          className={`text-[12px] font-black ${isSelected ? 'text-[#0891B2]' : 'text-[#1F2328]'}`}
         >
-          {slot.dayLabel} {slot.time}
+          {start.dateLabel} ({start.dayLabel}) {start.timeLabel}–{end.timeLabel}
         </span>
         {isSelected && (
           <div
-            className="w-4 h-4 rounded-full flex items-center justify-center"
+            className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ background: ACCENT }}
           >
             <svg
@@ -204,8 +129,17 @@ function SlotCard({ slot, isSelected, onClick }) {
           </div>
         )}
       </div>
-      <div className="text-[10px] font-bold" style={{ color: labelColor }}>
-        {label}
+      <div className="text-[11px] font-semibold text-[#1F2328]">
+        {schedule.counselorName}
+        {schedule.counselorDepartmentName && (
+          <span className="text-[#9AA0A6] font-normal"> · {schedule.counselorDepartmentName}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 mt-1 text-[10px] text-[#656D76]">
+        {schedule.location && <span>{schedule.location}</span>}
+        <span className="font-bold" style={{ color: ACCENT }}>
+          잔여 {schedule.remainingCapacity}
+        </span>
       </div>
     </button>
   );
@@ -214,65 +148,218 @@ function SlotCard({ slot, isSelected, onClick }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 /**
- * 상담 신청 4단계 흐름 (동의 → 유형·상담자 선택 → 일정 선택 → 완료).
+ * 상담 신청 4단계 흐름 (동의 → 유형 선택 → 일정 선택 → 완료).
  *
  * @param {Object} props
  * @param {() => void} props.onComplete
  * @param {() => void} [props.onBack]
  */
 export default function CounselingApply({ onComplete, onBack }) {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
+  const {
+    data: counselingTypes = [],
+    isLoading: isCounselingTypesLoading,
+    isError: hasCounselingTypesError,
+    isFetching: isCounselingTypesFetching,
+    refetch: refetchCounselingTypes,
+  } = useQuery({
+    queryKey: ['counselingTypes'],
+    queryFn: fetchCounselingTypes,
+    // 서버는 활성 유형 전체(DIRECT·CENTER)를 내려주지만, 학생 온라인 신청은 현재 DIRECT만 제공한다.
+    // CENTER(센터 접수)는 후순위라 화면에서 걸러낸다. 이 필터는 UX 차단이고 최종 방어는 백엔드가 한다.
+    select: (types) => types.filter((type) => type.applicationRoute === APPLICATION_ROUTE.DIRECT),
+  });
 
-  // Step 0 — consent
-  const [agreed, setAgreed] = useState(false);
+  // Step 0 — consent. 정책·동의 이력 조회와 동의 기록은 AI 도우미와 공유하는 훅이 맡는다.
+  // 이 화면은 훅 결과(true/false)를 받아 단계(step)만 바꾼다.
+  const {
+    currentPolicy,
+    activeConsent,
+    isLoading: isConsentLoading,
+    isFetching: isConsentFetching,
+    error: consentQueryError,
+    hasConfigError: hasConsentConfigError,
+    refetch: refetchConsent,
+    consentChecked,
+    changeConsentChecked,
+    resetConsentChecked,
+    consentError,
+    setConsentError,
+    isAgreeing,
+    refreshConsentState,
+    agreeCurrentPolicy,
+  } = useCounselingConsent();
+  const hasConsentQueryError = !!consentQueryError;
+  const activeConsentId = activeConsent?.userConsentId ?? null;
+  // 최종 제출 직전 동의 재조회 중인지 표시한다(동의 기록 중 상태는 훅의 isAgreeing).
+  const [isConsentRefreshing, setIsConsentRefreshing] = useState(false);
+  const returnToConsentStep = () => {
+    resetConsentChecked();
+    setSubmitError('');
+    setStep(0);
+  };
 
-  // Step 1 — type & counselor
+  // "동의하고 다음" 버튼 핸들러. 동의가 확인되면(true) 다음 단계로 넘어간다.
+  const handleAgreeAndNext = async () => {
+    const isConsentReady = await agreeCurrentPolicy();
+    if (isConsentReady) {
+      setStep(1);
+    }
+  };
+
+  // Step 1 — type
   const [selectedType, setSelectedType] = useState(null);
-  const [selectedCounselor, setSelectedCounselor] = useState(null);
   const HAS_CONFLICT = false; // set true to demo duplicate error
 
-  // Step 2 — schedule
-  const [slots, setSlots] = useState(BASE_SLOTS);
+  const chosenType = counselingTypes.find((type) => type.typeCode === selectedType);
+  // 진로상담(CS200)인지 여부. 빈 일정 문구·S002 문구에서만 쓰고 인가·필터링에는 쓰지 않는다.
+  const isCareerType = chosenType?.typeCode === COUNSELING_TYPE_CODE.CAREER;
+
+  // Step 2 — schedule. 유형별 실제 예약 가능 일정만 조회한다(서버가 이미 필터링해서 내려줌).
+  const {
+    data: schedules = [],
+    isLoading: isSchedulesLoading,
+    isError: hasSchedulesError,
+    isFetching: isSchedulesFetching,
+    refetch: refetchSchedules,
+  } = useQuery({
+    queryKey: ['availableSchedules', chosenType?.counselingTypeId],
+    queryFn: () => fetchAvailableSchedules(chosenType.counselingTypeId),
+    enabled: !!chosenType?.counselingTypeId,
+  });
+
+  const [counselorFilter, setCounselorFilter] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [memo, setMemo] = useState('');
   const [submitConfirm, setSubmitConfirm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  // 메모 입력값 검증 오류와 API 제출 실패 오류를 분리한다.
+  // memoError는 메모 필드에만 연결하고(aria-invalid/aria-describedby),
+  // submitError(일정 만료 등 제출 실패)는 별도 알림 영역에 표시해 메모 필드에 잘못 묶이지 않게 한다.
+  const [memoError, setMemoError] = useState('');
+  const [submitError, setSubmitError] = useState('');
+  // 서버 생성 응답에는 상담사명·일시·장소·유형명이 없어서, 완료 화면에 표시할 값을
+  // 제출 시점의 chosenType/chosenSlot에서 미리 스냅샷해 둔다. 제출 후 availableSchedules를
+  // 무효화하면 방금 예약한 슬롯이 목록에서 빠져 chosenSlot이 사라지기 때문이다.
+  const [completionInfo, setCompletionInfo] = useState(null);
+  const [createdReservation, setCreatedReservation] = useState(null);
+
+  const createReservationMutation = useMutation({
+    mutationFn: createCounselingReservation,
+    // requestContent(상담 희망 내용)는 학생의 민감한 원문이라 완료 후 mutation cache에
+    // 남겨두지 않는다. gcTime: 0으로 즉시 회수 대상이 되게 하고, 아래 onSettled에서
+    // reset()으로 관찰자·variables를 확실히 분리한다.
+    gcTime: 0,
+    onSuccess: (reservation) => {
+      setCreatedReservation(reservation);
+      queryClient.invalidateQueries({ queryKey: ['counselingReservations'] });
+      queryClient.invalidateQueries({ queryKey: ['availableSchedules'] });
+      setStep(3);
+    },
+    onError: async (error) => {
+      // A004: 제출에 쓴 동의가 무효·철회되었거나 본인 것이 아니라는 뜻이다.
+      // 서버가 최종 판정한 결과이므로 자동으로 다시 동의 처리하지 않고, 동의 단계로 되돌려
+      // 최신 이력을 다시 조회해서 사용자가 직접 재확인하게 한다.
+      if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.FORBIDDEN) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: COUNSELING_CONSENT_POLICIES_QUERY_KEY }),
+          queryClient.invalidateQueries({ queryKey: MY_CONSENTS_QUERY_KEY }),
+        ]);
+        // submitError는 2단계 알림 영역에서만 렌더되므로, 되돌아갈 0단계에서 보이도록
+        // 동일한 내용을 consentError로도 남긴다.
+        setConsentError('동의가 만료되었거나 철회되어 신청할 수 없습니다. 동의 내용을 다시 확인해 주세요.');
+        returnToConsentStep();
+        return;
+      }
+      setSubmitError(getSubmitErrorMessage(error, isCareerType));
+      if (error?.code === COUNSELING_RESERVATION_ERROR_CODE.SCHEDULE_NOT_AVAILABLE) {
+        setSelectedSlot(null);
+        queryClient.invalidateQueries({ queryKey: ['availableSchedules'] });
+      }
+    },
+    // onError는 여러 지점에서 return하는 async 콜백이라, 정리 시점을 한 곳(onSettled)으로
+    // 모은다. onSettled는 onSuccess/onError가 완료(await 포함)된 뒤에 실행되므로, 화면 처리가
+    // 다 끝난 뒤에만 mutation cache에서 신청 내용을 제거한다.
+    onSettled: () => {
+      createReservationMutation.reset();
+    },
+  });
 
   // Helpers
-  const STEPS = ['동의', '유형·상담자 선택', '일정 선택', '신청 완료'];
+  const STEPS = ['동의', '유형 선택', '일정 선택', '신청 완료'];
 
-  const chosenSlot = slots.find((s) => s.id === selectedSlot);
-  const chosenCounselor = COUNSELORS.find((c) => c.id === selectedCounselor);
-  const chosenType = COUNSELING_TYPES.find((t) => t.key === selectedType);
+  // 실제 일정 목록에서 상담사를 중복 없이 뽑아 필터 옵션으로 쓴다.
+  const counselorOptions = useMemo(() => {
+    const map = new Map();
+    schedules.forEach((s) => {
+      const key = counselorKeyOf(s);
+      if (!map.has(key)) {
+        map.set(key, { key, name: s.counselorName, dept: s.counselorDepartmentName });
+      }
+    });
+    return Array.from(map.values());
+  }, [schedules]);
 
-  const handleSlotClick = (slot) => {
-    if (selectedSlot === slot.id) {
-      setSelectedSlot(null);
-      return;
-    }
-    // Simulate race: slot S10 gets snatched
-    if (slot.id === 'S10' && selectedSlot !== 'S10') {
-      setSlots((prev) => prev.map((s) => (s.id === 'S10' ? { ...s, status: 'full' } : s)));
-      toast('선택한 시간의 정원이 마감되었습니다. 다른 시간을 선택해 주세요.', 'warning');
-      return;
-    }
-    setSelectedSlot(slot.id);
-  };
+  const filteredSchedules = useMemo(
+    () =>
+      counselorFilter
+        ? schedules.filter((s) => counselorKeyOf(s) === counselorFilter)
+        : schedules,
+    [schedules, counselorFilter],
+  );
+
+  const chosenSlot = schedules.find((s) => s.scheduleId === selectedSlot);
 
   const handleFinalSubmit = async () => {
+    // 이미 요청이 진행 중이면 중복 제출을 막는다.
+    if (createReservationMutation.isPending || isConsentRefreshing) {
+      return;
+    }
+    // 다이얼로그가 열린 사이 일정이 갱신돼 선택 슬롯이 사라졌을 수 있다.
+    // (다른 학생이 먼저 예약해 refetch로 목록에서 빠지는 경우 등)
+    // 이때는 신청을 진행하지 않고 다이얼로그를 닫은 뒤 선택을 초기화한다.
+    if (!chosenType || !chosenSlot || memo.trim() === '') {
+      setSubmitConfirm(false);
+      if (!chosenSlot) {
+        setSelectedSlot(null);
+      }
+      return;
+    }
     setSubmitConfirm(false);
-    setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setSubmitting(false);
-    setStep(3);
-  };
+    setIsConsentRefreshing(true);
+    try {
+      // 예약 요청 직전에도 최신 동의 ID를 확인해 오래된 Query 캐시를 사용하지 않는다.
+      const currentConsentState = await refreshConsentState();
+      if (!currentConsentState.policy) {
+        setConsentError('동의 정보를 확인하지 못해 신청할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+        returnToConsentStep();
+        return;
+      }
+      if (!currentConsentState.consent) {
+        setConsentError('동의가 유효하지 않아 신청을 진행할 수 없습니다. 동의 내용을 다시 확인해 주세요.');
+        returnToConsentStep();
+        return;
+      }
 
-  // Group slots by date column for the grid
-  const dateGroups = Array.from(new Set(slots.map((s) => s.date))).map((date) => ({
-    date,
-    dayLabel: slots.find((s) => s.date === date).dayLabel,
-    slots: slots.filter((s) => s.date === date),
-  }));
+      setCompletionInfo({
+        typeName: chosenType.typeName,
+        counselorName: chosenSlot.counselorName,
+        startsAt: chosenSlot.startsAt,
+        location: chosenSlot.location,
+      });
+      createReservationMutation.mutate({
+        counselingTypeId: chosenType.counselingTypeId,
+        scheduleId: chosenSlot.scheduleId,
+        requestContent: memo.trim(),
+        consentId: currentConsentState.consent.userConsentId,
+      });
+    } catch {
+      setConsentError('동의 정보를 확인하지 못해 신청할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+      returnToConsentStep();
+    } finally {
+      setIsConsentRefreshing(false);
+    }
+  };
 
   return (
     <div>
@@ -300,94 +387,98 @@ export default function CounselingApply({ onComplete, onBack }) {
       {/* ══════════════════════════════════════════════════════════════ */}
       {step === 0 && (
         <div className="max-w-[640px] flex flex-col gap-4">
-          {/* Consent card */}
-          <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
-              <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-              <h2 className="text-[14px] font-bold text-[#1F2328]">상담 정보 처리 동의</h2>
-              <span className="ml-auto text-[10px] font-black px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
-                필수
-              </span>
-            </div>
-            <div className="px-5 py-5 text-[13px] leading-relaxed text-[#444D56]">
-              <p className="font-bold text-[#1F2328] mb-3">한국대학교 학생상담 정보 처리 방침</p>
-              <p className="mb-3">
-                한국대학교(이하 &quot;학교&quot;)는 학생의 심리적 건강 증진과 성장 지원을 목적으로 상담
-                서비스를 운영하며, 이 과정에서 수집되는 개인정보를 다음과 같이 처리합니다.
-              </p>
-              <ol className="list-decimal list-inside space-y-2 text-[12px] text-[#656D76] mb-4">
-                <li>
-                  <strong className="text-[#1F2328]">수집 항목:</strong> 이름, 학번, 학과, 연락처,
-                  상담 내용 및 기록
-                </li>
-                <li>
-                  <strong className="text-[#1F2328]">이용 목적:</strong> 상담 서비스 제공, 사례
-                  관리, 위기 개입, 교육통계 분석(비식별화)
-                </li>
-                <li>
-                  <strong className="text-[#1F2328]">보유 기간:</strong> 졸업 후 5년간 보관 후 파기
-                </li>
-                <li>
-                  <strong className="text-[#1F2328]">비밀보장 예외:</strong> 자해·타해 위험, 아동
-                  학대 신고 의무, 법원 명령이 있는 경우
-                </li>
-                <li>
-                  <strong className="text-[#1F2328]">제3자 제공:</strong> 원칙적으로 외부 제공 불가.
-                  위기 상황 시 보호자·응급기관 연락 가능
-                </li>
-              </ol>
-              <div className="bg-[#F0FDFE] border border-[#A5F3FC] rounded-[6px] px-4 py-3 text-[12px] text-[#164E63]">
-                위 내용을 충분히 읽고 이해하였으며, 상담 정보 수집 및 처리에 동의합니다. 동의를
-                거부할 권리가 있으나, 거부 시 상담 서비스 이용이 제한됩니다.
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t border-[#E5E7EB] bg-[#F9FAFB]">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  className="w-5 h-5 rounded-[4px] flex-shrink-0"
-                  style={{ accentColor: ACCENT }}
-                />
-                <span className="text-[13px] font-semibold text-[#1F2328]">
-                  위 상담 정보 처리 방침을 읽었으며 이에 동의합니다.
-                </span>
-              </label>
-            </div>
-          </div>
+          {/* 정책·이력 로딩 중 */}
+          {isConsentLoading && <SkeletonLoader rows={4} cols={1} />}
 
-          {/* Consent history */}
-          <div className="px-4 py-3 bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB]">
-            <p className="text-[11px] font-semibold text-[#9AA0A6] mb-1.5 uppercase tracking-wide">
-              동의 이력
-            </p>
-            <div className="flex flex-col gap-1">
-              {[
-                { ver: 'v2.1', date: '2026-03-01 09:22', note: '현재 버전' },
-                { ver: 'v2.0', date: '2025-09-01 10:05', note: '이전 동의' },
-              ].map((h) => (
-                <div key={h.ver} className="flex items-center gap-3 text-[11px] text-[#9AA0A6]">
-                  <span className="font-mono font-bold">{h.ver}</span>
-                  <span>{h.date}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-[4px] bg-[#E5E7EB] text-[#656D76]">
-                    {h.note}
+          {/* 정책 또는 이력 조회 자체가 실패한 경우. "동의 없음"으로 단정하지 않고 재시도를 안내한다. */}
+          {!isConsentLoading && hasConsentQueryError && (
+            <div role="alert" className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-5 py-4">
+              <p className="text-[13px] font-bold text-[#7F1D1D]">동의 정보를 불러오지 못했습니다.</p>
+              <p className="text-[12px] text-[#CF222E] mt-1 mb-3">잠시 후 다시 시도해 주세요.</p>
+              <Button size="sm" variant="outline" loading={isConsentFetching} onClick={refetchConsent}>
+                다시 시도
+              </Button>
+            </div>
+          )}
+
+          {/* 필수 개인정보 동의 정책이 정확히 1건이 아닌 설정 오류. 임의로 하나를 골라 진행하지 않는다. */}
+          {!isConsentLoading && !hasConsentQueryError && hasConsentConfigError && (
+            <div role="alert" className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-5 py-4">
+              <p className="text-[13px] font-bold text-[#7F1D1D]">
+                상담 신청을 위한 동의 항목 설정에 문제가 있어 신청을 진행할 수 없습니다.
+              </p>
+              <p className="text-[12px] text-[#CF222E] mt-1">상담센터에 문의해 주세요.</p>
+            </div>
+          )}
+
+          {!isConsentLoading && !hasConsentQueryError && !hasConsentConfigError && currentPolicy && (
+            <>
+              {/* Consent card */}
+              <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+                <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
+                  <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
+                  <h2 className="text-[14px] font-bold text-[#1F2328]">{currentPolicy.title}</h2>
+                  <span className="text-[10px] font-mono text-[#9AA0A6]">v{currentPolicy.version}</span>
+                  <span className="ml-auto text-[10px] font-black px-2 py-0.5 rounded-full bg-[#FEE2E2] text-[#CF222E]">
+                    필수
                   </span>
                 </div>
-              ))}
-            </div>
-          </div>
+                {/* content는 서버가 내려주는 plain text다. HTML로 신뢰하지 않으므로 그대로 escape되어 렌더된다. */}
+                <div className="px-5 py-5 text-[13px] leading-relaxed text-[#444D56] whitespace-pre-wrap">
+                  {currentPolicy.content}
+                </div>
+                <div className="px-5 py-4 border-t border-[#E5E7EB] bg-[#F9FAFB]">
+                  {activeConsentId ? (
+                    <div className="flex items-center gap-2 text-[13px] font-semibold text-[#1A7F37]">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1A7F37" strokeWidth="1.8" strokeLinecap="round">
+                        <circle cx="8" cy="8" r="7" fill="#DCFCE7" />
+                        <path d="M5 8l2 2 4-4" />
+                      </svg>
+                      <span>
+                        이미 동의했습니다.
+                        {activeConsent?.consentedAt &&
+                          ` (동의일시: ${formatConsentTimestamp(activeConsent.consentedAt)})`}
+                      </span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={consentChecked.checked}
+                        onChange={(e) => changeConsentChecked(e.target.checked)}
+                        className="w-5 h-5 rounded-[4px] flex-shrink-0"
+                        style={{ accentColor: ACCENT }}
+                      />
+                      <span className="text-[13px] font-semibold text-[#1F2328]">
+                        위 상담 정보 처리 방침을 읽었으며 이에 동의합니다.
+                      </span>
+                    </label>
+                  )}
+                </div>
+              </div>
 
-          <div className="flex justify-end">
-            <Button
-              size="md"
-              disabled={!agreed}
-              style={agreed ? { background: ACCENT } : {}}
-              onClick={() => setStep(1)}
-            >
-              동의하고 다음 →
-            </Button>
-          </div>
+              {consentError && (
+                <div role="alert" className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-4 py-3 text-[13px] font-semibold text-[#CF222E]">
+                  {consentError}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  size="md"
+                  disabled={
+                    ((!activeConsentId && !consentChecked.checked) || isAgreeing) ||
+                    isConsentRefreshing
+                  }
+                  loading={isAgreeing || isConsentRefreshing}
+                  style={activeConsentId || consentChecked.checked ? { background: ACCENT } : {}}
+                  onClick={handleAgreeAndNext}
+                >
+                  동의하고 다음 →
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -423,9 +514,9 @@ export default function CounselingApply({ onComplete, onBack }) {
             </div>
           )}
 
-          <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1.3fr' }}>
-            {/* Left: Type selection */}
-            <div className="flex flex-col gap-3">
+          <div className="max-w-[640px]">
+            {/* Type selection */}
+            <div className="flex flex-col gap-3" aria-live="polite">
               <h3 className="text-[13px] font-bold text-[#1F2328] flex items-center gap-2">
                 <div
                   className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white"
@@ -435,14 +526,50 @@ export default function CounselingApply({ onComplete, onBack }) {
                 </div>
                 상담 유형 선택
               </h3>
-              {COUNSELING_TYPES.map((t) => {
-                const isSelected = selectedType === t.key;
+              {isCounselingTypesLoading && <SkeletonLoader rows={3} cols={2} />}
+              {hasCounselingTypesError && (
+                <div
+                  role="alert"
+                  className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-4 py-4"
+                >
+                  <p className="text-[13px] font-bold text-[#7F1D1D]">
+                    상담 유형을 불러오지 못했습니다.
+                  </p>
+                  <p className="text-[12px] text-[#CF222E] mt-1 mb-3">
+                    잠시 후 다시 시도해 주세요.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={isCounselingTypesFetching}
+                    onClick={() => refetchCounselingTypes()}
+                  >
+                    다시 시도
+                  </Button>
+                </div>
+              )}
+              {!isCounselingTypesLoading &&
+                !hasCounselingTypesError &&
+                counselingTypes.length === 0 && (
+                  <EmptyState
+                    message="신청 가능한 상담 유형이 없습니다."
+                    sub="상담센터에 문의해 주세요."
+                  />
+                )}
+              {counselingTypes.map((type) => {
+                const isSelected = selectedType === type.typeCode;
                 return (
                   <button
-                    key={t.key}
+                    key={type.typeCode}
+                    aria-pressed={isSelected}
                     onClick={() => {
-                      setSelectedType(t.key);
-                      setSelectedCounselor(null);
+                      setSelectedType(type.typeCode);
+                      setCounselorFilter(null);
+                      setSelectedSlot(null);
+                      // 유형을 바꾸면 이전 유형에서 난 제출 실패·검증 오류는 더 이상 유효하지 않으므로 지운다.
+                      // 그렇지 않으면 새 일정 화면에 이전 오류 메시지가 그대로 남는다.
+                      setSubmitError('');
+                      setMemoError('');
                     }}
                     className={`w-full text-left rounded-[10px] border-2 p-4 transition-all ${isSelected ? 'bg-[#ECFEFF] shadow-[0_0_0_1px_rgba(8,145,178,0.2)]' : 'bg-white border-[#E5E7EB] hover:border-[#A5F3FC]'}`}
                     style={isSelected ? { borderColor: ACCENT } : {}}
@@ -451,7 +578,7 @@ export default function CounselingApply({ onComplete, onBack }) {
                       <p
                         className={`text-[13px] font-bold leading-snug ${isSelected ? 'text-[#0E7490]' : 'text-[#1F2328]'}`}
                       >
-                        {t.title}
+                        {type.typeName}
                       </p>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ml-2 transition-colors ${isSelected ? '' : 'border-[#D1D5DB]'}`}
@@ -472,127 +599,45 @@ export default function CounselingApply({ onComplete, onBack }) {
                         )}
                       </div>
                     </div>
-                    <p className="text-[11px] text-[#656D76] leading-snug mb-2.5">{t.desc}</p>
                     <div className="flex flex-wrap gap-1">
-                      {t.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                          style={{
-                            background: isSelected ? `${ACCENT}18` : '#F3F4F6',
-                            color: isSelected ? ACCENT : '#656D76',
-                          }}
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={{
+                          background: isSelected ? `${ACCENT}18` : '#F3F4F6',
+                          color: isSelected ? ACCENT : '#656D76',
+                        }}
+                      >
+                        신청 경로: {APPLICATION_ROUTE_LABEL[type.applicationRoute] ?? type.applicationRoute}
+                      </span>
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={{
+                          background: isSelected ? `${ACCENT}18` : '#F3F4F6',
+                          color: isSelected ? ACCENT : '#656D76',
+                        }}
+                      >
+                        상담 방식: {type.counselingMethod}
+                      </span>
                     </div>
+                    {type.precedingProcedure && (
+                      <p className="text-[11px] text-[#656D76] leading-snug mt-2.5">
+                        선행 절차: {type.precedingProcedure}
+                      </p>
+                    )}
                   </button>
                 );
               })}
             </div>
-
-            {/* Right: Counselor table */}
-            <div className="bg-white rounded-[10px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden self-start">
-              <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
-                <div
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white"
-                  style={{ background: ACCENT }}
-                >
-                  2
-                </div>
-                <h3 className="text-[13px] font-bold text-[#1F2328]">상담자 선택</h3>
-                {!selectedType && (
-                  <span className="text-[11px] text-[#9AA0A6] ml-1">
-                    상담 유형을 먼저 선택하세요
-                  </span>
-                )}
-              </div>
-              <table className="w-full text-[12px] border-collapse">
-                <thead>
-                  <tr className="bg-[#F6F8FA] border-b border-[#E5E7EB]">
-                    {['선택', '상담사', '구분', '전문분야', '가능 슬롯'].map((h) => (
-                      <th
-                        key={h}
-                        className={`px-3 py-2.5 text-[10px] font-semibold text-[#656D76] uppercase tracking-wide whitespace-nowrap ${h === '전문분야' ? 'text-left' : 'text-center'}`}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {COUNSELORS.map((c, i) => {
-                    const isSelected = selectedCounselor === c.id;
-                    const disabled = !selectedType || c.availableSlots === 0;
-                    return (
-                      <tr
-                        key={c.id}
-                        onClick={() => !disabled && setSelectedCounselor(c.id)}
-                        className={`border-b border-[#F3F4F6] last:border-0 transition-colors ${
-                          disabled
-                            ? 'opacity-40 cursor-not-allowed'
-                            : isSelected
-                              ? 'bg-[#ECFEFF] cursor-pointer'
-                              : 'hover:bg-[#F0FDFE] cursor-pointer'
-                        } ${i % 2 === 1 && !isSelected ? 'bg-[#FAFAFA]' : ''}`}
-                      >
-                        <td className="px-3 py-3 text-center">
-                          <div
-                            className={`w-4 h-4 rounded-full border-2 mx-auto flex items-center justify-center ${isSelected ? '' : 'border-[#D1D5DB]'}`}
-                            style={isSelected ? { background: ACCENT, borderColor: ACCENT } : {}}
-                          >
-                            {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <div className="font-bold text-[#1F2328] text-[12px]">{c.name}</div>
-                          <div className="text-[10px] text-[#9AA0A6]">{c.dept}</div>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.role === '지도교수' ? 'bg-[#DBEAFE] text-[#0969DA]' : 'bg-[#DCFCE7] text-[#1A7F37]'}`}
-                          >
-                            {c.role}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {c.specialties.map((s) => (
-                              <span
-                                key={s}
-                                className="text-[10px] px-1.5 py-0.5 rounded-[4px] bg-[#F3F4F6] text-[#656D76]"
-                              >
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          {c.availableSlots > 0 ? (
-                            <span className="font-bold text-[#0891B2]">{c.availableSlots}개</span>
-                          ) : (
-                            <span className="text-[#9AA0A6] text-[11px]">마감</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
           </div>
 
           <div className="flex gap-2 justify-between">
-            <Button size="sm" variant="secondary" onClick={() => setStep(0)}>
+            <Button size="sm" variant="secondary" onClick={returnToConsentStep}>
               ← 이전
             </Button>
             <Button
               size="md"
-              disabled={!selectedType || !selectedCounselor || HAS_CONFLICT}
-              style={
-                selectedType && selectedCounselor && !HAS_CONFLICT ? { background: ACCENT } : {}
-              }
+              disabled={!selectedType || HAS_CONFLICT}
+              style={selectedType && !HAS_CONFLICT ? { background: ACCENT } : {}}
               onClick={() => setStep(2)}
             >
               다음 — 일정 선택 →
@@ -606,79 +651,109 @@ export default function CounselingApply({ onComplete, onBack }) {
       {/* ══════════════════════════════════════════════════════════════ */}
       {step === 2 && (
         <div className="flex flex-col gap-4">
-          {/* Counselor summary */}
+          {/* Type summary */}
           <div className="bg-[#F0FDFE] border border-[#A5F3FC] rounded-[8px] px-5 py-3 flex items-center gap-4 text-[12px]">
-            <div className="w-8 h-8 rounded-full bg-[#CFFAFE] flex items-center justify-center font-black text-[#0891B2]">
-              {chosenCounselor?.name[0]}
-            </div>
-            <div>
-              <span className="font-bold text-[#0E7490]">
-                {chosenCounselor?.name} {chosenCounselor?.role}
-              </span>
-              <span className="mx-2 text-[#A5F3FC]">·</span>
-              <span className="text-[#0E7490]">{chosenType?.title}</span>
-            </div>
+            <span className="font-bold text-[#0E7490]">{chosenType?.typeName}</span>
+            <span className="text-[#0E7490]">예약 가능한 일정 중 하나를 선택하세요.</span>
           </div>
 
-          {/* Calendar grid */}
-          <div className="bg-white rounded-[10px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-            <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-2">
-              <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
-              <h2 className="text-[14px] font-bold text-[#1F2328]">가능 슬롯 — 2026년 8월 3주차</h2>
-              <div className="ml-auto flex items-center gap-3 text-[11px] text-[#9AA0A6]">
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-[2px] border border-[#0891B2] inline-block" />
-                  가능
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-[2px] bg-[#ECFEFF] border border-[#0891B2] inline-block" />
-                  선택됨
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-[2px] bg-[#F3F4F6] inline-block" />
-                  불가
-                </span>
-              </div>
-            </div>
-            <div className="p-5">
-              {/* Date headers */}
-              <div
-                className="grid gap-3"
-                style={{ gridTemplateColumns: `repeat(${dateGroups.length}, 1fr)` }}
-              >
-                {dateGroups.map((dg) => (
-                  <div key={dg.date} className="text-center mb-2">
-                    <div className="text-[11px] font-bold text-[#656D76]">{dg.dayLabel}요일</div>
-                    <div className="text-[12px] font-black text-[#1F2328]">{dg.date.slice(5)}</div>
-                  </div>
-                ))}
-              </div>
-              {/* Slot rows — up to max slots per day */}
-              {(() => {
-                const maxSlots = Math.max(...dateGroups.map((dg) => dg.slots.length));
-                return Array.from({ length: maxSlots }).map((_, rowIdx) => (
-                  <div
-                    key={rowIdx}
-                    className="grid gap-3 mb-2"
-                    style={{ gridTemplateColumns: `repeat(${dateGroups.length}, 1fr)` }}
+          {/* BE가 counselingTypeId를 아직 내려주지 않는 경우(BLOCKED 상태) */}
+          {!chosenType?.counselingTypeId && (
+            <EmptyState
+              message="이 상담 유형은 아직 일정 조회를 사용할 수 없습니다."
+              sub="상담센터에 문의하거나 다른 유형을 선택해 주세요."
+            />
+          )}
+
+          {chosenType?.counselingTypeId && (
+            <div className="bg-white rounded-[10px] border border-[#E5E7EB] shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+              <div className="px-5 py-4 border-b border-[#E5E7EB] flex items-center gap-3 flex-wrap">
+                <div className="w-1 h-4 rounded-full" style={{ background: ACCENT }} />
+                <h2 className="text-[14px] font-bold text-[#1F2328]">예약 가능한 일정</h2>
+
+                {/* 상담자 필터: 실제 조회된 일정에서 뽑은 상담자 목록만 사용한다 */}
+                {counselorOptions.length > 0 && (
+                  <select
+                    aria-label="상담자 필터"
+                    value={counselorFilter ?? ''}
+                    onChange={(e) => setCounselorFilter(e.target.value || null)}
+                    className="ml-auto text-[12px] border border-[#E5E7EB] rounded-[6px] px-2 py-1.5 focus:outline-none focus:border-[#0891B2]"
                   >
-                    {dateGroups.map((dg) => {
-                      const slot = dg.slots[rowIdx];
-                      if (!slot) return <div key={dg.date + rowIdx} />;
-                      return (
-                        <SlotCard
-                          key={slot.id}
-                          slot={slot}
-                          isSelected={selectedSlot === slot.id}
-                          onClick={() => handleSlotClick(slot)}
-                        />
-                      );
-                    })}
+                    <option value="">전체 상담자</option>
+                    {counselorOptions.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.name}
+                        {c.dept ? ` · ${c.dept}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="p-5">
+                {isSchedulesLoading && <SkeletonLoader rows={3} cols={2} />}
+
+                {hasSchedulesError && (
+                  <div
+                    role="alert"
+                    className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-4 py-4"
+                  >
+                    <p className="text-[13px] font-bold text-[#7F1D1D]">
+                      일정을 불러오지 못했습니다.
+                    </p>
+                    <p className="text-[12px] text-[#CF222E] mt-1 mb-3">
+                      잠시 후 다시 시도해 주세요.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={isSchedulesFetching}
+                      onClick={() => refetchSchedules()}
+                    >
+                      다시 시도
+                    </Button>
                   </div>
-                ));
-              })()}
+                )}
+
+                {/* 서버가 내려준 원본 일정(schedules) 자체가 비어 있는지, 아니면 상담자
+                    필터 때문에 filteredSchedules만 비었는지를 구분한다. 진로상담(CS200)은
+                    지도교수 개인이 여는 일정이라 원본이 비었을 때는 "다른 상담자를
+                    확인"이라는 문구가 맞지 않으므로 별도 안내를 쓴다. */}
+                {!isSchedulesLoading &&
+                  !hasSchedulesError &&
+                  filteredSchedules.length === 0 &&
+                  (isCareerType && schedules.length === 0 ? (
+                    <EmptyState
+                      message="예약 가능한 진로상담 일정이 없습니다."
+                      sub="지도교수 또는 상담센터에 문의해 주세요."
+                    />
+                  ) : (
+                    <EmptyState
+                      message="예약 가능한 일정이 없습니다."
+                      sub="다른 상담 유형이나 상담자를 확인해 주세요."
+                    />
+                  ))}
+
+                {!isSchedulesLoading && !hasSchedulesError && filteredSchedules.length > 0 && (
+                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredSchedules.map((schedule) => (
+                      <ScheduleCard
+                        key={schedule.scheduleId}
+                        schedule={schedule}
+                        isSelected={selectedSlot === schedule.scheduleId}
+                        onClick={() => {
+                          setSelectedSlot((prev) =>
+                            prev === schedule.scheduleId ? null : schedule.scheduleId,
+                          );
+                          setSubmitError('');
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Selected slot banner */}
           {chosenSlot && (
@@ -696,28 +771,51 @@ export default function CounselingApply({ onComplete, onBack }) {
                 <path d="M5 8l2 2 4-4" />
               </svg>
               <span className="text-[13px] font-bold text-[#14532D]">
-                선택: {chosenSlot.date} ({chosenSlot.dayLabel}) {chosenSlot.time} ·{' '}
-                {chosenSlot.location}
+                선택: {formatScheduleLabel(chosenSlot.startsAt)} · {chosenSlot.counselorName}
+                {chosenSlot.location ? ` · ${chosenSlot.location}` : ''}
               </span>
             </div>
           )}
 
           {/* Memo */}
           <div className="bg-white rounded-[8px] border border-[#E5E7EB] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
-            <label className="text-[13px] font-semibold text-[#1F2328] mb-1.5 block">
-              상담 희망 내용 <span className="text-[#9AA0A6] font-normal text-[12px]">(선택)</span>
+            <label htmlFor="counseling-memo" className="text-[13px] font-semibold text-[#1F2328] mb-1.5 block">
+              상담 희망 내용 <span className="text-[#CF222E] font-normal text-[12px]">(필수)</span>
             </label>
             <textarea
+              id="counseling-memo"
               value={memo}
-              onChange={(e) => setMemo(e.target.value)}
+              onChange={(e) => {
+                setMemo(e.target.value);
+                setMemoError('');
+                setSubmitError('');
+              }}
               placeholder="상담에서 다루고 싶은 내용이나 어려운 점을 간략히 작성해 주세요."
               rows={4}
+              required
+              aria-invalid={!!memoError}
+              aria-describedby={memoError ? 'counseling-memo-error' : undefined}
               className="w-full px-3 py-2.5 text-[13px] border border-[#E5E7EB] rounded-[6px] resize-none focus:outline-none focus:border-[#0891B2] placeholder:text-[#9AA0A6]"
             />
             <p className="text-[11px] text-[#9AA0A6] mt-1.5">
               입력한 내용은 담당 상담사만 열람합니다.
             </p>
+            {memoError && (
+              <p id="counseling-memo-error" role="alert" className="text-[12px] text-[#CF222E] mt-2 font-semibold">
+                {memoError}
+              </p>
+            )}
           </div>
+
+          {/* 제출 실패(일정 만료 등)는 메모 필드가 아니라 별도 알림 영역에 표시한다. */}
+          {submitError && (
+            <div
+              role="alert"
+              className="bg-[#FEF2F2] border border-[#FECACA] rounded-[8px] px-4 py-3 text-[13px] font-semibold text-[#CF222E]"
+            >
+              {submitError}
+            </div>
+          )}
 
           <div className="flex gap-2 justify-between">
             <Button size="sm" variant="secondary" onClick={() => setStep(1)}>
@@ -725,10 +823,19 @@ export default function CounselingApply({ onComplete, onBack }) {
             </Button>
             <Button
               size="md"
-              disabled={!selectedSlot}
-              loading={submitting}
-              style={selectedSlot ? { background: ACCENT } : {}}
-              onClick={() => setSubmitConfirm(true)}
+              disabled={!chosenSlot || createReservationMutation.isPending || isConsentRefreshing}
+              loading={createReservationMutation.isPending || isConsentRefreshing}
+              style={chosenSlot ? { background: ACCENT } : {}}
+              onClick={() => {
+                if (!chosenSlot) {
+                  return;
+                }
+                if (memo.trim() === '') {
+                  setMemoError('상담 희망 내용을 입력해 주세요.');
+                  return;
+                }
+                setSubmitConfirm(true);
+              }}
             >
               신청 완료 →
             </Button>
@@ -779,26 +886,23 @@ export default function CounselingApply({ onComplete, onBack }) {
                   {
                     label: '예약번호',
                     value: (
-                      <span className="font-mono font-black text-[#0891B2]">CS-2026-0331</span>
+                      <span className="font-mono font-black text-[#0891B2]">
+                        {createdReservation.reservationId}
+                      </span>
                     ),
                   },
                   {
                     label: '상태',
                     value: (
                       <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#DBEAFE] text-[#0969DA]">
-                        신청
+                        {COUNSELING_RESERVATION_STATUS_LABEL[createdReservation.reservationStatus]}
                       </span>
                     ),
                   },
-                  { label: '상담유형', value: chosenType?.title },
-                  { label: '상담사', value: `${chosenCounselor?.name} ${chosenCounselor?.role}` },
-                  {
-                    label: '일시',
-                    value: chosenSlot
-                      ? `${chosenSlot.date} (${chosenSlot.dayLabel}) ${chosenSlot.time}`
-                      : '-',
-                  },
-                  { label: '장소', value: chosenSlot?.location },
+                  { label: '상담유형', value: completionInfo.typeName },
+                  { label: '상담사', value: completionInfo.counselorName },
+                  { label: '일시', value: formatScheduleLabel(completionInfo.startsAt) },
+                  { label: '장소', value: completionInfo.location },
                 ].map((row) => (
                   <div key={row.label} className="flex items-center px-5 py-3">
                     <span className="w-24 text-[12px] text-[#656D76] flex-shrink-0">
@@ -811,7 +915,7 @@ export default function CounselingApply({ onComplete, onBack }) {
 
               <div className="bg-[#F0FDFE] border border-[#A5F3FC] rounded-[8px] px-4 py-3 w-full text-left">
                 <p className="text-[12px] text-[#164E63]">
-                  📱 알림톡으로 예약 확정 안내가 발송됩니다. 상담 당일 취소는 최소{' '}
+                  🔔 인앱 알림으로 예약 확정 안내가 제공됩니다. 상담 당일 취소는 최소{' '}
                   <strong>1일 전</strong>까지 가능합니다.
                 </p>
               </div>
@@ -833,8 +937,9 @@ export default function CounselingApply({ onComplete, onBack }) {
       <ConfirmDialog
         open={submitConfirm}
         title="상담 신청 확인"
-        message={`${chosenSlot ? `${chosenSlot.date} (${chosenSlot.dayLabel}) ${chosenSlot.time}` : ''} · ${chosenCounselor?.name} ${chosenCounselor?.role}\n\n위 일정으로 상담을 신청하시겠습니까?`}
+        message={`${chosenSlot ? formatScheduleLabel(chosenSlot.startsAt) : ''} · ${chosenSlot?.counselorName ?? ''}\n\n위 일정으로 상담을 신청하시겠습니까?`}
         confirmLabel="신청하기"
+        loading={createReservationMutation.isPending || isConsentRefreshing}
         onConfirm={handleFinalSubmit}
         onCancel={() => setSubmitConfirm(false)}
       />

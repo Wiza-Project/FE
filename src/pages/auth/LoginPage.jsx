@@ -1,142 +1,134 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { UNIVERSITY_NAME, CURRENT_USER, STAFF_USERS } from '@/data/dummy';
+import { Navigate, useLocation } from 'react-router-dom';
+import { UNIVERSITY_NAME } from '@/data/dummy';
 import { useAuthStore } from '@/stores/authStore';
-import { USER_TYPE } from '@/constants/domain';
-import { toast } from '@/components/common';
+import { login as loginApi } from '@/api/auth';
+import { publishActivity } from '@/lib/authSync';
+import { CONSENT_PATH, hasCompletedCommonConsent, resolvePostAuthPath } from '@/routes/redirects';
 
-const PORTAL_CONFIG = {
-  student: { label: '학생', color: '#2563EB', idLabel: '학번', idPlaceholder: '학번 8자리 입력' },
-  staff: { label: '교직원', color: '#7C3AED', idLabel: '교번', idPlaceholder: '교번 입력' },
-  admin: {
-    label: '관리자',
-    color: '#6B7280',
-    idLabel: '관리자 ID',
-    idPlaceholder: '관리자 ID 입력',
-  },
-  enterprise: {
-    label: '기업',
-    color: '#059669',
-    idLabel: '기업 ID',
-    idPlaceholder: '기업 회원 ID 입력',
-  },
+// 포털(학생/교직원)을 화면에서 따로 선택받지 않고 학생 브랜드 컬러를 기본값으로 씁니다.
+// 로그인 후 화면 분기는 아래 인증 가드가 응답의 user 를 보고 처리합니다.
+const BRAND_COLOR = '#2563EB';
+
+// 학번/교번 모두 숫자 8자리(university_no) 형식.
+const ID_MAX_LENGTH = 8;
+
+// 로그인 화면 진입 사유(자동 로그아웃)별 안내 문구.
+// ProtectedRoute(유휴 타임아웃 / 세션 만료)가 location.state.reason 으로 넘겨줍니다.
+const LOGOUT_REASON_MESSAGE = {
+  idle: '30분 동안 활동이 없어 자동 로그아웃되었습니다.',
+  session_expired: '세션이 만료되었습니다. 다시 로그인해주세요.',
 };
 
-const DEMO_CREDS = {
-  student: { id: '20231234', pw: '1234' },
-  staff: { id: 'staff001', pw: '1234' },
-  admin: { id: 'admin', pw: '1234' },
-  enterprise: { id: 'corp001', pw: '1234' },
-};
-
+// scms-be AuthService.MAX_FAILED_LOGIN_ATTEMPTS 와 반드시 같은 값이어야 합니다.
+// 서버는 remainingAttempts(잔여 횟수)만 내려주므로, "지금까지 몇 번째 실패인지"를
+// 화면에 표시하려면 이 값을 기준으로 역산합니다 (MAX_ATTEMPTS - remainingAttempts).
 const MAX_ATTEMPTS = 5;
 
+// 아이디 저장은 사용자 편의 기능이라 localStorage 를 계속 씁니다.
+// 인증 상태나 동의 완료 여부는 절대 여기에 두지 않습니다 — 서버(DB) 판정값만 신뢰합니다.
 const SAVE_ID_KEY = 'sicms_saved_id';
-const FIRST_LOGIN_KEY = 'sicms_first_login_done';
 
 /**
- * 데모 로그인 화면.
+ * 로그인 화면.
  *
- * 학사행정시스템 연동 전까지는 아이디/비밀번호를 하드코딩된 데모 계정과 비교하는
- * 목업 로그인입니다. 실제 인증 API가 준비되면 handleLogin의 검증 로직을 교체하세요.
+ * 학생/교직원 포털을 화면에서 따로 선택받지 않고 하나의 폼으로 로그인합니다.
+ * 로그인 성공 응답의 user 로 이후 화면을 분기합니다.
+ *   TODO: 관리자 로그인이 실제로 필요해지면 별도 경로(/admin/login 등)로 분리예정
  *
- * 학생/교직원 포털만 라우터에 연결되어 있어 이 두 유형만 실제 로그인을 완료합니다.
- * 관리자/기업 데모 탭은 화면 자체는 유지하되, 아직 연결된 포털이 없어 안내 토스트만 띄웁니다.
+ * 로그인 후 이동은 imperative navigate() 가 아니라 아래 인증 가드(<Navigate replace/>)가
+ * 담당합니다. 덕분에 (1) 폼 제출로 로그인한 경우, (2) 이미 로그인한 사용자가 뒤로가기·주소
+ * 직접 입력·새로고침으로 /login 에 들어온 경우가 같은 한 곳에서 같은 규칙으로 처리되고,
+ * 로그인 화면이 브라우저 이력에 남지 않습니다.
  */
 export default function LoginPage() {
-  const navigate = useNavigate();
-  const login = useAuthStore((s) => s.login);
+  const location = useLocation();
+  const authLogin = useAuthStore((s) => s.login);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
 
-  const [portal, setPortal] = useState('student');
   const [id, setId] = useState(() => localStorage.getItem(SAVE_ID_KEY) ?? '');
   const [pw, setPw] = useState('');
   const [saveId, setSaveId] = useState(() => !!localStorage.getItem(SAVE_ID_KEY));
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => {
+    const reason = location.state?.reason;
+    return reason ? LOGOUT_REASON_MESSAGE[reason] : '';
+  });
   const [loading, setLoading] = useState(false);
-  const [attempts, setAttempts] = useState(0);
-  const locked = attempts >= MAX_ATTEMPTS;
-
-  const cfg = PORTAL_CONFIG[portal];
-
-  const completeLogin = (p) => {
-    if (p === 'student') {
-      login(
-        {
-          id: 1,
-          loginId: id.trim(),
-          name: CURRENT_USER.name,
-          userType: USER_TYPE.STUDENT,
-          department: CURRENT_USER.department,
-          studentNo: id.trim(),
-        },
-        'demo-token',
-      );
-      const isFirst = !localStorage.getItem(FIRST_LOGIN_KEY);
-      navigate(isFirst ? '/consent' : '/my');
-      return;
-    }
-    if (p === 'staff') {
-      const staffUser = STAFF_USERS[0];
-      login(
-        {
-          id: 2,
-          loginId: id.trim(),
-          name: staffUser.name,
-          userType: USER_TYPE.STAFF,
-          department: staffUser.department,
-          studentNo: null,
-        },
-        'demo-token',
-      );
-      navigate('/staff');
-      return;
-    }
-    // 관리자/기업 포털은 아직 라우터에 연결되지 않았습니다.
-    toast(`${PORTAL_CONFIG[p].label} 포털은 다음 단계에서 연결됩니다.`, 'info');
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (locked) return;
     setError('');
     if (!id.trim()) {
       setError('아이디를 입력해주세요.');
+      return;
+    }
+    // onChange 필터링은 "입력 중" 8자리 초과만 잘라내므로 1~7자리 값이나,
+    // onChange를 거치지 않고 복원된 localStorage 저장값은 여기서 막아야 합니다.
+    // 백엔드 LoginRequest의 @Pattern("\d{8}") 검증 메시지와 문구를 맞췄습니다.
+    if (!/^\d{8}$/.test(id)) {
+      setError('아이디는 숫자 8자리로 입력해주세요.');
       return;
     }
     if (!pw) {
       setError('비밀번호를 입력해주세요.');
       return;
     }
+
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setLoading(false);
-    const cred = DEMO_CREDS[portal];
-    if (id.trim() === cred.id && pw === cred.pw) {
+    try {
+      const data = await loginApi({ loginId: id.trim(), password: pw });
       if (saveId) localStorage.setItem(SAVE_ID_KEY, id.trim());
       else localStorage.removeItem(SAVE_ID_KEY);
-      completeLogin(portal);
-    } else {
-      const next = attempts + 1;
-      setAttempts(next);
-      if (next >= MAX_ATTEMPTS) {
-        setError(
-          '인증 실패 5회로 계정이 잠겼습니다. 학사지원팀에 문의하세요.\n(내선 1234 / support@korea.ac.kr)',
-        );
+      // 이전 세션의 오래된 활동 시각이 새 로그인 직후 즉시 만료 처리되지 않게 합니다.
+      publishActivity();
+      // 여기서 화면을 직접 옮기지 않습니다 — 스토어가 갱신되면 아래 인증 가드가
+      // 동의 여부·원래 목적지·역할을 보고 replace 이동시킵니다.
+      authLogin(data.user, data.accessToken);
+    } catch (err) {
+      if (err.code === 'U003') {
+        // 아이디/비밀번호 불일치.
+        // 실패 카운트는 컴포넌트 로컬 state가 아니라 서버가 내려준 값(err.data —
+        // scms-be LoginFailureResponse)을 그대로 씁니다. 로컬 state는 새로고침/다른 탭/
+        // 이전 세션의 실패를 몰라 "계정을 막 잠근 그 시도"조차 1번째 실패로 보이는
+        // 문제가 있었습니다 (PR #20 코드리뷰 반영).
+        // 존재하지 않는 아이디는 계정 존재 여부를 노출하지 않기 위해 err.data 자체가
+        // 없습니다 — 이 경우 else로 빠져 단순 안내만 표시됩니다.
+        // accountLocked는 "이 응답을 유발한 시도로 계정이 방금 잠겼는지"를 뜻하며,
+        // 잠금을 유발한 그 시도의 코드도 여전히 U003입니다(다음 시도부터 U005로 바뀜 —
+        // 아래 U004/U005/U006 분기 참고).
+        const failureInfo = err.data;
+        if (failureInfo?.accountLocked) {
+          setError('계정이 잠겼습니다. 비밀번호 찾기를 이용하거나 관리자에게 문의하세요.');
+        } else if (failureInfo && failureInfo.remainingAttempts <= MAX_ATTEMPTS - 3) {
+          // 1~2회는 단순 오타일 가능성이 높아 카운트 없이 안내만 하고,
+          // 3회차부터 남은 횟수를 보여줘 잠금이 다가온다는 걸 알립니다.
+          const attemptCount = MAX_ATTEMPTS - failureInfo.remainingAttempts;
+          setError(`${err.message} (${attemptCount}/${MAX_ATTEMPTS}회)`);
+        } else {
+          setError(err.message);
+        }
+      } else if (err.code === 'U004' || err.code === 'U005' || err.code === 'U006') {
+        // 휴면/잠금/탈퇴 — 백엔드가 내려준 안내 문구를 그대로 보여줍니다. 실패 횟수로 세지 않습니다.
+        setError(err.message);
       } else {
-        setError(
-          `아이디 또는 비밀번호가 올바르지 않습니다. (${next}/${MAX_ATTEMPTS}회)\n데모: ${cred.id} / ${cred.pw}`,
-        );
+        setError(err.message || '로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
       }
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fillDemo = (p) => {
-    setPortal(p);
-    setId(DEMO_CREDS[p].id);
-    setPw(DEMO_CREDS[p].pw);
-    setError('');
-    setAttempts(0);
-  };
+  // 인증 가드 — 로그인된 사용자에게는 로그인 폼 자체를 렌더링하지 않습니다.
+  // (로그인 직후 / 뒤로가기 / 주소 직접 입력 / 새로고침 / 로그인 링크 재선택 모두 여기로 옵니다.)
+  if (isAuthenticated && user) {
+    // 공통 필수 약관 미동의면 먼저 동의 화면으로 보내고, 원래 목적지는 state.from 으로 넘겨
+    // 동의를 마친 뒤 그 화면으로 돌아갈 수 있게 합니다.
+    if (!hasCompletedCommonConsent(user)) {
+      return <Navigate to={CONSENT_PATH} state={{ from: location.state?.from ?? null }} replace />;
+    }
+    return <Navigate to={resolvePostAuthPath(location.state?.from, user)} replace />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F6F8FA]">
@@ -168,7 +160,7 @@ export default function LoginPage() {
             {/* Login card */}
             <div className="bg-white rounded-[12px] border border-[#E5E7EB] shadow-[0_4px_28px_rgba(0,0,0,0.08)] overflow-hidden">
               {/* Color bar */}
-              <div className="h-1" style={{ background: cfg.color }} />
+              <div className="h-1" style={{ background: BRAND_COLOR }} />
 
               {/* Title */}
               <div className="px-8 pt-7 pb-1">
@@ -181,16 +173,21 @@ export default function LoginPage() {
               <form onSubmit={handleLogin} className="px-8 py-5 flex flex-col gap-4">
                 {/* ID */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-[13px] font-semibold text-[#1F2328]">{cfg.idLabel}</label>
+                  <label htmlFor="login-id" className="text-[13px] font-semibold text-[#1F2328]">
+                    아이디
+                  </label>
                   <input
+                    id="login-id"
                     type="text"
+                    inputMode="numeric"
                     value={id}
                     onChange={(e) => {
-                      setId(e.target.value);
+                      // 학번/교번은 숫자 8자리 — 숫자 이외 입력은 제거하고 8자리를 넘는 입력은 자릅니다.
+                      // (붙여넣기로 "2024-1234" 같은 형식이 들어와도 숫자만 추출해 앞 8자리까지 반영)
+                      setId(e.target.value.replace(/\D/g, '').slice(0, ID_MAX_LENGTH));
                       setError('');
                     }}
-                    placeholder={cfg.idPlaceholder}
-                    disabled={locked}
+                    placeholder="아이디 8자리 입력"
                     autoFocus
                     className="h-10 rounded-[6px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] text-[#1F2328] placeholder:text-[#9AA0A6] focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-colors disabled:bg-[#F9FAFB] disabled:text-[#9AA0A6]"
                   />
@@ -212,7 +209,6 @@ export default function LoginPage() {
                       setError('');
                     }}
                     placeholder="비밀번호 입력"
-                    disabled={locked}
                     className="h-10 rounded-[6px] border border-[#E5E7EB] bg-white px-3.5 text-[14px] text-[#1F2328] placeholder:text-[#9AA0A6] focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-colors disabled:bg-[#F9FAFB] disabled:text-[#9AA0A6]"
                   />
                 </div>
@@ -225,7 +221,7 @@ export default function LoginPage() {
                     onChange={(e) => setSaveId(e.target.checked)}
                     className="w-4 h-4 rounded-[3px] border-[#D1D5DB] accent-[#2563EB]"
                   />
-                  <span className="text-[13px] text-[#656D76]">학번 저장</span>
+                  <span className="text-[13px] text-[#656D76]">아이디 저장</span>
                 </label>
 
                 {/* Error */}
@@ -255,54 +251,16 @@ export default function LoginPage() {
                 {/* Login button */}
                 <button
                   type="submit"
-                  disabled={locked || loading}
+                  disabled={loading}
                   className="h-11 w-full rounded-[6px] text-white font-bold text-[14px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-1"
-                  style={{ background: locked ? '#9AA0A6' : cfg.color }}
+                  style={{ background: BRAND_COLOR }}
                 >
                   {loading && (
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   )}
-                  {locked ? '계정 잠김' : '로그인'}
+                  로그인
                 </button>
-
-                {/* Fail count bar */}
-                {attempts > 0 && !locked && (
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-[#CF222E] rounded-full transition-all"
-                        style={{ width: `${(attempts / MAX_ATTEMPTS) * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-[11px] text-[#CF222E] font-semibold">
-                      {attempts}/{MAX_ATTEMPTS}
-                    </span>
-                  </div>
-                )}
               </form>
-
-              {/* Demo chips */}
-              <div className="border-t border-[#F3F4F6] px-8 py-4 bg-[#FAFAFA]">
-                <p className="text-[11px] font-semibold text-[#9AA0A6] uppercase tracking-wide mb-2.5">
-                  프로토타입 데모 계정
-                </p>
-                <div className="flex gap-2">
-                  {['student', 'staff', 'admin', 'enterprise'].map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => fillDemo(p)}
-                      className={`px-3 py-1.5 rounded-[999px] text-[12px] font-bold transition-all border ${portal === p && id === DEMO_CREDS[p].id ? 'text-white border-transparent' : 'bg-white border-[#E5E7EB] text-[#656D76] hover:border-[#2563EB] hover:text-[#2563EB]'}`}
-                      style={
-                        portal === p && id === DEMO_CREDS[p].id
-                          ? { background: PORTAL_CONFIG[p].color }
-                          : {}
-                      }
-                    >
-                      {PORTAL_CONFIG[p].label}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* Bottom links */}

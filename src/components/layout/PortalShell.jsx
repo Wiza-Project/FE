@@ -1,9 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
-import { USER_TYPE } from '@/constants/domain';
-import { UNIVERSITY_NAME, SEMESTERS } from '@/data/dummy';
+import { USER_TYPE, DEPARTMENT, canAccessCounselOperation } from '@/constants/domain';
+import { UNIVERSITY_NAME } from '@/data/dummy';
 import { toast } from '@/components/common';
+import { fetchMyAcademicRecord } from '@/api/students';
+import { useCommonCode } from '@/hooks/useCommonCode';
+import {
+  useHasUnreadNotifications,
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotifications,
+} from '@/hooks/useNotifications';
+import { formatRelativeTime } from '@/utils/date';
 
 // ─── Icon primitives ─────────────────────────────────────────────────────────
 
@@ -17,6 +27,24 @@ const Icon = {
   Star: () => (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
       <path d="M8 1l1.854 3.756L14 5.522l-3 2.923.708 4.127L8 10.5l-3.708 2.072L5 8.445 2 5.522l4.146-.766z" />
+    </svg>
+  ),
+  Card: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="3" width="14" height="10" rx="1.5" fill="currentColor" opacity=".15" />
+      <rect
+        x="1"
+        y="3"
+        width="14"
+        height="10"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <circle cx="5" cy="7.5" r="1.4" fill="currentColor" />
+      <path d="M3.2 11c.3-1.2 1.1-1.8 1.8-1.8s1.5.6 1.8 1.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="9" y1="6.5" x2="13" y2="6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="9" y1="9" x2="13" y2="9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   ),
   Grid: () => (
@@ -106,6 +134,7 @@ const Icon = {
 
 const NAV_STUDENT = [
   { key: 'mypage', label: '마이페이지', icon: Icon.User, accent: '#6B7280', path: '/my' },
+  { key: 'records', label: '학적 정보', icon: Icon.Card, accent: '#6B7280', path: '/my/records' },
   {
     key: 'competency',
     label: '핵심역량진단',
@@ -123,7 +152,7 @@ const NAV_STUDENT = [
   { key: 'counseling', label: '학생상담', icon: Icon.Chat, accent: '#0891B2', path: '/counsel' },
   { key: 'mileage', label: '마일리지', icon: Icon.Coin, accent: '#D97706', path: '/mileage' },
   { key: 'career', label: '취업·창업', icon: Icon.Briefcase, accent: '#059669', path: '/career' },
-  { key: 'notice', label: '공지·문의', icon: Icon.Notice, accent: '#6B7280', path: '/notice' },
+  { key: 'notice', label: '공지·FAQ', icon: Icon.Notice, accent: '#6B7280', path: '/notice' },
 ];
 
 // 교직원 포털은 업무시스템 톤(무채색 + 단일 포인트컬러)을 따릅니다.
@@ -134,7 +163,7 @@ const NAV_STAFF = [
   { key: 'competency', label: '핵심역량 관리', icon: Icon.Star, path: '/staff/competency' },
   { key: 'counseling', label: '상담 운영', icon: Icon.Chat, path: '/staff/counsel' },
   { key: 'records', label: '학적 조회', icon: Icon.User, path: '/staff/students' },
-  { key: 'mileage', label: '마일리지 심사', icon: Icon.Coin, path: '/staff/mileage' },
+  { key: 'mileage', label: '마일리지 관리', icon: Icon.Coin, path: '/staff/mileage' },
   { key: 'career', label: '취업·창업 운영', icon: Icon.Briefcase, path: '/staff/career' },
   {
     key: 'statistics',
@@ -142,6 +171,7 @@ const NAV_STAFF = [
     icon: Icon.Chart,
     path: '/staff/career/statistics',
   },
+  { key: 'boards', label: '게시판 관리', icon: Icon.Notice, path: '/staff/boards' },
 ];
 
 const PORTAL_NAVS = { student: NAV_STUDENT, staff: NAV_STAFF };
@@ -149,26 +179,28 @@ const PORTAL_LABELS = { student: '학생 포털', staff: '교직원 포털' };
 // 학생 포털은 브랜드 블루 유지, 교직원 포털은 행정시스템 톤(거의 무채색)의 단일 포인트컬러 사용
 const PORTAL_COLORS = { student: '#2563EB', staff: '#1F2937' };
 
-const NOTIFICATIONS = [
-  {
-    title: '진로탐색 워크숍 마감 임박',
-    sub: '신청 마감 3일 전입니다.',
-    time: '10분 전',
-    dot: '#D97706',
+// 알림의 moduleCode(백엔드 ModuleCode enum: PROGRAM/COUNSEL/MILEAGE/CAREER/COMPETENCY)를
+// 포털별 라우트 경로로 매핑합니다. 알림 응답에 레코드 ID가 없어 특정 항목이 아닌
+// 해당 도메인의 메인 페이지로 이동합니다. 새 ModuleCode가 추가되면 여기도 함께 갱신하세요.
+const MODULE_ROUTES = {
+  student: {
+    PROGRAM: '/programs',
+    COUNSEL: '/counsel',
+    MILEAGE: '/mileage',
+    CAREER: '/career',
+    COMPETENCY: '/competency',
   },
-  {
-    title: '마일리지 적립 완료',
-    sub: '독서인증제 참여 마일리지 20점이 적립되었습니다.',
-    time: '2시간 전',
-    dot: '#1A7F37',
+  staff: {
+    PROGRAM: '/staff/programs',
+    COUNSEL: '/staff/counsel',
+    MILEAGE: '/staff/mileage',
+    CAREER: '/staff/career',
+    COMPETENCY: '/staff/competency',
   },
-  {
-    title: '상담 예약 확정',
-    sub: '2026-03-20 14:00 상담 예약이 확정되었습니다.',
-    time: '1일 전',
-    dot: '#0969DA',
-  },
-];
+};
+
+// 알림 드롭다운에 보여줄 개수. 상세 목록/유형별 필터는 이번 스코프 밖입니다.
+const NOTIFICATION_DROPDOWN_SIZE = 5;
 
 const PROFILE_MENU = [
   { label: '내 정보 수정', icon: '✎' },
@@ -186,12 +218,103 @@ export default function PortalShell() {
   const navigate = useNavigate();
 
   const portal = user?.userType === USER_TYPE.STAFF ? 'staff' : 'student';
-  const nav = PORTAL_NAVS[portal];
+  const canCounselOperation = canAccessCounselOperation(user?.roleCodes);
+  const isProgramStaff = user?.department === DEPARTMENT.NON_SUBJECT_OPERATION;
+  // 교직원이지만 ST200 단독 또는 ST300 단독이 아니면(겸임·무역할 포함) '상담 운영'을,
+  // 비교과운영부서(D200)가 아니면 '비교과 운영'을 숨긴다. 이는 UX용 1차 숨김이고 실제
+  // 진입 차단은 라우트의 CounselOperationRoute, 최종 권한은 BE가 판단한다.
+  const nav =
+    portal === 'staff'
+      ? NAV_STAFF.filter(
+          (item) =>
+            (item.key !== 'counseling' || canCounselOperation) &&
+            (item.key !== 'extracurr' || isProgramStaff),
+        )
+      : PORTAL_NAVS[portal];
   const portalColor = PORTAL_COLORS[portal];
 
-  const [semester, setSemester] = useState(SEMESTERS[1] ?? SEMESTERS[0]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const notifRef = useRef(null);
+  const profileRef = useRef(null);
+
+  
+  useEffect(() => {
+    if (!notifOpen && !profileOpen) return;
+
+    const handlePointerDown = (event) => {
+      if (notifOpen && notifRef.current && !notifRef.current.contains(event.target)) {
+        setNotifOpen(false);
+      }
+      if (profileOpen && profileRef.current && !profileRef.current.contains(event.target)) {
+        setProfileOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [notifOpen, profileOpen]);
+
+  // 학생 소속 학과(전공)는 로그인 응답(user)에 없고 학적 조회 API에만 있다 — MyPage.jsx와
+  // 동일한 쿼리 키를 써서 캐시를 공유한다(같은 화면 안에서는 중복 요청되지 않는다).
+  const { data: studentProfile } = useQuery({
+    queryKey: ['dashboardProfile'],
+    queryFn: fetchMyAcademicRecord,
+    enabled: portal === 'student',
+  });
+
+  // 상단바 학년도·학기 선택 — 어떤 화면도 이 값을 읽어 데이터를 필터링하지 않는 장식용
+  const { data: academicYears = [] } = useCommonCode('ACADEMIC_YEAR');
+  const { data: semesterCodesRaw = [] } = useCommonCode('SEMESTER');
+  const minAcademicYear = portal === 'student' ? studentProfile?.curriculumYear : null;
+  const visibleAcademicYears = [...academicYears]
+    .filter((y) => minAcademicYear == null || Number(y.code) >= minAcademicYear)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const visibleSemesterCodes = semesterCodesRaw
+    .filter((s) => s.code === 'SPRING' || s.code === 'FALL')
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const [semesterYear, setSemesterYear] = useState('');
+  const [semesterCode, setSemesterCode] = useState('');
+  useEffect(() => {
+    if (visibleAcademicYears.length === 0) return;
+    // studentProfile(입학연도)이 academicYears보다 늦게 도착하면 이미 골라둔
+    // semesterYear가 필터링 후 목록에서 빠질 수 있다 — 그 경우엔 다시 골라야 한다.
+    if (semesterYear && visibleAcademicYears.some((y) => y.code === semesterYear)) return;
+    const fallback = visibleAcademicYears.find((y) => y.code === '2026') ?? visibleAcademicYears[0];
+    setSemesterYear(fallback.code);
+  }, [semesterYear, visibleAcademicYears]);
+  useEffect(() => {
+    if (semesterCode || visibleSemesterCodes.length === 0) return;
+    const fallback = visibleSemesterCodes.find((s) => s.code === 'FALL') ?? visibleSemesterCodes[0];
+    setSemesterCode(fallback.code);
+  }, [semesterCode, visibleSemesterCodes]);
+
+  // 뱃지(안읽음 존재 여부)는 상시 폴링, 목록은 드롭다운이 열렸을 때만 요청합니다.
+  const { data: hasUnread = false } = useHasUnreadNotifications();
+  const { data: notificationPage, isLoading: notificationsLoading } = useNotifications(
+    { size: NOTIFICATION_DROPDOWN_SIZE },
+    notifOpen,
+  );
+  const notifications = notificationPage?.content ?? [];
+  const markReadMutation = useMarkNotificationRead();
+  const markAllReadMutation = useMarkAllNotificationsRead();
+
+  const handleNotificationClick = (n) => {
+    if (!n.read) {
+      markReadMutation.mutate(n.notificationId);
+    }
+    setNotifOpen(false);
+    const path = MODULE_ROUTES[portal]?.[n.moduleCode];
+    if (path) {
+      navigate(path);
+    }
+  };
+
+  const handleMarkAllRead = () => {
+    if (markAllReadMutation.isPending || !hasUnread) return;
+    markAllReadMutation.mutate();
+  };
 
   const activeItem =
     nav
@@ -206,6 +329,14 @@ export default function PortalShell() {
   };
 
   const userInitial = user?.name?.[0] ?? '?';
+
+  // 학생: 학번 · 전공(학적 조회 API). 교직원: 소속 부서명(로그인 응답).
+  const identityLine =
+    portal === 'student'
+      ? [studentProfile?.studentId ?? user?.loginId, studentProfile?.majorName]
+          .filter(Boolean)
+          .join(' · ')
+      : (user?.departmentName ?? user?.department ?? '');
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F6F8FA]">
@@ -244,11 +375,11 @@ export default function PortalShell() {
                 {isActive && (
                   <span
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
-                    style={{ background: item.accent ?? portalColor }}
+                    style={{ background: item.accent ?? '#9CA3AF' }}
                   />
                 )}
                 <span
-                  style={{ color: isActive ? (item.accent ?? portalColor) : undefined }}
+                  style={{ color: isActive ? (item.accent ?? '#9CA3AF') : undefined }}
                   className="transition-colors"
                 >
                   <item.icon />
@@ -274,11 +405,7 @@ export default function PortalShell() {
               <div className="text-[13px] font-semibold text-white truncate">
                 {user?.name ?? '알 수 없음'}
               </div>
-              <div className="text-[11px] text-[#6B7280] truncate">
-                {portal === 'student'
-                  ? `${user?.studentNo ?? ''} · ${user?.department ?? ''}`
-                  : (user?.department ?? '')}
-              </div>
+              <div className="text-[11px] text-[#6B7280] truncate">{identityLine}</div>
             </div>
             <button
               onClick={handleLogout}
@@ -299,21 +426,44 @@ export default function PortalShell() {
             {UNIVERSITY_NAME} &rsaquo; {PORTAL_LABELS[portal]}
           </div>
 
-          {/* Semester selector */}
-          <select
-            value={semester}
-            onChange={(e) => setSemester(e.target.value)}
-            className="h-8 px-3 pr-7 text-[12px] font-semibold text-[#1F2328] bg-[#F6F8FA] border border-[#E5E7EB] rounded-[6px] appearance-none cursor-pointer focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"
-          >
-            {SEMESTERS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+          {/* Semester selector: 학년도 · 학기 별도 드롭다운 */}
+          <div className="flex items-center gap-1.5">
+            <select
+              aria-label="학년도 선택"
+              value={semesterYear}
+              onChange={(e) => setSemesterYear(e.target.value)}
+              className="h-8 px-3 pr-7 text-[12px] font-semibold text-[#1F2328] bg-[#F6F8FA] border border-[#E5E7EB] rounded-[6px] appearance-none cursor-pointer focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"
+            >
+              {visibleAcademicYears.length === 0 ? (
+                <option value="">학년도</option>
+              ) : (
+                visibleAcademicYears.map((y) => (
+                  <option key={y.code} value={y.code}>
+                    {y.codeName}
+                  </option>
+                ))
+              )}
+            </select>
+            <select
+              aria-label="학기 선택"
+              value={semesterCode}
+              onChange={(e) => setSemesterCode(e.target.value)}
+              className="h-8 px-3 pr-7 text-[12px] font-semibold text-[#1F2328] bg-[#F6F8FA] border border-[#E5E7EB] rounded-[6px] appearance-none cursor-pointer focus:outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]"
+            >
+              {visibleSemesterCodes.length === 0 ? (
+                <option value="">학기</option>
+              ) : (
+                visibleSemesterCodes.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.codeName}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
 
           {/* Notification bell */}
-          <div className="relative">
+          <div className="relative" ref={notifRef}>
             <button
               onClick={() => {
                 setNotifOpen((o) => !o);
@@ -322,37 +472,64 @@ export default function PortalShell() {
               className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F3F4F6] text-[#656D76] transition-colors relative"
             >
               <Icon.Bell />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#CF222E] rounded-full border-2 border-white" />
+              {hasUnread && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#CF222E] rounded-full border-2 border-white" />
+              )}
             </button>
             {notifOpen && (
               <div className="absolute right-0 top-11 w-80 bg-white rounded-[8px] border border-[#E5E7EB] shadow-xl z-50">
                 <div className="px-4 py-3 border-b border-[#E5E7EB] flex items-center justify-between">
                   <span className="text-[13px] font-bold text-[#1F2328]">알림</span>
-                  <button className="text-[11px] text-[#2563EB] font-semibold hover:underline">
+                  <button
+                    onClick={handleMarkAllRead}
+                    disabled={markAllReadMutation.isPending || !hasUnread}
+                    className="text-[11px] text-[#2563EB] font-semibold hover:underline disabled:text-[#9AA0A6] disabled:no-underline disabled:cursor-not-allowed"
+                  >
                     모두 읽음
                   </button>
                 </div>
-                <div className="divide-y divide-[#F3F4F6]">
-                  {NOTIFICATIONS.map((n, i) => (
-                    <div key={i} className="px-4 py-3 hover:bg-[#F9FAFB] cursor-pointer flex gap-3">
-                      <div
-                        className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
-                        style={{ background: n.dot }}
-                      />
-                      <div>
-                        <div className="text-[13px] font-semibold text-[#1F2328]">{n.title}</div>
-                        <div className="text-[12px] text-[#656D76] mt-0.5">{n.sub}</div>
-                        <div className="text-[11px] text-[#9AA0A6] mt-1">{n.time}</div>
-                      </div>
+                <div className="divide-y divide-[#F3F4F6] max-h-96 overflow-y-auto">
+                  {notificationsLoading ? (
+                    <div className="px-4 py-6 text-center text-[12px] text-[#9AA0A6]">
+                      불러오는 중...
                     </div>
-                  ))}
+                  ) : notifications.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-[12px] text-[#9AA0A6]">
+                      새 알림이 없습니다.
+                    </div>
+                  ) : (
+                    notifications.map((n) => {
+                      const unread = !n.read;
+                      return (
+                        <div
+                          key={n.notificationId}
+                          onClick={() => handleNotificationClick(n)}
+                          className="px-4 py-3 hover:bg-[#F9FAFB] cursor-pointer flex gap-3"
+                        >
+                          <div
+                            className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
+                            style={{ background: unread ? '#2563EB' : '#D0D7DE' }}
+                          />
+                          <div>
+                            <div className="text-[13px] font-semibold text-[#1F2328]">
+                              {n.title}
+                            </div>
+                            <div className="text-[12px] text-[#656D76] mt-0.5">{n.content}</div>
+                            <div className="text-[11px] text-[#9AA0A6] mt-1">
+                              {formatRelativeTime(n.createdAt)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}
           </div>
 
           {/* Profile */}
-          <div className="relative">
+          <div className="relative" ref={profileRef}>
             <button
               onClick={() => {
                 setProfileOpen((o) => !o);
@@ -374,9 +551,7 @@ export default function PortalShell() {
                   <div className="text-[13px] font-bold text-[#1F2328]">
                     {user?.name ?? '알 수 없음'}
                   </div>
-                  <div className="text-[12px] text-[#656D76]">
-                    {user?.studentNo ?? user?.loginId} · {user?.department ?? ''}
-                  </div>
+                  <div className="text-[12px] text-[#656D76]">{identityLine}</div>
                 </div>
                 {PROFILE_MENU.map((item, i) => (
                   <button
@@ -407,23 +582,13 @@ export default function PortalShell() {
         </header>
 
         {/* Content area */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto relative">
           <div className="page-enter min-h-full p-6">
             <Outlet />
           </div>
         </main>
       </div>
 
-      {/* Backdrop for dropdowns */}
-      {(notifOpen || profileOpen) && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => {
-            setNotifOpen(false);
-            setProfileOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -2,22 +2,25 @@ import { createBrowserRouter } from 'react-router-dom';
 import RootLayout from '@/components/layout/RootLayout';
 import PortalShell from '@/components/layout/PortalShell';
 import ProtectedRoute from '@/routes/ProtectedRoute';
+import CounselOperationRoute from '@/routes/CounselOperationRoute';
 import { USER_TYPE } from '@/constants/domain';
-import { ComingSoon } from '@/components/common';
-
 import HomePage from '@/pages/HomePage';
 import MyPage from '@/pages/MyPage';
+import AcademicRecordPage from '@/pages/records/AcademicRecordPage';
 import CompetencyPage from '@/pages/competency/CompetencyPage';
 import ExtracurrPage from '@/pages/program/ExtracurrPage';
 import CounselingPage from '@/pages/counsel/CounselingPage';
 import MileagePage from '@/pages/mileage/MileagePage';
 import CareerPage from '@/pages/career/CareerPage';
+import JobChatTestPage from '@/pages/career/JobChatTestPage';
+import NoticePage from '@/pages/notice/NoticePage';
 import StaffDashboard from '@/pages/staff/StaffDashboard';
 import StaffExtracurrPage from '@/pages/staff/extracurr/StaffExtracurrPage';
 import StaffCompetencyPage from '@/pages/staff/competency/StaffCompetencyPage';
 import StaffMileagePage from '@/pages/staff/mileage/StaffMileagePage';
 import StaffEmploymentPage from '@/pages/staff/career/StaffEmploymentPage';
 import StaffCounselingPage from '@/pages/staff/counsel/StaffCounselingPage';
+import StaffBoardsPage from '@/pages/staff/boards/StaffBoardsPage';
 import StudentRecords from '@/pages/staff/students/StudentRecords';
 import LoginPage from '@/pages/auth/LoginPage';
 import ConsentPage from '@/pages/auth/ConsentPage';
@@ -32,6 +35,7 @@ import NotFoundPage from '@/pages/NotFoundPage';
  *   /counsel       상담관리         P3100
  *   /mileage       마일리지         P4100
  *   /career        취창업관리       P5100
+ *   /notice        공지·FAQ         (Q&A·질문 등록·담당자 답변·비밀글·문의 템플릿은 다음 스코프)
  *   /staff/*       교직원 포털
  *
  * ADMIN 포털은 별도로 만들지 않기로 결정했습니다(2026-08-18). USER_TYPE.ADMIN 값
@@ -57,8 +61,9 @@ export const router = createBrowserRouter([
 
   // ── 로그인 / 최초 동의 (전체 화면, 헤더 없음) ─────────────
   { path: '/login', element: <LoginPage /> },
+  // /consent 는 "아직 공통 동의를 안 한 사람"이 보는 화면이라 공통 동의 게이트를 꺼야 합니다.
   {
-    element: <ProtectedRoute />,
+    element: <ProtectedRoute requireCommonConsent={false} />,
     children: [{ path: '/consent', element: <ConsentPage /> }],
   },
 
@@ -70,32 +75,23 @@ export const router = createBrowserRouter([
         element: <PortalShell />,
         children: [
           { path: '/my', element: <MyPage /> },
+          { path: '/my/records', element: <AcademicRecordPage /> },
           { path: '/competency', element: <CompetencyPage /> },
           { path: '/programs', element: <ExtracurrPage /> },
           { path: '/counsel', element: <CounselingPage /> },
           { path: '/mileage', element: <MileagePage /> },
           { path: '/career', element: <CareerPage /> },
-          { path: '/notice', element: <ComingSoon label="공지·문의" /> },
+          { path: '/career/job-chat-test', element: <JobChatTestPage /> },
+          { path: '/notice', element: <NoticePage /> },
         ],
       },
     ],
   },
 
-  // ── 교사(교수) 포털 ────────────────────────────────────
-  // TODO: PROFESSOR 포털 페이지 구현 예정
-  // {
-  //   element: <ProtectedRoute allow={[USER_TYPE.PROFESSOR]} />,
-  //   children: [
-  //     {
-  //       element: <PortalShell />,
-  //       children: [
-  //         // professor pages
-  //       ],
-  //     },
-  //   ],
-  // },
-
   // ── 교직원 포털 ────────────────────────────────────────
+  // 교수도 별도 포털 없이 이 교직원 포털을 그대로 사용(2026-08-21 확인).
+  // role_code 기반 화면/권한 분기가 필요해지면
+  // ProtectedRoute의 role_code 쪽에서 처리
   {
     element: <ProtectedRoute allow={[USER_TYPE.STAFF]} />,
     children: [
@@ -105,8 +101,12 @@ export const router = createBrowserRouter([
           { path: '/staff', element: <StaffDashboard /> },
           { path: '/staff/programs', element: <StaffExtracurrPage /> },
           { path: '/staff/competency', element: <StaffCompetencyPage /> },
-          { path: '/staff/counsel', element: <StaffCounselingPage /> },
+          {
+            element: <CounselOperationRoute />,
+            children: [{ path: '/staff/counsel', element: <StaffCounselingPage /> }],
+          },
           { path: '/staff/students', element: <StudentRecords /> },
+          { path: '/staff/boards', element: <StaffBoardsPage /> },
           { path: '/staff/mileage', element: <StaffMileagePage /> },
           { path: '/staff/career', element: <StaffEmploymentPage /> },
           { path: '/staff/career/statistics', element: <StaffEmploymentPage /> },
