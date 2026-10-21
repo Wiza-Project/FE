@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import JobList from './JobList';
 import JobDetail from './JobDetail';
 import JobBookmarks from './JobBookmarks';
@@ -11,38 +12,74 @@ import CareerPrepPage from './CareerPrepPage';
 
 // TODO: 0902 현재 데이터 연결 테스트 선행, 이후 하드코딩 수정 필요
 export default function CareerPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [section, setSection] = useState('jobs');
   const [jobView, setJobView] = useState('list');
-  const [selectedJob, setSelectedJob] = useState('J001');
+  const [prepView, setPrepView] = useState('resume');
+  const [selectedJobId, setSelectedJobId] = useState(null);
+
+  // AI 채팅 추천 카드 등 외부에서 /career?jobId=XXX 로 진입 시 즉시 상세 뷰 렌더링
+  useEffect(() => {
+    const queryJobId = searchParams.get('jobId');
+    if (queryJobId) {
+      setSelectedJobId(Number(queryJobId));
+      setJobView('detail');
+      setSection('jobs');
+    }
+  }, [searchParams]);
 
   const goJobList = () => {
     setSection('jobs');
     setJobView('list');
+    setSelectedJobId(null);
+  };
+
+  // 공고 상세 선택 핸들러
+  const handleSelectJob = (id) => {
+    setSelectedJobId(id);
+    setJobView('detail');
+  };
+
+  // 희망조건 설정 바로가기 핸들러
+  const handleGoPreference = () => {
+    setPrepView('preference');
+    setSection('prep');
   };
 
   // Render job sub-screens
   const renderJobs = () => {
     switch (jobView) {
       case 'detail':
-        return <JobDetail jobId={selectedJob} onBack={() => setJobView('list')} />;
+        return selectedJobId ? (
+          <JobDetail
+            jobId={selectedJobId}
+            onBack={() => {
+              setSelectedJobId(null);
+              setJobView('list');
+            }}
+          />
+        ) : (
+          <JobList
+            onDetail={handleSelectJob}
+            onBookmarks={() => setJobView('bookmarks')}
+            // 취업 준비 탭으로 즉시 전환
+            onGoPreference={handleGoPreference}
+          />
+        );
       case 'bookmarks':
         return (
           <JobBookmarks
             onBack={() => setJobView('list')}
-            onDetail={(id) => {
-              setSelectedJob(id);
-              setJobView('detail');
-            }}
+            onDetail={handleSelectJob}
           />
         );
       default:
         return (
           <JobList
-            onDetail={(id) => {
-              setSelectedJob(id);
-              setJobView('detail');
-            }}
+            onDetail={handleSelectJob}
             onBookmarks={() => setJobView('bookmarks')}
+            onGoPreference={handleGoPreference}
           />
         );
     }
@@ -58,16 +95,28 @@ export default function CareerPage() {
         ].map(([k, l]) => (
           <button
             key={k}
-            onClick={() => setSection(k)}
-            className={`h-8 px-5 text-[13px] font-semibold rounded-[6px] transition-colors whitespace-nowrap ${section === k ? 'bg-white text-[#1F2328] shadow-sm' : 'text-[#656D76] hover:text-[#1F2328]'}`}
+            onClick={() => {
+              if (k === 'prep') setPrepView('resume');
+              setSection(k);
+            }}
+            className={`h-8 px-5 text-[13px] font-semibold rounded-[6px] transition-colors whitespace-nowrap ${
+              section === k ? 'bg-white text-[#1F2328] shadow-sm' : 'text-[#656D76] hover:text-[#1F2328]'
+            }`}
           >
             {l}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => navigate('/career/job-chat-test')}
+          className="h-8 px-5 text-[13px] font-semibold rounded-[6px] text-[#059669] transition-colors hover:bg-white hover:text-[#047857] whitespace-nowrap"
+        >
+          AI봇 잡매칭
+        </button>
       </div>
 
       {section === 'jobs' && renderJobs()}
-      {section === 'prep' && <CareerPrepPage onJobList={goJobList} />}
+      {section === 'prep' && <CareerPrepPage onJobList={goJobList} initialView={prepView}/>}
     </div>
   );
 }
