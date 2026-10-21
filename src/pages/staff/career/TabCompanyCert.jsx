@@ -97,8 +97,8 @@ export default function TabCompanyCert() {
     mutationFn: (payload) =>
       registerCompany({
         companyName: payload.companyName,
-        businessNumber: payload.businessNumber || payload.businessRegistrationNo,
-        ceoName: payload.ceoName || payload.representativeName,
+        businessRegistrationNo: payload.businessRegistrationNo || payload.businessNumber,
+        representativeName: payload.representativeName || payload.ceoName,
         contactName: payload.contactName || payload.managerName,
         contactEmail: payload.contactEmail,
         contactPhone: payload.contactPhone,
@@ -113,7 +113,7 @@ export default function TabCompanyCert() {
       toast('협약 기업이 정상 등록되었습니다!', 'success');
     },
     onError: (err) => {
-      toast(err?.response?.data?.message || err?.response?.data?.error || '기업 등록에 실패했습니다.', 'error');
+      toast(err?.message || err?.response?.data?.message || '기업 등록에 실패했습니다.', 'error');
     },
   });
 
@@ -149,8 +149,15 @@ export default function TabCompanyCert() {
 
   const handleRegisterSubmit = (e) => {
     e.preventDefault();
-    if (!regForm.companyName || !regForm.businessRegistrationNo || !regForm.representativeName || !regForm.contactName) {
-      toast('기업명, 사업자등록번호(10자리), 대표자명, 담당자명은 필수 입력입니다.', 'error');
+    if (
+      !regForm.companyName ||
+      !regForm.businessRegistrationNo ||
+      !regForm.representativeName ||
+      !regForm.contactName ||
+      !regForm.contactEmail ||
+      !regForm.contactPhone
+    ) {
+      toast('기업명, 사업자등록번호(10자리), 대표자명, 담당자명, 이메일, 연락처는 필수 입력입니다.', 'error');
       return;
     }
     if (regForm.businessRegistrationNo.length !== 10) {

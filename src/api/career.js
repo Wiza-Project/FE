@@ -86,6 +86,15 @@ export const getJobPostingDetail = (id) =>
 export const getRecommendedPostings = () =>
   apiClient.get('/students/career/matching/recommendations').then((res) => res.data);
 
+
+/**0907
+ * [학생] 메인 대시보드 배너 슬라이더용 최신 활성 채용공고 상위 10건 조회
+ * GET /api/career/job-postings/latest-slider
+ * @returns {Promise<Array<JobPostingSummaryResponseDTO>>}
+ */
+export const getLatestSliderPostings = () =>
+  apiClient.get('/students/career/job-postings/latest-slider').then((res) => res.data);
+
 /**
  * @typedef {Object} JobRelationRequest
  * @property {number} jobPostingId 지원할 채용공고 식별자
@@ -165,11 +174,12 @@ export const getMyJobApplications = (params) =>
 /**
  * @typedef {Object} JobPreference
  * @property {number} [studentUserId] 학생 식별자
- * @property {string} desiredIndustry 희망 업종
- * @property {string} desiredRole 희망 직무
- * @property {string} desiredRegion 희망 근무 지역
- * @property {number} [desiredSalary] 희망 연봉 (단위: 만원)
- * @property {string} [employmentType] 희망 고용형태
+ * @property {number} [ncsStandardId] 희망 직무 코드 ID
+ * @property {number} [preferredRegionCodeId] 희망 근무 지역 코드 ID
+ * @property {string} [preferredEmploymentType] 희망 고용형태 (정규직, 계약직 등)
+ * @property {number} [minimumSalary] 희망 최소 연봉 (단위: 만원)
+ * @property {('RECOMMENDED'|'GENERAL')} [preferredPostingType] 선호 채용 구분
+ * @property {string} [jobKeyword] 희망 직무 키워드
  * @property {string} [updatedAt] 최종 수정일시
  */
 
@@ -179,7 +189,23 @@ export const getMyJobApplications = (params) =>
  * @returns {Promise<JobPreference>}
  */
 export const getJobPreference = () =>
-  apiClient.get('/students/career/preference').then((res) => res.data);
+  apiClient
+    .get('/students/career/preference')
+    .then((res) => res.data?.data || res.data)
+    .catch((err) => {
+      // 등록된 희망조건이 없는 경우(404 C002) 정상적인 빈 상태(null)로 반환 처리
+      if (err?.response?.status === 404) {
+        return null;
+      }
+      throw err;
+    });
+
+/**
+ * [공통] 내 전체 동의 이력 조회 (PROFILING 선택동의 완료 여부 판별용)
+ * GET /api/consents/me
+ */
+export const getMyConsentHistory = () =>
+  apiClient.get('/consents/me').then((res) => res.data?.data || res.data || []);
 
 /**
  * [학생] 취업 희망조건 등록 및 수정
@@ -189,6 +215,15 @@ export const getJobPreference = () =>
  */
 export const saveJobPreference = (payload) =>
   apiClient.put('/students/career/preference', payload).then((res) => res.data);
+
+/**
+ * [학생] CAREER 모듈의 PROFILING 동의 상태 및 일시 조회
+ * GET /api/students/consents/status?moduleCode=CAREER&consentType=PROFILING
+ */
+export const getProfilingConsentStatus = () =>
+  apiClient.get('/students/consents/status', {
+    params: { moduleCode: 'CAREER', consentType: 'PROFILING' }
+  }).then((res) => res.data);
 
 // 화면 호환용 별칭 - 불필요 시 삭제
 export const getJobBookmarks = getMyJobScraps;

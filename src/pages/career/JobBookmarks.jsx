@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { PageHeader, Button, Pagination, toast } from '@/components/common';
 import { getMyJobScraps, toggleJobScrap } from '@/api/career';
+import { cleanJobTitle } from '@/utils/format';
 
 const ACCENT = '#059669';
 const PAGE_SIZE = 10;
@@ -80,7 +81,7 @@ function DeadlineCalendar({ scrapList }) {
               key={idx}
               className="text-[9px] font-semibold text-[#059669] bg-[#DCFCE7] rounded-[3px] px-1.5 py-0.5 leading-snug mb-1 truncate"
             >
-              {title}
+              {cleanJobTitle(title)}
             </div>
           ))}
         </div>
@@ -191,7 +192,7 @@ export default function JobBookmarks({ onBack, onDetail }) {
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[13px] font-bold text-[#1F2328] hover:text-[#059669] transition-colors">
-                        {job.postingTitle}
+                        {cleanJobTitle(job.postingTitle)}
                       </span>
                     </div>
                     <div className="flex gap-3 text-[12px] text-[#9AA0A6]">

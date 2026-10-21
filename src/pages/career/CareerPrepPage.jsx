@@ -25,12 +25,16 @@ const NAV_ITEMS = [
 ];
 
 /**
+ * 학생 취업 준비 허브 화면
+ * 이력서/자기소개서 작성, 포트폴리오 및 희망직무 설정, 실시간 온라인 지원 현황(칸반) 서브 뷰
+ *
  * @param {Object} props
- * @param {() => void} props.onJobList
+ * @param {() => void} props.onJobList 채용공고 목록 화면으로 이동하는 콜백
  */
-export default function CareerPrepPage({ onJobList }) {
-  const [view, setView] = useState('resume');
-  const current = NAV_ITEMS.find((n) => n.key === view);
+// 403 나는 resume 대신 외부에서 넘겨준 initialView로 시작할 수 있도록 수정
+export default function CareerPrepPage({ onJobList, initialView = 'resume' }) {
+  const [view, setView] = useState(initialView);
+  const current = NAV_ITEMS.find((n) => n.key === view) || NAV_ITEMS[0];
 
   return (
     <div>

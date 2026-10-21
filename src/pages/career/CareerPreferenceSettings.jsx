@@ -58,6 +58,8 @@ export default function CareerPreferenceSettings({ onComplete }) {
     preferredRegionCodeId: null,
     preferredEmploymentType: 'REGULAR',
     minimumSalary: 3500,
+    preferredPostingType: 'RECOMMENDED', // 기본값 추천채용
+    jobKeyword: '',                      // 기본값 빈문자열
   });
 
   const { data: regions = [] } = useCommonCode('REGION_CODE');
@@ -91,6 +93,8 @@ export default function CareerPreferenceSettings({ onComplete }) {
         preferredRegionCodeId: prefData.preferredRegionCodeId ?? prefData.regionCodeId ?? regions[0]?.codeId,
         preferredEmploymentType: prefData.preferredEmploymentType || 'REGULAR',
         minimumSalary: prefData.minimumSalary || 3500,
+        preferredPostingType: prefData.preferredPostingType || 'RECOMMENDED',
+        jobKeyword: prefData.jobKeyword || '',
       });
     } else if (ncsItems.length > 0 && regions.length > 0 && !form.ncsStandardId) {
       setForm((p) => ({
@@ -240,6 +244,34 @@ export default function CareerPreferenceSettings({ onComplete }) {
               className="w-full h-10 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669]"
             />
           </div>
+
+
+{/* 👇 [추가] 선호 채용 구분 & 희망 직무 키워드 */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[12px] font-bold text-[#1F2328] mb-2">선호 채용 구분</label>
+            <select
+              value={form.preferredPostingType}
+              onChange={(e) => setForm((p) => ({ ...p, preferredPostingType: e.target.value }))}
+              className="w-full h-10 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669]"
+            >
+              <option value="RECOMMENDED">교내 추천 채용 (우대)</option>
+              <option value="GENERAL">일반 채용</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-bold text-[#1F2328] mb-2">희망 직무 키워드</label>
+            <input
+              type="text"
+              placeholder="예: 안드로이드, 백엔드"
+              value={form.jobKeyword}
+              onChange={(e) => setForm((p) => ({ ...p, jobKeyword: e.target.value }))}
+              className="w-full h-10 px-3 text-[13px] rounded-[6px] border border-[#E5E7EB] bg-white focus:outline-none focus:border-[#059669]"
+            />
+          </div>
+        </div>
+
         </div>
 
         <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded-[6px] p-3 text-[11px] text-[#14532D] leading-relaxed">

@@ -12,6 +12,7 @@ import ExtracurrPage from '@/pages/program/ExtracurrPage';
 import CounselingPage from '@/pages/counsel/CounselingPage';
 import MileagePage from '@/pages/mileage/MileagePage';
 import CareerPage from '@/pages/career/CareerPage';
+import JobChatTestPage from '@/pages/career/JobChatTestPage';
 import NoticePage from '@/pages/notice/NoticePage';
 import StaffDashboard from '@/pages/staff/StaffDashboard';
 import StaffExtracurrPage from '@/pages/staff/extracurr/StaffExtracurrPage';
@@ -80,6 +81,7 @@ export const router = createBrowserRouter([
           { path: '/counsel', element: <CounselingPage /> },
           { path: '/mileage', element: <MileagePage /> },
           { path: '/career', element: <CareerPage /> },
+          { path: '/career/job-chat-test', element: <JobChatTestPage /> },
           { path: '/notice', element: <NoticePage /> },
         ],
       },
