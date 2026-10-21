@@ -1,4 +1,5 @@
-import { apiClient, downloadFile } from './client';
+import axios from 'axios';
+import { apiClient, getAccessToken } from './client';
 
 /**
  * 운영계획서 업로드. POST /api/staff/programs/files
@@ -53,11 +54,38 @@ export const fetchProgramDetail = async (programId) => {
 /**
  * 학생용 비교과 프로그램 운영계획서 다운로드. GET /api/students/programs/{programId}/file
  * 첨부파일이 없으면 404(RESOURCE_NOT_FOUND) — 상세 응답의 fileName이 null이 아닐 때만 호출한다.
+ * client.js의 공용 downloadFile을 쓰지 않고 이 파일 안에서 직접 처리한다 — 서버가 내려주는
+ * Content-Disposition에는 아스키 전용 filename="..."(한글이 깨진 값)과 RFC5987 방식의
+ * filename*=UTF-8''...(정상 값)이 함께 오는데, extended 값을 우선해야 한글 파일명이 안 깨진다.
  * @param {number} programId
  * @param {string} fallbackName 서버가 파일명을 안 줄 때 사용할 이름
  */
-export const downloadProgramOperationPlan = (programId, fallbackName) =>
-  downloadFile(`/students/programs/${programId}/file`, fallbackName);
+export const downloadProgramOperationPlan = async (programId, fallbackName) => {
+  const response = await axios.get(
+    `${apiClient.defaults.baseURL}/students/programs/${programId}/file`,
+    {
+      responseType: 'blob',
+      headers: getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : undefined,
+      withCredentials: true,
+    },
+  );
+
+  const disposition = response.headers['content-disposition'];
+  const extendedMatch = disposition?.match(/filename\*=UTF-8''([^;]+)/i);
+  const plainMatch = disposition?.match(/filename="?([^";]+)"?/i);
+  const filename = extendedMatch
+    ? decodeURIComponent(extendedMatch[1])
+    : (plainMatch ? plainMatch[1] : fallbackName);
+
+  const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(blobUrl);
+};
 
 /**
  * 로그인한 학생 본인의 회차별 출결 현황 조회. GET /api/students/programs/{programId}/attendances
